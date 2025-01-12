@@ -1,28 +1,152 @@
+import os
+import time
+from pathlib import Path
+
 import colorama
+import torch
+from torch.optim import AdamW, Adam
+from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
+from torch.utils.data import DataLoader
+from torch import nn
+import random
+import numpy as np
+import pandas as pd
+import warnings
+
+warnings.filterwarnings("ignore")
+
 colorama.init()
-
-from config import CONFIG, IS_TEST, IS_TRAIN, IS_INFERENCE
+from config import get_config, is_predict, is_train, is_test
+from options import dump_config, parse_args
+from utils.util import (get_model, get_test_dataset, get_train_valid_dataset, load_model,
+    prepare_logger)
 from model_operation import Trainer, Tester, Predictor
-from options import parse_args
-from utils.utils import prepare_logger
 
-if __name__ == '__main__':
+# from torchvision.models import resnet50
+
+
+def end_task():
+    # CONFIG = get_config()
+    # if is_train():
+    #     # draw epoch-loss curve
+    #     # metrics = scores(targets, outputs, labels)
+    #     # scores_map = {k: v for k, v in metrics.items() if not any(keyword == k for keyword in ['argmax', 'argmin', 'mean'])}
+    #     # Plot(2, 3).metrics(scores_map).save(self.output_dir / "metrics.png")
+    #     pass
+    # if is_test():
+    #     # draw metrics curve
+    #     metrics_file = (
+    #         Path(CONFIG["output_dir"])
+    #         / CONFIG["run_id"]
+    #         / CONFIG["task"]
+    #         / "test"
+    #         / "metrics.parquet"
+    #     )
+    #     df = pd.read_parquet(metrics_file)
+    #     losses = df["loss"]
+    #     # Plot(1, 1).metrics().complete().save()
+    # if is_predict():
+    #     # paint the predicted data
+    #     pass
+    pass
+
+
+def set_seed(seed: int):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+if __name__ == "__main__":
     prepare_logger()
-    args = parse_args()
+    parse_args()
 
-    if IS_TRAIN:
-        handle = Trainer()
-        handle.train()
-        exit(0)
+    # register models
+    CONFIG = get_config()
+    set_seed(CONFIG["seed"])
 
-    if IS_TEST:
-        handle = Tester()
-        handle.test()
-        exit(0)
+    output_dir = Path(CONFIG["output_dir"]) / CONFIG["task"] / CONFIG["run_id"]
 
-    if IS_INFERENCE:
-        handle = Predictor()
-        handle.predict(args.input)
-        exit(0)
+    if CONFIG["private"]["wandb"]:
+        import wandb
+        wandb.init(entity="lpoutyoumu", project=CONFIG["task"], id=CONFIG["run_id"])
+
+    model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
+    if CONFIG['model']['load'] != "":
+        model_params = load_model(Path(CONFIG['model']['load']), 'cuda')['model']
+        print('Load model: ', CONFIG['model']['load'])
+        model.load_state_dict(model_params)
+
+    if is_train():
+        train_dataset, valid_dataset = get_train_valid_dataset(
+            dataset_name=CONFIG["train"]["dataset"]["name"],
+            base_dir=Path(CONFIG["train"]["dataset"]["path"]),
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=CONFIG["train"]["batch_size"],
+            pin_memory=True,
+            num_workers=CONFIG["train"]["dataset"]["num_workers"],
+        )
+        valid_loader = (
+            DataLoader(
+                valid_dataset,
+                batch_size=CONFIG["train"]["batch_size"],
+                pin_memory=True,
+                num_workers=CONFIG["train"]["dataset"]["num_workers"],
+            )
+            if valid_dataset
+            else None
+        )
+        optimizer = AdamW(
+            model.parameters(),
+            lr=CONFIG["train"]["optimizer"]["learning_rate"],
+            weight_decay=CONFIG["train"]["optimizer"]["weight_decay"],
+            eps=CONFIG["train"]["optimizer"]["eps"],
+        )
+        # lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler'] else None
+        lr_scheduler = None
+        criterion = nn.BCEWithLogitsLoss()
+        handle = Trainer(output_dir / "train", model)
+        handle.train(
+            num_epoches=CONFIG["train"]["epoch"],
+            criterion=criterion,
+            optimizer=optimizer,
+            train_dataloader=train_loader,
+            valid_dataloader=valid_loader,
+            lr_scheduler=lr_scheduler,
+            early_stop=CONFIG["train"]["early_stopping"],
+        )
+        dump_config(output_dir / "train" / "config.json")
+
+    if is_test():
+        test_dataset = get_test_dataset(
+            dataset_name=CONFIG["test"]["dataset"]["name"],
+            base_dir=Path(CONFIG["test"]["dataset"]["path"]),
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=CONFIG["test"]["batch_size"],
+            pin_memory=True,
+            num_workers=CONFIG["test"]["dataset"]["num_workers"],
+        )
+        # callback = lambda outputs: return outputs
+        handle = Tester(output_dir / "test", model)
+        handle.test(test_dataloader=test_loader)
+        dump_config(output_dir / "test" / "config.json")
+
+    if is_predict():
+        handle = Predictor(output_dir / "predict", model)
+        input_path = Path(CONFIG["predict"]["input"])
+        if input_path.is_dir():
+            inputs = [filename for filename in input_path.iterdir()]
+            handle.predict(inputs, **CONFIG["predict"]["config"])
+        dump_config(output_dir / "predict" / "config.json")
+
+    end_task()
 
     exit(1)

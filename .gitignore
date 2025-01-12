@@ -1,0 +1,8 @@
+/.vscode
+/.idea
+/__pycache__
+/results
+/output
+/data
+**__pycache__**
+/.env

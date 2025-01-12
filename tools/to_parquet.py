@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from argparse import ArgumentParser
 
+
 def to_parquet(filename):
     in_type = os.path.splitext(filename)[-1].lower()
     output = os.path.join('output', os.path.basename(filename) + '.parquet')
