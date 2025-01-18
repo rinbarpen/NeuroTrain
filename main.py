@@ -18,8 +18,9 @@ warnings.filterwarnings("ignore")
 colorama.init()
 from config import get_config, is_predict, is_train, is_test
 from options import dump_config, parse_args
-from utils.util import (get_model, get_test_dataset, get_train_valid_dataset, load_model,
-    prepare_logger)
+from utils.util import load_model, prepare_logger
+from models.models import get_model
+from utils.dataset.dataset import get_test_dataset, get_train_valid_dataset
 from model_operation import Trainer, Tester, Predictor
 
 # from torchvision.models import resnet50
@@ -67,7 +68,8 @@ if __name__ == "__main__":
 
     # register models
     CONFIG = get_config()
-    set_seed(CONFIG["seed"])
+    if CONFIG["seed"] >= 0:
+        set_seed(CONFIG["seed"])
 
     output_dir = Path(CONFIG["output_dir"]) / CONFIG["task"] / CONFIG["run_id"]
 
@@ -77,7 +79,9 @@ if __name__ == "__main__":
 
     model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
     if CONFIG['model']['load'] != "":
-        model_params = load_model(Path(CONFIG['model']['load']), 'cuda')['model']
+        model_params = load_model(Path(CONFIG['model']['load']), 'cuda')
+        if hasattr(model_params, 'model'):
+            model_params = model_params['model']
         print('Load model: ', CONFIG['model']['load'])
         model.load_state_dict(model_params)
 
@@ -91,6 +95,7 @@ if __name__ == "__main__":
             batch_size=CONFIG["train"]["batch_size"],
             pin_memory=True,
             num_workers=CONFIG["train"]["dataset"]["num_workers"],
+            shuffle=True,
         )
         valid_loader = (
             DataLoader(
@@ -98,6 +103,7 @@ if __name__ == "__main__":
                 batch_size=CONFIG["train"]["batch_size"],
                 pin_memory=True,
                 num_workers=CONFIG["train"]["dataset"]["num_workers"],
+                shuffle=True,
             )
             if valid_dataset
             else None
@@ -108,8 +114,8 @@ if __name__ == "__main__":
             weight_decay=CONFIG["train"]["optimizer"]["weight_decay"],
             eps=CONFIG["train"]["optimizer"]["eps"],
         )
-        # lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler'] else None
-        lr_scheduler = None
+        lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler']['on'] else None
+        # lr_scheduler = None if CONFIG['train']['lr_scheduler']['on'] else None
         criterion = nn.BCEWithLogitsLoss()
         handle = Trainer(output_dir / "train", model)
         handle.train(

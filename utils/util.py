@@ -15,7 +15,7 @@ from torchsummary import summary
 from pprint import pprint
 from typing import TextIO
 
-from utils.dataset import drive_dataset
+from config import CONFIG
 
 
 def prepare_logger():
@@ -53,15 +53,18 @@ def prepare_logger():
 def save_model(path: Path, model: nn.Module,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
     checkpoint = dict()
-    checkpoint['model'] = model.state_dict()
-    if optimizer:
-        checkpoint["optimizer"] = optimizer.state_dict()
-    if lr_scheduler:
-        checkpoint["lr_scheduler"] = lr_scheduler.state_dict()
-    if scaler:
-        checkpoint["scaler"] = scaler.state_dict()
-    for k, v in kwargs.items():
-        checkpoint[k] = v
+    if CONFIG['model']['only_weight']:
+        checkpoint = model.state_dict()
+    else:
+        checkpoint['model'] = model.state_dict()
+        if optimizer:
+            checkpoint["optimizer"] = optimizer.state_dict()
+        if lr_scheduler:
+            checkpoint["lr_scheduler"] = lr_scheduler.state_dict()
+        if scaler:
+            checkpoint["scaler"] = scaler.state_dict()
+        for k, v in kwargs.items():
+            checkpoint[k] = v
 
     try:
         torch.save(checkpoint, path)
@@ -124,52 +127,3 @@ def tuple2list(t: tuple):
 
 def list2tuple(l: list):
     return tuple(l)
-
-
-def get_train_valid_dataset(dataset_name: str, base_dir: Path):
-    match dataset_name.lower():
-        case 'drive':
-            return drive_dataset.get_drive_train_valid_dataset(base_dir, 1.0)
-    
-    return None, None
-
-def get_test_dataset(dataset_name: str, base_dir: Path):
-    match dataset_name.lower():
-        case 'drive':
-            return drive_dataset.get_drive_test_dataset(base_dir)
-
-    return None, None
-
-def get_model(model_name: str, config: dict):
-    match model_name:
-        case 'unet_neck':
-            from models.like.unet_neck import UNet
-            model = UNet(config['n_channels'], config['n_classes'], bilinear=False)
-            return model
-        case 'unet':
-            from models.sample.unet import UNet
-            model = UNet(config['n_channels'], config['n_classes'], bilinear=False)
-            return model
-
-    return None
-
-
-def time_cost(f):
-    def wrapper(*args, **kwargs):
-        begin = time.time_ns()
-        result = f(*args, **kwargs)
-        end = time.time_ns()
-        print(f"Function {f.__name__} took {end - begin} ns")
-        return result
-    return wrapper
-
-class timer:
-    def __init__(self, name="block"):
-        self.name = name
-
-    def __enter__(self):
-        self.begin = time.time_ns()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        end = time.time_ns()
-        print(f"{self.name} took {end - self.begin} ns")

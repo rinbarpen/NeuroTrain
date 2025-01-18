@@ -1,43 +1,85 @@
+import logging
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 from pathlib import Path
 import numpy as np
 from sklearn import metrics
+from utils.util import list2tuple
 
+class Font:
+    _family = 'Times New Roman'
+    _weight = 'normal'
+    _size = 16
+    def __init__(self):
+        pass
+
+    def family(self, x: str):
+        self._family = x
+        return self
+    
+    def weight(self, x: str):
+        self._weight = x
+        return self
+    
+    def size(self, x: int):
+        self._size = x
+        return self
+
+    def build(self):
+        return {
+            'family': self._family,
+            'weight': self._weight,
+            'size': self._size,
+        }
 
 class Subplot:
     def __init__(self, ax, parent):
         self._ax = ax
         self._parent = parent
 
-    def plot(self, x, y):
-        self._ax.plot(x, y)
+    def plot(self, x, y, *args, **kwargs):
+        self._ax.plot(x, y, *args, **kwargs)
         return self
-    def bar(self, x, height, **kwargs):
-        self._ax.bar(x, height, **kwargs)
+    def bar(self, x, height, *args, **kwargs):
+        self._ax.bar(x, height, *args, **kwargs)
         return self
-    def barh(self, y, width, **kwargs):
-        self._ax.barh(y, width, **kwargs)
+    def barh(self, y, width, *args, **kwargs):
+        self._ax.barh(y, width, *args, **kwargs)
         return self
-    def scatter(self, x, y, **kwargs):
-        self._ax.scatter(x, y, **kwargs)
+    def scatter(self, x, y, *args, **kwargs):
+        self._ax.scatter(x, y, *args, **kwargs)
         return self
-    def hist(self, x, bins=None, **kwargs):
-        self._ax.hist(x, bins=bins, **kwargs)
+    def hist(self, x, bins=None, *args, **kwargs):
+        self._ax.hist(x, bins=bins, *args, **kwargs)
         return self
 
-    def figsize(self, figsize: tuple[int, int]):
+    def tight_layout(self):
+        self._ax.set_tight_layout()
+        return self
+    def legend(self, *args, **kwargs):
+        self._ax.set_legend(*args, **kwargs)
+        return self
+    def figsize(self, figsize: tuple[float, float]):
         self._ax.set_figsize(figsize)
         return self
-    def xlabel(self, xlabel: str):
-        self._ax.set_xlabel(xlabel)
+    def xlabel(self, xlabel: str, *args, **kwargs):
+        self._ax.set_xlabel(xlabel, *args, **kwargs)
         return self
-    def ylabel(self, ylabel: str):
-        self._ax.set_xlabel(ylabel)
+    def ylabel(self, ylabel: str, *args, **kwargs):
+        self._ax.set_xlabel(ylabel, *args, **kwargs)
         return self
-    def label(self, label: str):
-        self._ax.set_label(label)
+    def xticks(self, xticks: np.array):
+        self._ax.set_xticks(xticks)
+        return self
+    def yticks(self, yticks: np.array):
+        self._ax.set_yticks(yticks)
+        return self
+    def xlim(self, *args):
+        self._ax.set_xlim(*args)
+        return self
+    def ylim(self, *args):
+        self._ax.set_ylim(*args)
         return self
     def title(self, title: str):
         self._ax.set_title(title)
@@ -48,20 +90,14 @@ class Subplot:
 
     def epoch_loss(self, 
                    num_epoch: int, 
-                   losses: np.ndarray|list[np.ndarray]|list[float]|list[list[float]], 
-                   labels: str|tuple[str, ...]='Loss', 
+                   losses: np.ndarray|list[float]|tuple[float], 
+                   label: str='Loss', 
                    title='Epoch-Loss'):
-        if isinstance(losses, list[float]):
-            losses = np.array([loss for loss in losses], dtype=np.float64)
-        elif isinstance(losses, list[list[float]]):
-            losses = np.array([[loss for loss in loss_a] for loss_a in losses], dtype=np.float64)
+        if isinstance(losses, list) or isinstance(losses, tuple): 
+            losses = np.array(losses, dtype=np.float64)
 
         epoches = np.arange(1, num_epoch+1, dtype=np.int32)
-        if isinstance(labels, str):
-            self._ax.plot(epoches, losses, label=labels)
-        if isinstance(labels, tuple):
-            for (loss, label) in zip(losses, labels):
-                self._ax.plot(epoches, loss, label=label)
+        self._ax.plot(epoches, losses, label=label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel('Epoch')
@@ -69,6 +105,24 @@ class Subplot:
         self._ax.set_xlim(1, num_epoch)
         self._ax.legend()
         return self
+
+    def many_epoch_loss(self, 
+                   num_epoch: int, 
+                   losses: tuple[np.ndarray]|list[np.ndarray], 
+                   labels: tuple[str, ...]|list[str]='Loss', 
+                   title='Epoch-Loss'):        
+        epoches = np.arange(1, num_epoch+1, dtype=np.int32)
+
+        for i, label in enumerate(labels):
+            self._ax.plot(epoches, losses[i], label=label)
+
+        self._ax.set_title(title)
+        self._ax.set_xlabel('Epoch')
+        self._ax.set_ylabel('Loss')
+        self._ax.set_xlim(1, num_epoch)
+        self._ax.legend()
+        return self
+
 
     def confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray, labels=None, xlabel='True', ylabel='Prediction', title='Confusion Matrix', cmap='Blues'):
         cm = metrics.confusion_matrix(y_true, y_pred)

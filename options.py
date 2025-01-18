@@ -21,19 +21,24 @@ def parse_args():
     train_parser.add_argument('-e', '--epoch', type=int, help='epoch')
     train_parser.add_argument('-lr', '--learning_rate', type=float, help='learning_rate')
     train_parser.add_argument('--eps', type=float, help='eps')
-    train_parser.add_argument('-wd', '--weight_decay', type=float, help='weight_decay')
-    train_parser.add_argument('-sne', '--save_every_n_epoch', type=int, default=1, required=False, help='save_every_n_epoch')
+    train_parser.add_argument('--weight_decay', type=float, help='weight_decay')
+    train_parser.add_argument('--save_every_n_epoch', type=int, required=False, help='save_every_n_epoch')
     train_parser.add_argument('-ab', '--augment_boost', type=str, help='augment_boost')
     ## amp mode: bf16 int8 ..
     train_parser.add_argument('--amp', action='store_true', help='set amp mode')
-    train_parser.add_argument('-es', '--early_stopping', action='store_true', default=False, help='early_stopping')
-    train_parser.add_argument('--warmup', type=int, default=50, help='early_stopping')
+    ## for lr_scheduler
+    train_parser.add_argument('--lr_scheduler', action='store_true', default=False, help='lr_scheduler')
+    train_parser.add_argument('--warmup', type=int, help='lr_scheduler epoch')
+    train_parser.add_argument('--warmup_lr', type=float, help='lr_scheduler learning_rate')
     ## for early_stopping
-    train_parser.add_argument('-p', '--patience', type=int, default=3, help='patience')
+    train_parser.add_argument('-es', '--early_stopping', action='store_true', default=False, help='early_stopping')
+    train_parser.add_argument('--patience', type=int, default=3, help='patience')
+    ## common
     train_parser.add_argument('-b', '--batch_size', type=int, default=1, help='batch_size')
     train_parser.add_argument('--num_workers', type=int, default=0, help='num_workers')
-    train_parser.add_argument('-d', '--data', type=str, help='dataset names')
-    train_parser.add_argument('-dd', '--data_dir', type=str, help='dataset directory')
+    train_parser.add_argument('--data', type=str, help='dataset names')
+    train_parser.add_argument('--data_dir', type=str, help='dataset directory')
+    train_parser.add_argument('--only_weight', action='store_true', help='save model only with weight')
     # Predict
     predict_parser = parser.add_argument_group(title='Predict Options', description='Predict options')
     predict_parser.add_argument('-i', '--input', type=str, help='input')
@@ -58,6 +63,8 @@ def parse_args():
         config_file = Path(args.config)
         CONFIG = load_config(config_file)
 
+    if args.only_weight:
+        CONFIG['model']['only_weight'] = args.only_weight
     if args.seed:
         CONFIG['seed'] = args.seed
     if args.device:
@@ -96,7 +103,10 @@ def parse_args():
             CONFIG['train']['optimizer']['learning_rate'] = args.learning_rate
         if args.augment_boost:
             CONFIG['train']['augment_boost']['on'] = True
-            CONFIG['train']['augment_boost']['config'] = args.augment_boost
+            for arg in args.augment_boost.split(';'):
+                k, v = arg.split('=')[0], arg.split('=')[1]
+                augment_boost = {k.strip(): v.strip()}
+            CONFIG['train']['augment_boost']['config'] = augment_boost
         if args.save_every_n_epoch:
             CONFIG['train']['save_every_n_epoch'] = args.save_every_n_epoch
         if args.weight_decay:
@@ -108,6 +118,12 @@ def parse_args():
             CONFIG['train']['early_stopping'] = args.early_stopping
             CONFIG['train']['patience'] = args.patience
             logging.debug(f'set up early_stopping with patience={args.patience}')
+        if args.lr_scheduler:
+            CONFIG['train']['lr_scheduler']['on'] = args.lr_scheduler
+            if args.warmup:
+                CONFIG['train']['lr_scheduler']['warmup'] = args.warmup
+            if args.warmup_lr:
+                CONFIG['train']['lr_scheduler']['warmup_lr'] = args.warmup_lr
         CONFIG['private']['mode'] = 0
     if args.test:
         if args.data:
