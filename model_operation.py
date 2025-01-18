@@ -26,6 +26,8 @@ class Trainer:
         self.output_dir = output_dir
         self.model = model
 
+        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+
     def train(self, num_epoches: int, criterion, optimizer, train_dataloader: DataLoader,
               valid_dataloader: DataLoader, lr_scheduler=None,
               *, early_stop=False):
@@ -138,7 +140,7 @@ class Trainer:
         colorlog.info(f'save model to {last_model_filename} when meeting to the last epoch')
 
         labels = CONFIG['classes'][1]
-        Recorder.record_loss(train_losses)
+        Recorder.record_loss(train_losses, self.output_dir)
         train_losses = np.array(train_losses, dtype=np.float64)
         plot = Plot(1, 1)
         plot.subplot().epoch_loss(num_epoches, train_losses, labels, title='Train-Epoch-Loss').complete()
@@ -146,7 +148,7 @@ class Trainer:
         logging.info(f'Save train-epoch-loss graph to {self.output_dir / "train-epoch-loss.png"}')
         if valid_dataloader:
             labels = CONFIG['classes'][1]
-            Recorder.record_loss(valid_losses)
+            Recorder.record_loss(valid_losses, self.output_dir)
             valid_losses = np.array(valid_losses, dtype=np.float64)
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epoches, valid_losses, labels, title='Valid-Epoch-Loss').complete()
@@ -190,6 +192,8 @@ class Tester:
         self.output_dir = output_dir
         self.model = model
 
+        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
         CONFIG = get_config()
@@ -221,7 +225,7 @@ class Tester:
             for label, _ in label_scores.items():
                 scores_map[metric_name][label] /= n
 
-        Recorder.record_metrics(scores_map)
+        Recorder.record_metrics(scores_map, self.output_dir)
         pp(scores_map)
         Plot(2, 3).metrics(scores_map).save(self.output_dir / "metrics.png")
         if CONFIG['private']['wandb']:
@@ -239,6 +243,8 @@ class Vaildator:
         self.output_dir = output_dir
         self.model = model
 
+        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+
     @torch.no_grad()
     def valid(self, valid_dataloader: DataLoader):
         CONFIG = get_config()
@@ -254,13 +260,15 @@ class Vaildator:
 
             metrics = scores(targets, outputs, labels)
             scores_map = {k: v for k, v in metrics.items() if not any(keyword == k for keyword in ['argmax', 'argmin', 'mean'])}
-            Recorder.record_metrics(scores_map)
+            Recorder.record_metrics(scores_map, self.output_dir)
             Plot(2, 3).metrics(scores_map).save(self.output_dir / "metrics.png")
 
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
         self.model = model
+
+        os.makedirs(self.output_dir.absolute(), exist_ok=True)
 
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
