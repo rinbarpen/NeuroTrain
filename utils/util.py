@@ -75,7 +75,9 @@ def save_model(path: Path, model: nn.Module,
 
 
 def load_model(path: Path, map_location: str = 'cuda'):
-    return torch.load(path, map_location=torch.device(map_location))
+    return torch.load(path, 
+                      map_location=torch.device(map_location), 
+                      weights_only=CONFIG['model']['only_weight'])
 
 def save_model_to_onnx(path: Path, model: nn.Module, input_size: tuple):
     dummy_input = torch.randn(input_size)

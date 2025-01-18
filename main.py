@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 import colorama
+import logging
 import torch
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
@@ -79,10 +80,12 @@ if __name__ == "__main__":
 
     model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
     if CONFIG['model']['load'] != "":
-        model_params = load_model(Path(CONFIG['model']['load']), 'cuda')
-        if hasattr(model_params, 'model'):
-            model_params = model_params['model']
-        print('Load model: ', CONFIG['model']['load'])
+        model_path = Path(CONFIG['model']['load'])
+        model_params = load_model(model_path, 'cuda')
+        model_params = model_params['model']
+        # if hasattr(model_params, 'model'):
+        #     model_params = model_params['model']
+        logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)
 
     if is_train():
@@ -130,6 +133,15 @@ if __name__ == "__main__":
         dump_config(output_dir / "train" / "config.json")
 
     if is_test():
+        if is_train():
+            model_path = output_dir / "train" / "weights" / "best_model.pt"
+            model_params = load_model(model_path, 'cuda')
+            model_params = model_params['model']
+            # if hasattr(model_params, 'model'):
+            #     model_params = model_params['model']
+            logging.info(f'Load model: {model_path}')
+            model.load_state_dict(model_params)
+
         test_dataset = get_test_dataset(
             dataset_name=CONFIG["test"]["dataset"]["name"],
             base_dir=Path(CONFIG["test"]["dataset"]["path"]),

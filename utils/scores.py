@@ -120,21 +120,6 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str]|tuple[str],
         result['argmin']['dice'] = labels[np.array([score for score in result['dice'].values()]).argmin()]
     return result
 
-if __name__ == '__main__':
-    n_batches = 2
-    n_classes = 3
-    labels = [str(i) for i in range(n_classes)]
-    y_true = np.random.rand(n_batches, n_classes, 512, 512)
-    y_pred = np.random.rand(n_batches, n_classes, 512, 512)
-    y_true[y_true >= 0.5] = 1
-    y_true[y_true < 0.5] = 0
-    y_pred[y_pred >= 0.5] = 1
-    y_pred[y_pred < 0.5] = 0
-
-    result = scores(y_true, y_pred, labels)
-    from pprint import pp
-    pp(result)
-
 # result template:
 # labels = ['0', '1', '2']
 # {'mean': {'iou': np.float64(0.33355472378823864),
@@ -173,3 +158,26 @@ if __name__ == '__main__':
 #  'dice': {'0': np.float64(0.400502026711725),
 #           '1': np.float64(0.4001642983878602),
 #           '2': np.float64(0.399811353583824)}}
+
+def dice_loss(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+    result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
+    score = 0.0
+    for v in result.values():
+        score += v
+    score /= len(labels)
+    return -score
+
+if __name__ == '__main__':
+    n_batches = 2
+    n_classes = 3
+    labels = [str(i) for i in range(n_classes)]
+    y_true = np.random.rand(n_batches, n_classes, 512, 512)
+    y_pred = np.random.rand(n_batches, n_classes, 512, 512)
+    y_true[y_true >= 0.5] = 1
+    y_true[y_true < 0.5] = 0
+    y_pred[y_pred >= 0.5] = 1
+    y_pred[y_pred < 0.5] = 0
+
+    result = scores(y_true, y_pred, labels)
+    from pprint import pp
+    pp(result)

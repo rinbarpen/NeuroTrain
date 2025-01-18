@@ -137,6 +137,8 @@ def parse_args():
         CONFIG['predict']['input'] = args.input
     if args.predict:
         CONFIG['private']['mode'] = 2
+    if args.train and args.test:
+        CONFIG['private']['mode'] = 3
 
     run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     CONFIG['run_id'] = run_id

@@ -72,9 +72,9 @@ load_dotenv()
 def is_verbose():
     return CONFIG['private']['verbose']
 def is_train():
-    return CONFIG['private']['mode'] == 0
+    return CONFIG['private']['mode'] == 0 or CONFIG['private']['mode'] == 3 
 def is_test():
-    return CONFIG['private']['mode'] == 1
+    return CONFIG['private']['mode'] == 1 or CONFIG['private']['mode'] == 3
 def is_predict():
     return CONFIG['private']['mode'] == 2
 
