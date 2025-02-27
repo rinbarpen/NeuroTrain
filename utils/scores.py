@@ -167,6 +167,32 @@ def dice_loss(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, clas
     score /= len(labels)
     return -score
 
+def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float=1e-7):
+    """计算 KL 散度损失
+    
+    Args:
+        y_true: 真实概率分布 (B, C, ...)
+        y_pred: 预测概率分布 (B, C, ...)
+        epsilon: 数值稳定性的小量
+        
+    Returns:
+        float: KL 散度损失值
+        
+    Example:
+        >>> # 假设有批次大小为2，3个类别的预测
+        >>> y_true = np.array([[[0.7, 0.2, 0.1], [0.3, 0.6, 0.1]]])  # (1, 2, 3)
+        >>> y_pred = np.array([[[0.6, 0.3, 0.1], [0.4, 0.5, 0.1]]])  # (1, 2, 3)
+        >>> loss = kl_divergence_loss(y_true, y_pred)
+    """
+    # 确保输入为概率分布
+    y_true = np.clip(y_true, epsilon, 1.0 - epsilon)
+    y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
+    
+    # 计算 KL 散度: sum(p * log(p/q))
+    kl_div = np.sum(y_true * np.log(y_true / y_pred), axis=1)
+    return np.mean(kl_div)
+
+
 if __name__ == '__main__':
     n_batches = 2
     n_classes = 3
@@ -181,3 +207,5 @@ if __name__ == '__main__':
     result = scores(y_true, y_pred, labels)
     from pprint import pp
     pp(result)
+
+# TODO: 添加 kl loss 和 soft loss and hard loss

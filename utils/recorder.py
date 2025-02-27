@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from config import get_config, is_predict, is_test, is_train
 
 LIST_TYPE = list|np.ndarray|torch.Tensor|tuple
 
