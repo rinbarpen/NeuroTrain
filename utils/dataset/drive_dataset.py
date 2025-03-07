@@ -20,7 +20,7 @@ def get_drive_test_dataset(base_dir: Path, to_rgb=False):
 
 def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
     save_dir = save_dir / "DRIVE"
-    os.makedirs(save_dir.absolute(), exist_ok=True)
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     train_dataset, _ = get_drive_train_valid_dataset(base_dir, 1.0, to_rgb=to_rgb)
     image_dir = save_dir / "images"
@@ -33,7 +33,7 @@ def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
     test_dataset = get_drive_test_dataset(base_dir, to_rgb=to_rgb)
     image_dir = save_dir / "images"
     mask_dir = save_dir / "1st_manual"
-    
+
     for i, (image, mask) in enumerate(test_dataset):
         save_numpy_data(image_dir / f'{i}.npy', image)
         save_numpy_data(mask_dir / f'{i}.npy', mask)

@@ -29,7 +29,7 @@ def get_isic2017_test_dataset(base_dir: Path, *, to_rgb=False):
 # output / ISIC2017
 def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
     save_dir = save_dir / "ISIC2017"
-    os.makedirs(save_dir.absolute(), exist_ok=True)
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     train_dataset = get_isic2017_train_dataset(base_dir, to_rgb=to_rgb)
     image_dir = save_dir / train_dataset.image_dir.stem
@@ -68,8 +68,8 @@ class ISIC2017Dataset(Dataset):
         self.to_rgb = to_rgb
         self.image_dir = image_dir
         self.mask_dir = mask_dir
-        self.image_paths = [p for p in image_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npz')]
-        self.mask_paths = [p for p in mask_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npz')]
+        self.image_paths = [p for p in image_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npy')]
+        self.mask_paths = [p for p in mask_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npy')]
 
     def __getitem__(self, index):
         image_file, mask_file = self.image_paths[index], self.mask_paths[index]

@@ -73,6 +73,9 @@ if __name__ == "__main__":
         set_seed(CONFIG["seed"])
 
     output_dir = Path(CONFIG["output_dir"]) / CONFIG["task"] / CONFIG["run_id"]
+    train_dir = output_dir / "train"
+    test_dir = output_dir / "test"
+    predict_dir = output_dir / "predict"
 
     if CONFIG["private"]["wandb"]:
         import wandb
@@ -120,9 +123,9 @@ if __name__ == "__main__":
         lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler']['on'] else None
         # lr_scheduler = None if CONFIG['train']['lr_scheduler']['on'] else None
         criterion = nn.BCEWithLogitsLoss()
-        handle = Trainer(output_dir / "train", model)
+        handle = Trainer(train_dir, model)
         handle.train(
-            num_epoches=CONFIG["train"]["epoch"],
+            num_epochs=CONFIG["train"]["epoch"],
             criterion=criterion,
             optimizer=optimizer,
             train_dataloader=train_loader,
@@ -130,15 +133,16 @@ if __name__ == "__main__":
             lr_scheduler=lr_scheduler,
             early_stop=CONFIG["train"]["early_stopping"],
         )
-        dump_config(output_dir / "train" / "config.json")
+        dump_config(train_dir / "config.json")
 
     if is_test():
         if is_train():
-            model_path = output_dir / "train" / "weights" / "best_model.pt"
+            model_path = train_dir / "weights" / "best.pt"
             model_params = load_model(model_path, 'cuda')
-            model_params = model_params['model']
-            # if hasattr(model_params, 'model'):
-            #     model_params = model_params['model']
+            try:
+                model_params = model_params['model']
+            except:
+                pass
             logging.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
 
@@ -153,18 +157,16 @@ if __name__ == "__main__":
             num_workers=CONFIG["test"]["dataset"]["num_workers"],
         )
         # callback = lambda outputs: return outputs
-        handle = Tester(output_dir / "test", model)
+        handle = Tester(test_dir, model)
         handle.test(test_dataloader=test_loader)
-        dump_config(output_dir / "test" / "config.json")
+        dump_config(test_dir / "config.json")
 
     if is_predict():
-        handle = Predictor(output_dir / "predict", model)
+        handle = Predictor(predict_dir, model)
         input_path = Path(CONFIG["predict"]["input"])
         if input_path.is_dir():
             inputs = [filename for filename in input_path.iterdir()]
             handle.predict(inputs, **CONFIG["predict"]["config"])
-        dump_config(output_dir / "predict" / "config.json")
+        dump_config(predict_dir / "config.json")
 
     end_task()
-
-    exit(1)

@@ -1,4 +1,4 @@
-from utils.util import dataset_to_numpy
+from utils.dataset.dataset import dataset_to_numpy
 from argparse import ArgumentParser
 import logging
 from pathlib import Path

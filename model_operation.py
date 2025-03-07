@@ -24,17 +24,24 @@ from utils.transform import image_transform
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
+        self.train_loss_image_path = output_dir / "train-epoch-loss.png"
+        self.valid_loss_image_path = output_dir / "valid-epoch-loss.png"
+        self.save_model_dir = output_dir / "weights"
+        self.last_model_file_path = self.save_model_dir / "last.pt"
+
+        self.save_model_dir.mkdir(exist_ok=True, parents=True)
+        
         self.model = model
 
-        os.makedirs(self.output_dir.absolute(), exist_ok=True)
-
-    def train(self, num_epoches: int, criterion, optimizer, train_dataloader: DataLoader,
-              valid_dataloader: DataLoader, lr_scheduler=None,
-              *, early_stop=False):
+    def train(self, num_epochs: int, 
+              criterion: nn.Module, 
+              optimizer: torch.optim.Optimizer, 
+              train_dataloader: DataLoader,
+              valid_dataloader: DataLoader | None, 
+              lr_scheduler: LRScheduler | None = None,
+              *, early_stop: bool = False):
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])
-        save_model_dir = Path(self.output_dir) / "weights"
-        os.makedirs(save_model_dir.absolute(), exist_ok=True)
 
         self.model = self.model.to(device)
 
@@ -50,12 +57,12 @@ class Trainer:
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
-        for epoch in range(1, num_epoches+1):
+        for epoch in range(1, num_epochs+1):
             # train
             self.model.train()
             train_loss = 0.0
             # last_train_loss = float('inf')
-            for inputs, targets in tqdm(train_dataloader, desc=f'{epoch}/{num_epoches}, Training...'):
+            for inputs, targets in tqdm(train_dataloader, desc=f'{epoch}/{num_epochs}, Training...'):
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
 
@@ -82,7 +89,7 @@ class Trainer:
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
 
-            colorlog.info(f'Epoch {epoch}/{num_epoches}, Train Loss: {train_loss}')
+            colorlog.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
 
             # validate
             if valid_dataloader:
@@ -91,7 +98,7 @@ class Trainer:
                 self.model.eval()
 
                 with torch.no_grad():
-                    for inputs, targets in tqdm(valid_dataloader, desc=f'{epoch}/{num_epoches}, Validating...'):
+                    for inputs, targets in tqdm(valid_dataloader, desc=f'{epoch}/{num_epochs}, Validating...'):
                         inputs, targets = inputs.to(device), targets.to(device)
 
                         outputs = self.model(inputs)
@@ -104,7 +111,7 @@ class Trainer:
                     valid_loss /= len(valid_dataloader)
                     valid_losses.append(valid_loss)
 
-                colorlog.info(f'Epoch {epoch}/{num_epoches}, Valid Loss: {valid_loss}')
+                colorlog.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
 
                 if early_stop:
                     early_stopper(valid_loss)
@@ -115,7 +122,7 @@ class Trainer:
             # save
             save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
             if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
-                save_model_filename = save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epoches}.pth'
+                save_model_filename = save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pth'
                 save_model(save_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=CONFIG['run_id'])
                 colorlog.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
@@ -134,26 +141,36 @@ class Trainer:
                                epoch=epoch, version=CONFIG['run_id'])
                     colorlog.info(f'save model to {best_model_filename} when {epoch=}, {best_loss=}')
 
-        last_model_filename = save_model_dir / "last_model.pt"
-        save_model(last_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                   epoch=num_epoches, version=CONFIG['run_id'])
-        colorlog.info(f'save model to {last_model_filename} when meeting to the last epoch')
+        save_model(self.last_model_file_path, 
+                   self.model, 
+                   optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
+                   epoch=num_epochs, version=CONFIG['run_id'])
+        colorlog.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
+        train_losses = np.array(train_losses, dtype=np.float64)
+        valid_losses = np.array(valid_losses, dtype=np.float64)
+        self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
+
+    def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray, optimizer=None, scaler=None, lr_scheduler=None):
+        CONFIG = get_config()
         labels = CONFIG['classes'][1]
         Recorder.record_loss(train_losses, self.output_dir)
         train_losses = np.array(train_losses, dtype=np.float64)
+
         plot = Plot(1, 1)
-        plot.subplot().epoch_loss(num_epoches, train_losses, labels, title='Train-Epoch-Loss').complete()
-        plot.save(self.output_dir / "train-epoch-loss.png")
-        logging.info(f'Save train-epoch-loss graph to {self.output_dir / "train-epoch-loss.png"}')
-        if valid_dataloader:
+        plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
+        plot.save(self.train_loss_image_path)
+
+        logging.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
+        if valid_losses:
             labels = CONFIG['classes'][1]
             Recorder.record_loss(valid_losses, self.output_dir)
             valid_losses = np.array(valid_losses, dtype=np.float64)
+            
             plot = Plot(1, 1)
-            plot.subplot().epoch_loss(num_epoches, valid_losses, labels, title='Valid-Epoch-Loss').complete()
-            plot.save(self.output_dir / "valid-epoch-loss.png")
-            logging.info(f'Save valid-epoch-loss graph to {self.output_dir / "valid-epoch-loss.png"}')
+            plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()
+            plot.save(self.valid_loss_image_path)
+            logging.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
 
 
         if CONFIG['private']['wandb']:
@@ -161,11 +178,11 @@ class Trainer:
             wandb.log({
                 'train': {
                     'losses': train_losses,
-                    'loss_image': self.output_dir / "epoch-loss.png"
+                    'loss_image': self.train_loss_image_path
                 },
                 'valid': {
                     'losses': valid_losses,
-                    'loss_image': self.output_dir / "epoch-loss.png"
+                    'loss_image': self.valid_loss_image_path
                 },
                 "config": {
                     "batch_size": CONFIG['train']['batch_size'],
@@ -180,10 +197,12 @@ class Trainer:
                 },
                 "model_data": {
                     "model": self.model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
+                    "optimizer": optimizer.state_dict() if optimizer else None,
                     "scaler": scaler.state_dict() if scaler else None,
-                    "lr_scheduler": lr_scheduler.state_dict() if lr_scheduler else None,
-                    "warmup": CONFIG['train']['lr_scheduler']['warmup'],
+                    "lr_scheduler": {
+                        'weight': lr_scheduler.state_dict(),
+                        "warmup": CONFIG['train']['lr_scheduler']['warmup'],
+                    } if lr_scheduler else None,
                 },
             })
 
@@ -241,6 +260,7 @@ class Vaildator:
     def __init__(self, output_dir: Path, model: nn.Module):
         super().__init__()
         self.output_dir = output_dir
+        self.metric_image_path = output_dir / "metrics.png"
         self.model = model
 
         os.makedirs(self.output_dir.absolute(), exist_ok=True)
@@ -261,7 +281,7 @@ class Vaildator:
             metrics = scores(targets, outputs, labels)
             scores_map = {k: v for k, v in metrics.items() if not any(keyword == k for keyword in ['argmax', 'argmin', 'mean'])}
             Recorder.record_metrics(scores_map, self.output_dir)
-            Plot(2, 3).metrics(scores_map).save(self.output_dir / "metrics.png")
+            Plot(2, 3).metrics(scores_map).save(self.metric_image_path)
 
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):

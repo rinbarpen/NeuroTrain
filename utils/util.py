@@ -90,17 +90,15 @@ def save_model_safe(path: Path, model: nn.Module, optimizer=None, lr_scheduler=N
         path.parent.mkdir()
         save_model(path, model, optimizer, lr_scheduler, scaler, **kwargs)
 
-def print_model_info(model_src: Path, output_stream: TextIO):
-    checkpoint = load_model(model_src, "cpu")
-    pprint(checkpoint, stream=output_stream)
-
-
-def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tensor):
+def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
     if isinstance(model_src, Path):
-        checkpoint = load_model(model_src, "cpu")
-        summary(checkpoint['model'], input_size=input_size)
+        checkpoint = load_model(model_src, device)
+        try:
+            summary(checkpoint['model'], input_size=input_size, device=device)
+        except:
+            summary(checkpoint, input_size=input_size, device=device)
     elif isinstance(model_src, torch.nn.Module):
-        summary(model_src, input_size=input_size)
+        summary(model_src, input_size=input_size, device=device)
 
 
 def save_numpy_data(path: Path, data: np.ndarray | torch.Tensor):
@@ -110,9 +108,8 @@ def save_numpy_data(path: Path, data: np.ndarray | torch.Tensor):
     try:
         np.save(path, data)
     except FileNotFoundError as e:
-        path.parent.mkdir()
+        path.parent.mkdir(parents=True)
         np.save(path, data)
-
 
 def load_numpy_data(path: Path):
     try:
@@ -126,6 +123,16 @@ def load_numpy_data(path: Path):
 def tuple2list(t: tuple):
     return list(t)
 
-
 def list2tuple(l: list):
     return tuple(l)
+
+def image_to_numpy(img: Image|cv2.Mat) -> np.ndarray:
+    if isinstance(img, Image):
+        img_np = np.array(img) # (H, W, C)
+        if img_np.ndim == 3:
+            img_np = img_np.transpose(2, 0, 1) # (C, H, W)
+    elif isinstance(img, cv2.Mat):
+        img_np = np.array(img)
+    
+    # output shape: (C, H, W) for RGB or (H, W) for gray
+    return img_np

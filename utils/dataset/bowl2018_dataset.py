@@ -21,7 +21,7 @@ def get_bowl2018_test_dataset(base_dir: Path, to_rgb=False):
 
 def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
     save_dir = save_dir / "BOWL2018"
-    os.makedirs(save_dir.absolute(), exist_ok=True)
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     train_dataset, _ = get_bowl2018_train_valid_dataset(base_dir, 1.0, to_rgb=to_rgb)
     

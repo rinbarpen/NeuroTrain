@@ -25,7 +25,6 @@ class Recorder:
 
     @staticmethod
     def record_losses(losses: dict[str, LIST_TYPE], path: Path):
-        losses = to_numpy(losses)
         df = pd.DataFrame()
         for k, v in losses.items():
             df[k] = to_numpy(v)

@@ -1,11 +1,14 @@
-import logging
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 from pathlib import Path
 import numpy as np
 from sklearn import metrics
-from utils.util import list2tuple
+
+# x, y, shape-like ['-o', '-D'] | font, color, label
+# labelsize for tick_params
+# linewidth linestyle for grid
+
 
 class Font:
     _family = 'Times New Roman'
@@ -53,12 +56,16 @@ class Subplot:
     def hist(self, x, bins=None, *args, **kwargs):
         self._ax.hist(x, bins=bins, *args, **kwargs)
         return self
+    def grid(self, visible: bool|None=None, **kwargs):
+        self._ax.grid(visible, **kwargs)
+        return self
+    # prop=Font().build()
+    def legend(self, *args, **kwargs):
+        self._ax.set_legend(*args, **kwargs)
 
     def tight_layout(self):
         self._ax.set_tight_layout()
         return self
-    def legend(self, *args, **kwargs):
-        self._ax.set_legend(*args, **kwargs)
         return self
     def figsize(self, figsize: tuple[float, float]):
         self._ax.set_figsize(figsize)
@@ -74,6 +81,9 @@ class Subplot:
         return self
     def yticks(self, yticks: np.array):
         self._ax.set_yticks(yticks)
+        return self
+    def tick_params(self, **kwargs):
+        self._ax.tick_parmas(**kwargs)
         return self
     def xlim(self, *args):
         self._ax.set_xlim(*args)
