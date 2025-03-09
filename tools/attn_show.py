@@ -1,10 +1,11 @@
 import torch
 import torch.nn.functional as F
-from .toolkit.vit_attn_show import show_mask_on_image
 import numpy as np
 import cv2
 import argparse
 from matplotlib import pyplot as plt
+
+from toolkit.vit_attn_show import show_mask_on_image
 
 def vit_image_on_mask(input_path, output_path, show=False):
     img = cv2.imread(input_path)

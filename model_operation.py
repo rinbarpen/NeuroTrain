@@ -1,9 +1,9 @@
-from abc import abstractmethod
-import logging
 import os
+import os.path
 from pathlib import Path
 from pprint import pp
 import numpy as np
+import logging
 import colorlog
 from tqdm import tqdm, trange
 import torch
@@ -16,10 +16,9 @@ from torch.utils.data import DataLoader
 from config import get_config
 from utils.early_stopping import EarlyStopping
 from utils.recorder import Recorder
-from utils.util import save_model
-from utils.scores import scores
+from utils.util import ScoreCalculator, save_model, load_model
 from utils.painter import Plot
-from utils.transform import image_transform
+from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -29,9 +28,9 @@ class Trainer:
         self.save_model_dir = output_dir / "weights"
         self.last_model_file_path = self.save_model_dir / "last.pt"
 
-        self.save_model_dir.mkdir(exist_ok=True, parents=True)
-        
         self.model = model
+
+        self.save_model_dir.mkdir(exist_ok=True, parents=True)
 
     def train(self, num_epochs: int, 
               criterion: nn.Module, 
@@ -57,6 +56,10 @@ class Trainer:
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
+        class_labels = CONFIG['classes']
+        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+        train_calculator = ScoreCalculator(class_labels, metric_labels)
+        valid_calculator = ScoreCalculator(class_labels, metric_labels)
         for epoch in range(1, num_epochs+1):
             # train
             self.model.train()
@@ -70,6 +73,7 @@ class Trainer:
                     device_type = 'cuda' if CONFIG['device'] != 'cpu' else 'cpu'
                     with autocast(device_type, dtype=torch.bfloat16):
                         outputs = self.model(inputs)
+
                         loss = criterion(targets, outputs)
 
                     scaler.scale(loss).backward()
@@ -82,14 +86,22 @@ class Trainer:
                     loss.backward()
                     optimizer.step()
 
+
                 train_loss += loss.item()
                 # logging.info(f'Epoch-Loss Variant: {loss.item() - last_train_loss}')
                 # last_train_loss = loss.item()
+                
+                targets[targets >= 0.5] = 1
+                targets[targets < 0.5] = 0
+                outputs[outputs >= 0.5] = 1
+                outputs[outputs < 0.5] = 0
+                train_calculator.add_one_batch(targets.detach().cpu().numpy(), outputs.detach().cpu().numpy())
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
-
             colorlog.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
+
+            train_calculator.finish_one_epoch()
 
             # validate
             if valid_dataloader:
@@ -108,10 +120,18 @@ class Trainer:
                         # logging.info(f'Epoch-Loss Variant: {loss.item() - last_valid_loss}')
                         # last_valid_loss = loss.item()
 
-                    valid_loss /= len(valid_dataloader)
-                    valid_losses.append(valid_loss)
+                        targets[targets >= 0.5] = 1
+                        targets[targets < 0.5] = 0
+                        outputs[outputs >= 0.5] = 1
+                        outputs[outputs < 0.5] = 0
+                        valid_calculator.add_one_batch(targets.detach().cpu().numpy(), outputs.detach().cpu().numpy())
+
+                valid_loss /= len(valid_dataloader)
+                valid_losses.append(valid_loss)
 
                 colorlog.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
+
+                valid_calculator.finish_one_epoch()
 
                 if early_stop:
                     early_stopper(valid_loss)
@@ -122,24 +142,27 @@ class Trainer:
             # save
             save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
             if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
-                save_model_filename = save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pth'
+                save_model_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pth'
                 save_model(save_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=CONFIG['run_id'])
                 colorlog.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
             if valid_dataloader:
                 if valid_loss < best_loss:
                     best_loss = valid_loss
-                    best_model_filename = save_model_dir / "best_model.pt"
+                    best_model_filename = self.save_model_dir / "best_model.pt"
                     save_model(best_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                                epoch=epoch, version=CONFIG['run_id'])
                     colorlog.info(f'save model to {best_model_filename} when {epoch=}, {best_loss=}')
             else:
                 if train_loss < best_loss:
                     best_loss = train_loss
-                    best_model_filename = save_model_dir / "best_model.pt"
+                    best_model_filename = self.save_model_dir / "best_model.pt"
                     save_model(best_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                                epoch=epoch, version=CONFIG['run_id'])
                     colorlog.info(f'save model to {best_model_filename} when {epoch=}, {best_loss=}')
+
+        train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+        valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
 
         save_model(self.last_model_file_path, 
                    self.model, 
@@ -211,88 +234,72 @@ class Tester:
         self.output_dir = output_dir
         self.model = model
 
-        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])
-        labels = CONFIG['classes']
+        class_labels = CONFIG['classes']
 
         self.model = self.model.to(device)
-        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
-        record_metrics = {metric_label: {label: []} for metric_label in metric_labels for label in labels}
-        scores_map = {metric_label: {label: 0.0} for metric_label in metric_labels for label in labels}
-        n = len(test_dataloader)
+        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+
+        calculator = ScoreCalculator(class_labels, metric_labels)
+
         for inputs, targets in tqdm(test_dataloader, desc="Testing"):
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = self.model(inputs)
 
-            targets[targets >= 0.5] = 1.0
-            targets[targets < 0.5] = 0.0
-            outputs[outputs >= 0.5] = 1.0
-            outputs[outputs < 0.5] = 0.0
+            targets[targets >= 0.5] = 1
+            targets[targets < 0.5] = 0
+            outputs[outputs >= 0.5] = 1
+            outputs[outputs < 0.5] = 0
 
             # (B, N, H, W) => N is n_classes
-            metrics = scores(targets.detach().cpu().numpy(), outputs.detach().cpu().numpy(), labels[1:], metric_labels=metric_labels)
-            metrics = {k: v for k, v in metrics.items() if not any(keyword == k for keyword in ['argmax', 'argmin', 'mean'])}
-            for metric_name, label_scores in metrics.items():
-                for label, score in label_scores.items():
-                    scores_map[metric_name][label] += score
-                    record_metrics[metric_name][label].append(score)
-        for metric_name, label_scores in metrics.items():
-            for label, _ in label_scores.items():
-                scores_map[metric_name][label] /= n
+            calculator.add_one_batch(
+                targets.detach().cpu().numpy(), 
+                outputs.detach().cpu().numpy())
 
-        Recorder.record_metrics(scores_map, self.output_dir)
-        pp(scores_map)
-        Plot(2, 3).metrics(scores_map).save(self.output_dir / "metrics.png")
-        if CONFIG['private']['wandb']:
-            import wandb
-            wandb.log({
-                'test': {
-                    'metrics': scores_map,
-                    'metrics_image': self.output_dir / "metrics.png",
-                },
-            })
+        calculator.record_batches(self.output_dir)
 
 class Vaildator:
     def __init__(self, output_dir: Path, model: nn.Module):
         super().__init__()
         self.output_dir = output_dir
-        self.metric_image_path = output_dir / "metrics.png"
         self.model = model
 
-        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @torch.no_grad()
     def valid(self, valid_dataloader: DataLoader):
         CONFIG = get_config()
-        labels = CONFIG['classes']
+        class_labels = CONFIG['classes']
+        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+
+        calculator = ScoreCalculator(class_labels, metric_labels)
 
         for inputs, targets in valid_dataloader:
             outputs = self.model(inputs)
 
-            targets[targets >= 0.5] = 1.0
-            targets[targets < 0.5] = 0.0
-            outputs[outputs >= 0.5] = 1.0
-            outputs[outputs < 0.5] = 0.0
+            targets[targets >= 0.5] = 1
+            targets[targets < 0.5] = 0
+            outputs[outputs >= 0.5] = 1
+            outputs[outputs < 0.5] = 0
 
-            metrics = scores(targets, outputs, labels)
-            scores_map = {k: v for k, v in metrics.items() if not any(keyword == k for keyword in ['argmax', 'argmin', 'mean'])}
-            Recorder.record_metrics(scores_map, self.output_dir)
-            Plot(2, 3).metrics(scores_map).save(self.metric_image_path)
+            calculator.add_one_batch(targets.cpu().detach().numpy(), outputs.cpu().detach().numpy())
+
+        calculator.record_batches(self.output_dir)
 
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
         self.model = model
 
-        os.makedirs(self.output_dir.absolute(), exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
-        os.makedirs(self.output_dir, exist_ok=True)
         from PIL import Image
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])

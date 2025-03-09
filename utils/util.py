@@ -15,7 +15,11 @@ from torchsummary import summary
 from pprint import pprint
 from typing import TextIO
 
-from config import CONFIG
+from config import CONFIG, get_config
+from models.sample.fpn import outputs
+from utils.recorder import Recorder
+from utils.scores import scores
+from utils.painter import Plot
 
 
 def prepare_logger():
@@ -136,3 +140,130 @@ def image_to_numpy(img: Image|cv2.Mat) -> np.ndarray:
     
     # output shape: (C, H, W) for RGB or (H, W) for gray
     return img_np
+
+class ScoreCalculator:
+    def __init__(self, class_labels: list[str], metric_labels: list[str]=['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']):
+        self.class_labels = class_labels
+        self.metric_labels = metric_labels
+        self.record_metrics = {metric_label: {class_label: []} for metric_label in metric_labels for class_label in class_labels}
+
+        self.epoch_metrics = {metric_label: {class_label: []} for metric_label in metric_labels for class_label in class_labels}
+
+    def add_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
+        metrics, _ = scores(targets, outputs, self.class_labels[1:], metric_labels=self.metric_labels)
+        for metric_label, label_scores in metrics.items():
+            for label, score in label_scores.items():
+                self.record_metrics[metric_label][label].append(score)
+
+    def finish_one_epoch(self):
+        for metric_label, label_scores in self.record_metrics.items():
+            for label, scores in label_scores.items():
+                self.epoch_metrics[metric_label][label].append(np.mean(scores))
+
+
+    def record_batches(self, output_dir: Path):
+        # 
+        # {'label': {'f1': [], 
+        #         'recall': []}}
+        # 
+        all_record: dict[str, dict[str, list]] = {}
+        # 
+        # {'label': {'f1': mean score, 
+        #         'recall': mean score}}
+        # 
+        mean_record: dict[str, dict[str, np.float64]] = {}
+        # 
+        # {'f1': mean_label_score}
+        # 
+        metric_record: dict[str, np.float64] = {}
+
+        for metric_name, label_scores in self.record_metrics.items():
+            for label, scores in label_scores.items():
+                all_record[label][metric_name] = scores
+        for label, metrics in all_record.items():
+            for metric, scores in metrics:
+                mean_record[label][metric] = np.mean(scores)
+        for metric_name, label_scores in self.record_metrics.items():
+            mean_scores = []
+            for label, scores in label_scores.items():
+                mean_scores.append(np.mean(scores)) 
+            metric_record[metric_name] = np.mean(mean_scores)
+
+        for label, metrics in mean_record.items():
+            Recorder.record_mean_metrics(mean_record[label], output_dir / label)
+        Recorder.record_metrics(metric_record, output_dir)
+
+        # paint mean metrics for all classes
+        Plot(1, len(self.class_labels)).metrics(metric_record).save(output_dir / "mean-metrics.png")
+
+        CONFIG = get_config()
+        if CONFIG['private']['wandb']:
+            import wandb
+            wandb.log({
+                'metric': {
+                    'score': {
+                        'all': all_record,
+                        'mean': mean_record,
+                        'record': mean_record,
+                    },
+                    'image': {
+                        'mean': output_dir / "mean-metrics.png",
+                    }
+                },
+            })
+
+    def record_epochs(self, output_dir: Path, n_epochs: int):
+        # 
+        # {'label': {'f1': [], 
+        #         'recall': []}}
+        # 
+        all_record: dict[str, dict[str, list]] = {}
+        # 
+        # {'label': {'f1': mean score, 
+        #         'recall': mean score}}
+        # 
+        mean_record: dict[str, dict[str, np.float64]] = {}
+        # 
+        # {'f1': mean_label_score}
+        # 
+        metric_record: dict[str, np.float64] = {}
+
+        for metric_name, label_scores in self.epoch_metrics.items():
+            for label, scores in label_scores.items():
+                all_record[label][metric_name] = scores
+        for label, metrics in all_record.items():
+            for metric, scores in metrics:
+                mean_record[label][metric] = np.mean(scores)
+        for metric_name, label_scores in self.record_metrics.items():
+            mean_scores = []
+            for label, scores in label_scores.items():
+                mean_scores.append(np.mean(scores)) 
+            metric_record[metric_name] = np.mean(mean_scores)
+
+        for label, metrics in all_record.items():
+            Recorder.record_all_metrics(all_record[label], output_dir / label)
+        for label, metrics in mean_record.items():
+            Recorder.record_mean_metrics(mean_record[label], output_dir / label)
+        Recorder.record_metrics(metric_record, output_dir)
+
+        # paint metrics curve for all classes in one figure
+        Plot(1, 1).subplot().many_epoch_metrics(n_epochs, all_record, self.class_labels).complete().save(output_dir / "epoch-metrics.png")
+        # paint mean metrics for all classes
+        Plot(1, len(self.class_labels)).metrics(metric_record).save(output_dir / "mean-metrics.png")
+
+        CONFIG = get_config()
+        if CONFIG['private']['wandb']:
+            import wandb
+            wandb.log({
+                'metric': {
+                    'score': {
+                        'all': all_record,
+                        'mean': mean_record,
+                        'record': mean_record,
+                    },
+                    'image': {
+                        'mean': output_dir / "mean-metrics.png",
+                        'epoch': output_dir / "epoch-metrics.png",
+                    }
+                },
+            })

@@ -46,8 +46,8 @@ class Recorder:
 
 
     @staticmethod
-    def record_metrics(metrics: dict[str, LIST_TYPE], path: Path):
-        # metrics: {'f1': [epoch f1], 'recall': [epoch recall]}
+    def record_metrics(metrics: dict[str, np.float64], path: Path):
+        # metrics: {'f1': f1 score, 'recall': recall}
         df = pd.DataFrame()
         for k, v in metrics.items():
             df[k] = to_numpy(v)
@@ -55,3 +55,25 @@ class Recorder:
         df.to_csv(path / 'metrics.csv')
         df.to_parquet(path / 'metrics.parquet')
         logging.info(f'Save metric data under the {path}')
+    @staticmethod
+    def record_all_metrics(metrics: dict[str, LIST_TYPE], path: Path):
+        # metrics: {'f1': [epoch f1], 'recall': [epoch recall]}
+        df = pd.DataFrame()
+        for k, v in metrics.items():
+            df[k] = to_numpy(v)
+
+        df.to_csv(path / 'all_metrics.csv')
+        df.to_parquet(path / 'all_metrics.parquet')
+        logging.info(f'Save all metric data under the {path}')
+
+    @staticmethod
+    def record_mean_metrics(metrics: dict[str, np.float64], path: Path):
+        # metrics: {'f1': mean f1, 'recall': mean recall}
+        df = pd.DataFrame()
+        for k, v in metrics.items():
+            df[k] = v
+
+        df.to_csv(path / 'mean_metrics.csv')
+        df.to_parquet(path / 'mean_metrics.parquet')
+        logging.info(f'Save mean metric data under the {path}')
+

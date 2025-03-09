@@ -116,6 +116,44 @@ class Subplot:
         self._ax.legend()
         return self
 
+    def epoch_metrics(self, 
+                   num_epoch: int, 
+                   metrics: np.ndarray|list[float]|tuple[float], 
+                   class_label: str, 
+                   title: str='Epoch-Label-Metric'):
+        if isinstance(metrics, list) or isinstance(metrics, tuple): 
+            metrics = np.array(metrics, dtype=np.float64)
+
+        epochs = np.arange(1, num_epoch+1, dtype=np.int32)
+        self._ax.plot(epochs, metrics, label=class_label)
+
+        self._ax.set_title(title)
+        self._ax.set_xlabel('Epoch')
+        self._ax.set_ylabel('Metric Score')
+        self._ax.set_xlim(1, num_epoch)
+        self._ax.legend()
+        return self
+
+    def many_epoch_metrics(self, 
+                   num_epoch: int, 
+                   class_metrics: dict[str, np.ndarray|list[float]|tuple[float]], 
+                   class_labels: list[str], 
+                   title: str='Epoch-Label-Metric'):
+        for label in class_labels:
+            metrics = class_metrics[label]
+            if isinstance(metrics, list) or isinstance(metrics, tuple): 
+                metrics = np.array(metrics, dtype=np.float64)
+
+            epochs = np.arange(1, num_epoch+1, dtype=np.int32)
+            self._ax.plot(epochs, metrics, label=label)
+
+        self._ax.set_title(title)
+        self._ax.set_xlabel('Epoch')
+        self._ax.set_ylabel('Metric Score')
+        self._ax.set_xlim(1, num_epoch)
+        self._ax.legend()
+        return self
+
     def many_epoch_loss(self, 
                    num_epoch: int, 
                    losses: tuple[np.ndarray]|list[np.ndarray], 
