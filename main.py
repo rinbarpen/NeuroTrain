@@ -85,9 +85,6 @@ if __name__ == "__main__":
     if CONFIG['model']['load'] != "":
         model_path = Path(CONFIG['model']['load'])
         model_params = load_model(model_path, 'cuda')
-        model_params = model_params['model']
-        # if hasattr(model_params, 'model'):
-        #     model_params = model_params['model']
         logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)
 
@@ -134,15 +131,13 @@ if __name__ == "__main__":
             early_stop=CONFIG["train"]["early_stopping"],
         )
         dump_config(train_dir / "config.json")
+        dump_config(train_dir / "config.toml")
+        dump_config(train_dir / "config.yaml")
 
     if is_test():
         if is_train():
             model_path = train_dir / "weights" / "best.pt"
             model_params = load_model(model_path, 'cuda')
-            try:
-                model_params = model_params['model']
-            except:
-                pass
             logging.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
 
@@ -160,6 +155,8 @@ if __name__ == "__main__":
         handle = Tester(test_dir, model)
         handle.test(test_dataloader=test_loader)
         dump_config(test_dir / "config.json")
+        dump_config(test_dir / "config.toml")
+        dump_config(test_dir / "config.yaml")
 
     if is_predict():
         handle = Predictor(predict_dir, model)
@@ -168,5 +165,7 @@ if __name__ == "__main__":
             inputs = [filename for filename in input_path.iterdir()]
             handle.predict(inputs, **CONFIG["predict"]["config"])
         dump_config(predict_dir / "config.json")
+        dump_config(predict_dir / "config.toml")
+        dump_config(predict_dir / "config.yaml")
 
     end_task()

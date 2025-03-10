@@ -54,34 +54,42 @@ def prepare_logger():
     root_logger.addHandler(file_handler)
 
 
-def save_model(path: Path, model: nn.Module,
+def save_model(path: Path, model: nn.Module, *, 
+               ext_path: Path|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
-    checkpoint = dict()
-    if CONFIG['model']['only_weight']:
-        checkpoint = model.state_dict()
-    else:
-        checkpoint['model'] = model.state_dict()
-        if optimizer:
-            checkpoint["optimizer"] = optimizer.state_dict()
-        if lr_scheduler:
-            checkpoint["lr_scheduler"] = lr_scheduler.state_dict()
-        if scaler:
-            checkpoint["scaler"] = scaler.state_dict()
-        for k, v in kwargs.items():
-            checkpoint[k] = v
+    model_cp = model.state_dict()
 
     try:
-        torch.save(checkpoint, path)
+        torch.save(model_cp, path)
     except FileExistsError as e:
         path = path.parent / (path.stem +
                               strftime("%Y%m%d_%H%M%S", time.localtime()))
-        torch.save(checkpoint, path)
+        torch.save(model_cp, path)
+
+    if ext_path:
+        ext_cp = dict()
+        if optimizer:
+            ext_cp["optimizer"] = optimizer.state_dict()
+        if lr_scheduler:
+            ext_cp["lr_scheduler"] = lr_scheduler.state_dict()
+        if scaler:
+            ext_cp["scaler"] = scaler.state_dict()
+        for k, v in kwargs.items():
+            ext_cp[k] = v
+        try:
+            torch.save(ext_cp, ext_path)
+        except FileExistsError as e:
+            ext_path = ext_path.parent / (ext_path.stem +
+                                strftime("%Y%m%d_%H%M%S", time.localtime()))
+            torch.save(ext_cp, ext_path)
 
 
 def load_model(path: Path, map_location: str = 'cuda'):
     return torch.load(path, 
-                      map_location=torch.device(map_location), 
-                      weights_only=CONFIG['model']['only_weight'])
+                      map_location=torch.device(map_location))
+def load_model_ext(ext_path: Path, map_location: str = 'cuda'):
+    return torch.load(ext_path, 
+                      map_location=torch.device(map_location))
 
 def save_model_to_onnx(path: Path, model: nn.Module, input_size: tuple):
     dummy_input = torch.randn(input_size)

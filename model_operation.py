@@ -27,6 +27,9 @@ class Trainer:
         self.valid_loss_image_path = output_dir / "valid-epoch-loss.png"
         self.save_model_dir = output_dir / "weights"
         self.last_model_file_path = self.save_model_dir / "last.pt"
+        self.best_model_file_path = self.save_model_dir / "best.pt"
+        self.last_model_ext_file_path = self.save_model_dir / "last-ext.pt"
+        self.best_model_ext_file_path = self.save_model_dir / "best-ext.pt"
 
         self.model = model
 
@@ -41,6 +44,7 @@ class Trainer:
               *, early_stop: bool = False):
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])
+        save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
 
         self.model = self.model.to(device)
 
@@ -140,45 +144,42 @@ class Trainer:
                         break
 
             # save
-            save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
             if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
-                save_model_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pth'
-                save_model(save_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
+                save_model_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pt'
+                save_model_ext_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
+                save_model(save_model_filename, self.model,             
+                           ext_path=save_model_ext_filename, optimizer=optimizer,        scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=CONFIG['run_id'])
                 colorlog.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
-            if valid_dataloader:
-                if valid_loss < best_loss:
-                    best_loss = valid_loss
-                    best_model_filename = self.save_model_dir / "best_model.pt"
-                    save_model(best_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                               epoch=epoch, version=CONFIG['run_id'])
-                    colorlog.info(f'save model to {best_model_filename} when {epoch=}, {best_loss=}')
-            else:
-                if train_loss < best_loss:
-                    best_loss = train_loss
-                    best_model_filename = self.save_model_dir / "best_model.pt"
-                    save_model(best_model_filename, self.model, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                               epoch=epoch, version=CONFIG['run_id'])
-                    colorlog.info(f'save model to {best_model_filename} when {epoch=}, {best_loss=}')
+
+            target_loss = valid_loss if valid_dataloader else train_loss
+            if target_loss < best_loss:
+                best_loss = target_loss
+                save_model(self.best_model_file_path, self.model, 
+                            ext_path=self.best_model_ext_file_path,
+                            optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
+                            epoch=epoch, version=CONFIG['run_id'])
+                colorlog.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
+                colorlog.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+            
+            save_model(self.last_model_file_path, self.model,
+                       ext_path=self.last_model_ext_file_path,
+                       optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
+                       epoch=num_epochs, version=CONFIG['run_id'])
 
         train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
         valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
 
-        save_model(self.last_model_file_path, 
-                   self.model, 
-                   optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                   epoch=num_epochs, version=CONFIG['run_id'])
         colorlog.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
         train_losses = np.array(train_losses, dtype=np.float64)
         valid_losses = np.array(valid_losses, dtype=np.float64)
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
-    def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray, optimizer=None, scaler=None, lr_scheduler=None):
+    def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
         CONFIG = get_config()
-        labels = CONFIG['classes'][1]
+        labels = CONFIG['classes'][1:]
         Recorder.record_loss(train_losses, self.output_dir)
-        train_losses = np.array(train_losses, dtype=np.float64)
 
         plot = Plot(1, 1)
         plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
@@ -186,9 +187,7 @@ class Trainer:
 
         logging.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
         if valid_losses:
-            labels = CONFIG['classes'][1]
             Recorder.record_loss(valid_losses, self.output_dir)
-            valid_losses = np.array(valid_losses, dtype=np.float64)
             
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()

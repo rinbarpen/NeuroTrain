@@ -14,8 +14,7 @@ CONFIG = {
         "config": {
             "n_channels": 1,
             "n_classes": 1
-        },
-        "only_weight": False,
+        }
     },
     "train": {
         "dataset": {
