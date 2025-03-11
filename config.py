@@ -8,9 +8,8 @@ CONFIG = {
     "seed": 42,
     "classes": ["Background", "Retina"],
     "model": {
-        "name": "unet_neck",
-        "save": "",
-        "load": "",
+        "name": "unet",
+        "continue_checkpoint": "",
         "config": {
             "n_channels": 1,
             "n_classes": 1
@@ -39,7 +38,7 @@ CONFIG = {
             "warmup": 50,
             "warmup_lr": 0.03
         },
-        "amp": False, # bfloat16
+        "amp": False, # default is bfloat16
         "early_stopping": False,
         "patience": 3
     },

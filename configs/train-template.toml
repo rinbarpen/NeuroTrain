@@ -6,10 +6,8 @@ seed = 42
 classes = ["Background", "Retina"]
 
 [model]
-name = "unet_neck"
-save = ""
-load = ""
-only_weight = false
+name = "unet"
+continue_checkpoint = ""
 
 [model.config]
 n_channels = 1

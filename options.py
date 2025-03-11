@@ -38,7 +38,6 @@ def parse_args():
     train_parser.add_argument('--num_workers', type=int, default=0, help='num_workers')
     train_parser.add_argument('--data', type=str, help='dataset names')
     train_parser.add_argument('--data_dir', type=str, help='dataset directory')
-    train_parser.add_argument('--only_weight', action='store_true', help='save model only with weight')
     # Predict
     predict_parser = parser.add_argument_group(title='Predict Options', description='Predict options')
     predict_parser.add_argument('-i', '--input', type=str, help='input')
@@ -53,8 +52,7 @@ def parse_args():
     parser.add_argument('--test', action='store_true', default=False, help='Test')
     parser.add_argument('--predict', action='store_true', default=False, help='Predict')
     parser.add_argument('--output_dir', type=str, help='Output Directory')
-    parser.add_argument('--save_dir', type=str, help='Save Model Directory')
-    parser.add_argument('--load_dir', type=str, help='Load Model Directory')
+    parser.add_argument('--continue_checkpoint', type=str, help='Load Model Checkpoint')
     parser.add_argument('--task', type=str, help='Task name')
 
     args = parser.parse_args()
@@ -63,8 +61,6 @@ def parse_args():
         config_file = Path(args.config)
         CONFIG = load_config(config_file)
 
-    if args.only_weight:
-        CONFIG['model']['only_weight'] = args.only_weight
     if args.seed:
         CONFIG['seed'] = args.seed
     if args.device:
@@ -76,10 +72,8 @@ def parse_args():
     if args.verbose:
         CONFIG['private']['verbose'] = args.verbose
 
-    if args.save_dir:
-        CONFIG['model']['save'] = args.save_dir
-    if args.load_dir:
-        CONFIG['model']['load'] = args.load_dir
+    if args.continue_checkpoint:
+        CONFIG['model']['continue_checkpoint'] = args.continue_checkpoint
     if args.model:
         CONFIG['model']['name'] = args.model
         if args.model_config: # n_channels=1;n_classes=1
