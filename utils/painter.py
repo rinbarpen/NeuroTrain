@@ -66,7 +66,6 @@ class Subplot:
     def tight_layout(self):
         self._ax.set_tight_layout()
         return self
-        return self
     def figsize(self, figsize: tuple[float, float]):
         self._ax.set_figsize(figsize)
         return self

@@ -12,11 +12,8 @@ from pathlib import Path
 from PIL import Image
 from torch import nn
 from torchsummary import summary
-from pprint import pprint
-from typing import TextIO
 
-from config import CONFIG, get_config
-from models.sample.fpn import outputs
+from config import get_config
 from utils.recorder import Recorder
 from utils.scores import scores
 from utils.painter import Plot
@@ -95,20 +92,10 @@ def save_model_to_onnx(path: Path, model: nn.Module, input_size: tuple):
     dummy_input = torch.randn(input_size)
     torch.onnx.export(model, dummy_input, path)
 
-def save_model_safe(path: Path, model: nn.Module, optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
-    try:
-        save_model(path, model, optimizer, lr_scheduler, scaler, **kwargs)
-    except FileNotFoundError as e:
-        path.parent.mkdir()
-        save_model(path, model, optimizer, lr_scheduler, scaler, **kwargs)
-
 def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
     if isinstance(model_src, Path):
         checkpoint = load_model(model_src, device)
-        try:
-            summary(checkpoint['model'], input_size=input_size, device=device)
-        except:
-            summary(checkpoint, input_size=input_size, device=device)
+        summary(checkpoint, input_size=input_size, device=device)
     elif isinstance(model_src, torch.nn.Module):
         summary(model_src, input_size=input_size, device=device)
 

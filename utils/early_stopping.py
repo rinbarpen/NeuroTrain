@@ -1,7 +1,7 @@
-import colorlog
+import logging
 
 class EarlyStopping:
-    def __init__(self, patience, verbose=False, delta=0):
+    def __init__(self, patience: int, verbose=False, delta: float=0.0):
         self.patience = patience
         self.verbose = verbose
         self.delta = delta
@@ -18,7 +18,7 @@ class EarlyStopping:
         elif score < self.best_score + self.delta:
             self.counter += 1
             if self.verbose:
-                colorlog.info(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+                logging.info(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
