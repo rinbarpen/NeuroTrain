@@ -1,3 +1,4 @@
+import os.path
 from pathlib import Path
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget, SemanticSegmentationTarget
@@ -10,10 +11,10 @@ from torch import nn
 import torch
 from PIL import Image
 import cv2
+from argparse import ArgumentParser
 
 
-
-def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tensor, image_np: np.ndarray, target_category: int):
+def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tensor, image_np: np.ndarray, target_category: int, mask_path: Path|None=None):
     # image_np: (H, W, C) format
     H, W = image_np.shape[0], image_np.shape[1]
     use_rgb = image_np.ndim == 3
@@ -30,9 +31,12 @@ def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tenso
 
     plt.imshow(visualization)
     plt.title(f"Grad-CAM for category {target_category} (all pixels)")
-    plt.show()
+    if mask_path:
+        plt.savefig(mask_path)
+    else:
+        plt.show()
 
-def resnet50_check(image_path: Path, is_rgb: bool):
+def resnet50_check(image_path: Path, mask_path: Path|None, *, is_rgb: bool):
     # Load a pre-trained ResNet50 model
     model = resnet50(pretrained=True)
     model.eval()
@@ -64,8 +68,18 @@ def resnet50_check(image_path: Path, is_rgb: bool):
     target_category = 0
 
     # Generate and display the Grad-CAM visualization
-    cam_segment(model, target_layers, input_tensor, image_np, target_category)
+    cam_segment(model, target_layers, input_tensor, image_np, target_category, mask_path)
 
 if __name__ == '__main__':
-    image_path = r'data\DRIVE\training\images\21.png'  
-    resnet50_check(image_path, True)
+    # image_path = r'data\DRIVE\training\images\21.png'
+    parser = ArgumentParser('draw cam')
+    parser.add_argument('-i', '--input', type=str, required=True, help='Input Image to Draw Cam')
+    parser.add_argument('-o', '--output', type=str, default='', help='Output Cammed Image to be saved')
+    
+    args = parser.parse_args()
+    input_image = args.input
+    output_image = args.output
+    if not os.path.isfile(args.output):
+        output_image = None
+
+    resnet50_check(input_image, output_image, is_rgb=True)

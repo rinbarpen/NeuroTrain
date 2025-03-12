@@ -3,6 +3,8 @@ from argparse import ArgumentParser
 import logging
 from pathlib import Path
 
+#TODO: Save config
+
 if __name__ == '__main__':
     parser = ArgumentParser(description="Cache dataset to numpy format")
     parser.add_argument('-n', '--dataset_name', type=str, required=True, help="Name of the dataset")
