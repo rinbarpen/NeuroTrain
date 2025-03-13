@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from config import get_config
 from utils.early_stopping import EarlyStopping
 from utils.recorder import Recorder
-from utils.util import ScoreCalculator, save_model, load_model
+from utils.util import ScoreCalculator, save_model
 from utils.painter import Plot
 from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
 
@@ -45,6 +45,7 @@ class Trainer:
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])
         save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
+        enable_valid_when_training = valid_dataloader is not None
 
         self.model = self.model.to(device)
 
@@ -63,7 +64,7 @@ class Trainer:
         class_labels = CONFIG['classes']
         metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
         train_calculator = ScoreCalculator(class_labels, metric_labels)
-        valid_calculator = ScoreCalculator(class_labels, metric_labels)
+        valid_calculator = ScoreCalculator(class_labels, metric_labels) if enable_valid_when_training else None
         for epoch in range(1, num_epochs+1):
             # train
             self.model.train()
@@ -99,7 +100,9 @@ class Trainer:
                 targets[targets < 0.5] = 0
                 outputs[outputs >= 0.5] = 1
                 outputs[outputs < 0.5] = 0
-                train_calculator.add_one_batch(targets.detach().cpu().numpy(), outputs.detach().cpu().numpy())
+                train_calculator.add_one_batch(
+                    targets.detach().cpu().float().numpy(), 
+                    outputs.detach().cpu().float().numpy())
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
@@ -108,7 +111,7 @@ class Trainer:
             train_calculator.finish_one_epoch()
 
             # validate
-            if valid_dataloader:
+            if enable_valid_when_training:
                 valid_loss = 0.0
                 # last_valid_loss = float('inf')
                 self.model.eval()
@@ -128,7 +131,9 @@ class Trainer:
                         targets[targets < 0.5] = 0
                         outputs[outputs >= 0.5] = 1
                         outputs[outputs < 0.5] = 0
-                        valid_calculator.add_one_batch(targets.detach().cpu().numpy(), outputs.detach().cpu().numpy())
+                        valid_calculator.add_one_batch(
+                            targets.detach().cpu().float().numpy(), 
+                            outputs.detach().cpu().float().numpy())
 
                 valid_loss /= len(valid_dataloader)
                 valid_losses.append(valid_loss)
@@ -168,12 +173,13 @@ class Trainer:
                        epoch=num_epochs, version=CONFIG['run_id'])
 
         train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
-        valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+        if enable_valid_when_training:
+            valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
 
         colorlog.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
         train_losses = np.array(train_losses, dtype=np.float64)
-        valid_losses = np.array(valid_losses, dtype=np.float64)
+        valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):

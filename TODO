@@ -1,2 +1,9 @@
+Overall:
+ - [x] Test to train
+ - [ ] Test to test
+ - [ ] Test to predict
+
 Train:
- - [exp] 添加训练时 Epoch-Class-MetricMap graph and data
+ - [x] Add Mean-Epoch-Metric for every class
+ - [x] the score from Mean-Metric for every class may be a fault
+ - [x] The image of Mean-Metric on classes is error 

@@ -4,6 +4,7 @@ import seaborn as sns
 from pathlib import Path
 import numpy as np
 from sklearn import metrics
+from utils.typed import ClassMetricOneScoreDict
 
 # x, y, shape-like ['-o', '-D'] | font, color, label
 # labelsize for tick_params
@@ -63,9 +64,6 @@ class Subplot:
     def legend(self, *args, **kwargs):
         self._ax.set_legend(*args, **kwargs)
 
-    def tight_layout(self):
-        self._ax.set_tight_layout()
-        return self
     def figsize(self, figsize: tuple[float, float]):
         self._ax.set_figsize(figsize)
         return self
@@ -99,7 +97,7 @@ class Subplot:
 
     def epoch_loss(self, 
                    num_epoch: int, 
-                   losses: np.ndarray|list[float]|tuple[float], 
+                   losses: list[np.ndarray], 
                    label: str='Loss', 
                    title='Epoch-Loss'):
         if isinstance(losses, list) or isinstance(losses, tuple): 
@@ -117,7 +115,7 @@ class Subplot:
 
     def epoch_metrics(self, 
                    num_epoch: int, 
-                   metrics: np.ndarray|list[float]|tuple[float], 
+                   metrics: list[np.ndarray], 
                    class_label: str, 
                    title: str='Epoch-Label-Metric'):
         if isinstance(metrics, list) or isinstance(metrics, tuple): 
@@ -135,7 +133,7 @@ class Subplot:
 
     def many_epoch_metrics(self, 
                    num_epoch: int, 
-                   class_metrics: dict[str, np.ndarray|list[float]|tuple[float]], 
+                   class_metrics: dict[str, list[np.ndarray]], 
                    class_labels: list[str], 
                    title: str='Epoch-Label-Metric'):
         for label in class_labels:
@@ -147,16 +145,14 @@ class Subplot:
             self._ax.plot(epochs, metrics, label=label)
 
         self._ax.set_title(title)
-        self._ax.set_xlabel('Epoch')
-        self._ax.set_ylabel('Metric Score')
         self._ax.set_xlim(1, num_epoch)
         self._ax.legend()
         return self
 
     def many_epoch_loss(self, 
                    num_epoch: int, 
-                   losses: tuple[np.ndarray]|list[np.ndarray], 
-                   labels: tuple[str, ...]|list[str]='Loss', 
+                   losses: list[np.ndarray], 
+                   labels: list[str]='Loss', 
                    title='Epoch-Loss'):        
         epoches = np.arange(1, num_epoch+1, dtype=np.int32)
 
@@ -180,14 +176,27 @@ class Subplot:
         self._ax.legend()
         return self
 
-    # scores_map: the inputs: {'metric_label': score, ...}
-    def metric(self, scores_map: dict[str, np.float64], title='XX Metric'):
-        labels, scores = scores_map.keys(), scores_map.values()
-        colors = sns.color_palette("husl", len(labels))
+    # scores_map: {'metric_label': {'label'： label_score, ...}, ...}
+    def many_metrics(self, label_metric_score: ClassMetricOneScoreDict, title: str|None=None, *, width=0.35):
+        colors = sns.color_palette("husl", len(label_metric_score))
+        for color, (class_label, metric_score) in zip(colors, label_metric_score.items()):
+            metric_labels, scores = metric_score.keys(), metric_score.values()
+            self._ax.bar(metric_labels, scores, width, color=color, label=class_label)
+
         self._ax.set_title(title)
-        self._ax.bar(labels, scores, color=colors)
         self._ax.set_ylim(0, 1)
+        self._ax.set_xticklabels(metric_labels)
+        self._ax.legend()
         return self
+
+    def with_autolabel(self, rects):
+        for rect in rects:
+            height = rect.get_height()
+            self._ax.annotate('{}'.format(height),
+                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xytext=(0, 3),  # 3 points vertical offset
+                        textcoords="offset points",
+                        ha='center', va='bottom')
 
     def roc(self, y_trues: list[np.ndarray], y_preds: list[np.ndarray],
             labels: list[str], title='Roc Curve'):
@@ -245,17 +254,15 @@ class Plot:
         _subplot = Subplot(ax, self)
         return _subplot
 
+    def tight_layout(self):
+        self._fig.tight_layout()
+        return self
+
     def theme(self, theme: str):
         self._theme = theme
 
     def title(self, title: str):
         self._title = title
-
-    # input: {'f1': {'label_name': score, ...}, 'accuracy': {...}, ...}
-    def metrics(self, scores_map: dict[str, dict[str, np.float64]]):
-        for metric_name, metric in scores_map.items():
-            self.subplot().metric(metric, title=metric_name).complete()
-        return self
 
     def show(self):
         self._setup_params()

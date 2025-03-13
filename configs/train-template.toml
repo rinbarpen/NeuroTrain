@@ -3,7 +3,7 @@ task = "TestModel"
 run_id = "0"
 device = "cuda"
 seed = 42
-classes = ["Background", "Retina"]
+classes = ["Retina"]
 
 [model]
 name = "unet"
@@ -53,7 +53,7 @@ path = "./data/DRIVE"
 num_workers = 0
 
 [predict]
-input = ""
+input = "data/DRIVE/test/images"
 config = {}
 
 [private]

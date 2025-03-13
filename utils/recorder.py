@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from utils.typed import MetricLabelManyScoreDict, MetricLabelOneScoreDict
+
 
 LIST_TYPE = list|np.ndarray|torch.Tensor|tuple
 
@@ -46,17 +48,17 @@ class Recorder:
 
 
     @staticmethod
-    def record_metrics(metrics: dict[str, np.float64], path: Path):
+    def record_metrics(metrics: MetricLabelOneScoreDict, path: Path):
         # metrics: {'f1': f1 score, 'recall': recall}
         df = pd.DataFrame()
         for k, v in metrics.items():
-            df[k] = to_numpy(v)
+            df[k] = to_numpy([v])
 
         df.to_csv(path / 'metrics.csv')
         df.to_parquet(path / 'metrics.parquet')
         logging.info(f'Save metric data under the {path}')
     @staticmethod
-    def record_all_metrics(metrics: dict[str, LIST_TYPE], path: Path):
+    def record_all_metrics(metrics: MetricLabelManyScoreDict, path: Path):
         # metrics: {'f1': [epoch f1], 'recall': [epoch recall]}
         df = pd.DataFrame()
         for k, v in metrics.items():
@@ -67,11 +69,11 @@ class Recorder:
         logging.info(f'Save all metric data under the {path}')
 
     @staticmethod
-    def record_mean_metrics(metrics: dict[str, np.float64], path: Path):
+    def record_mean_metrics(metrics: MetricLabelOneScoreDict, path: Path):
         # metrics: {'f1': mean f1, 'recall': mean recall}
         df = pd.DataFrame()
         for k, v in metrics.items():
-            df[k] = v
+            df[k] = to_numpy([v])
 
         df.to_csv(path / 'mean_metrics.csv')
         df.to_parquet(path / 'mean_metrics.parquet')

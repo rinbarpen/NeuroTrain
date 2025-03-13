@@ -82,8 +82,8 @@ if __name__ == "__main__":
         wandb.init(entity="lpoutyoumu", project=CONFIG["task"], id=CONFIG["run_id"])
 
     model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
-    if CONFIG['model']['load'] != "":
-        model_path = Path(CONFIG['model']['load'])
+    if CONFIG['model']['continue_checkpoint'] != "":
+        model_path = Path(CONFIG['model']['continue_checkpoint'])
         model_params = load_model(model_path, 'cuda')
         logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)

@@ -162,7 +162,15 @@ def load_config(filename: Path):
 
 def dump_config(filename: Path):
     CONFIG = get_config()
-    with filename.open(mode='w', encoding='utf-8') as f:
-        json.dump(CONFIG, f)
+    match filename.suffix:
+        case '.json':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                json.dump(CONFIG, f)
+        case '.toml':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                toml.dump(CONFIG, f)
+        case '.yaml'|'.yml':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                yaml.safe_dump_all(CONFIG, f)
 
     logging.info(f'Dumping config to {filename}')

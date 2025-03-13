@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn import metrics
+from utils.typed import ALL_METRIC_LABELS, MetricAfterDict, MetricClassOneScoreDict, MetricLabelsList
 
 type MetricMapType = dict[str, dict[str, np.float64]]
 
@@ -57,7 +58,7 @@ def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *,
     return result
 
 def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
-    n_labels = len(labels)
+    n_labels = len(labels) 
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
     y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
@@ -86,41 +87,33 @@ def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, clas
 
     return result
 
-def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str]|tuple[str], 
-           metric_labels=['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'], 
+def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], 
+           metric_labels: MetricLabelsList=ALL_METRIC_LABELS, 
            *, class_axis: int=1, average: str='binary'):
-    result: MetricMapType = {}
-    result_after = {'mean': {}, 'argmax': {}, 'argmin': {}}
-    if 'iou' in metric_labels:
-        result['iou'] = iou_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['iou'] = np.array([score for score in result['iou'].values()]).mean()
-        result_after['argmax']['iou'] = labels[np.array([score for score in result['iou'].values()]).argmax()]
-        result_after['argmin']['iou'] = labels[np.array([score for score in result['iou'].values()]).argmin()]
-    if 'accuracy' in metric_labels:
-        result['accuracy'] = accuracy_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['accuracy'] = np.array([score for score in result['accuracy'].values()]).mean()
-        result_after['argmax']['accuracy'] = labels[np.array([score for score in result['accuracy'].values()]).argmax()]
-        result_after['argmin']['accuracy'] = labels[np.array([score for score in result['accuracy'].values()]).argmin()]
-    if 'precision' in metric_labels:
-        result['precision'] = precision_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['precision'] = np.array([score for score in result['precision'].values()]).mean()
-        result_after['argmax']['precision'] = labels[np.array([score for score in result['precision'].values()]).argmax()]
-        result_after['argmin']['precision'] = labels[np.array([score for score in result['precision'].values()]).argmin()]
-    if 'recall' in metric_labels:
-        result['recall'] = recall_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['recall'] = np.array([score for score in result['recall'].values()]).mean()
-        result_after['argmax']['recall'] = labels[np.array([score for score in result['recall'].values()]).argmax()]
-        result_after['argmin']['recall'] = labels[np.array([score for score in result['recall'].values()]).argmin()]
-    if 'f1' in metric_labels:
-        result['f1'] = f1_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['f1'] = np.array([score for score in result['f1'].values()]).mean()
-        result_after['argmax']['f1'] = labels[np.array([score for score in result['f1'].values()]).argmax()]
-        result_after['argmin']['f1'] = labels[np.array([score for score in result['f1'].values()]).argmin()]
-    if 'dice' in metric_labels:
-        result['dice'] = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-        result_after['mean']['dice'] = np.array([score for score in result['dice'].values()]).mean()
-        result_after['argmax']['dice'] = labels[np.array([score for score in result['dice'].values()]).argmax()]
-        result_after['argmin']['dice'] = labels[np.array([score for score in result['dice'].values()]).argmin()]
+    result: MetricClassOneScoreDict = {}
+    result_after: MetricAfterDict = {'mean': {}, 'argmin': {}, 'argmax': {}}
+
+    MAP = {
+        'iou': iou_score,
+        'accuracy': accuracy_score,
+        'precision': precision_score,
+        'recall': recall_score,
+        'f1': f1_score,
+        'dice': dice_score,
+    }
+    def score(m: str):
+        result[m] = MAP[m](y_true, y_pred, labels, class_axis=class_axis, average=average)
+        values = np.array(result[m].values())
+        result_after['mean'][m] = values.mean()
+        result_after['argmax'][m] = labels[values.argmax()]
+        result_after['argmin'][m] = labels[values.argmin()]
+
+    for metric in metric_labels:
+        try:
+            score(metric)
+        except Exception:
+            pass
+
     return result, result_after
 
 # result template:

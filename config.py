@@ -64,8 +64,8 @@ CONFIG = {
 }
 
 
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 def is_verbose():
     return CONFIG['private']['verbose']
