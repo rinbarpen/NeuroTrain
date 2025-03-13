@@ -27,9 +27,10 @@ def image_transform(x: Image.Image|cv2.Mat, size: tuple[int, int], is_rgb=False,
 
     tensor_x = torch.tensor(x)
     if is_rgb:
-        x = tensor_x.permute(2, 1, 0)
+        if isinstance(x, Image.Image):
+            x = tensor_x.permute(2, 0, 1)
     else:
-        x = tensor_x.permute(1, 0).unsqueeze(0)
+        x = tensor_x.unsqueeze(0)
 
     if x.max() > 1:
         x /= 255
@@ -61,7 +62,7 @@ class VisionTransformersBuilder:
         self._transforms.append(transforms.RandomInvert(p))
         return self
 
-    def PIL_to_tensor(self, dtype=np.float32):
+    def PIL_to_tensor(self, dtype=torch.float32):
         self._transforms.append(transforms.PILToTensor())
         self._transforms.append(transforms.ConvertImageDtype(dtype))
         return self

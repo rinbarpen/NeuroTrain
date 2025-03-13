@@ -315,6 +315,9 @@ class Predictor:
             input_filename = input.name
             input = Image.open(input).convert('L')
             input = image_transform(input, size=(512, 512)).unsqueeze(0)
+            # transform = image_transforms(resize=(512, 512), is_rgb=False, is_PIL_image=True)
+            # input = transform(input).unsqueeze(0)
+
             input = input.to(device)
 
             pred = self.model(input)
@@ -325,6 +328,6 @@ class Predictor:
             pred = pred.detach().cpu().numpy()
             pred = pred.squeeze(0).squeeze(0)
             pred = pred.astype(np.uint8)
-
+            
             image = Image.fromarray(pred, mode='L')
             image.save(self.output_dir / input_filename)
