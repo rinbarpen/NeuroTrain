@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 colorama.init()
 from config import get_config, is_predict, is_train, is_test
 from options import dump_config, parse_args
-from utils.util import load_model, prepare_logger
+from utils.util import load_model, prepare_logger, save_model
 from models.models import get_model
 from utils.dataset.dataset import get_test_dataset, get_train_valid_dataset
 from model_operation import Trainer, Tester, Predictor
@@ -133,10 +133,18 @@ if __name__ == "__main__":
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")
         dump_config(train_dir / "config.yaml")
+        
+        last_model_filepath = Path(output_dir / "last.pt")
+        best_model_filepath = Path(output_dir / "best.pt")
+        last_model_filepath.symlink_to(handle.last_model_file_path)
+        best_model_filepath.symlink_to(handle.best_model_file_path)
+
+        logging.info(f'Link(soft) last.pt and best.pt to {output_dir}')
 
     if is_test():
         if is_train():
             model_path = train_dir / "weights" / "best.pt"
+            # model_path = output_dir / "best.pt"
             model_params = load_model(model_path, 'cuda')
             logging.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
@@ -159,6 +167,13 @@ if __name__ == "__main__":
         dump_config(test_dir / "config.yaml")
 
     if is_predict():
+        if is_train():
+            model_path = train_dir / "weights" / "best.pt"
+            # model_path = output_dir / "best.pt"
+            model_params = load_model(model_path, 'cuda')
+            logging.info(f'Load model: {model_path}')
+            model.load_state_dict(model_params)
+
         handle = Predictor(predict_dir, model)
         input_path = Path(CONFIG["predict"]["input"])
         if input_path.is_dir():

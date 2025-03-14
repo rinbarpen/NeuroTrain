@@ -13,11 +13,11 @@ from PIL.Image import Image
 from torch import nn
 from torchsummary import summary
 
-from config import CONFIG, get_config
+from config import CONFIG, get_config, ALL_METRIC_LABELS
 from utils.recorder import Recorder
 from utils.scores import scores
 from utils.painter import Plot
-from utils.typed import ALL_METRIC_LABELS, ClassLabelsList, ClassMetricManyScoreDict, ClassMetricOneScoreDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict, MetricLabelsList
+from utils.typed import ClassLabelsList, ClassMetricManyScoreDict, ClassMetricOneScoreDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict, MetricLabelsList
 
 def prepare_logger():
     log_colors = {

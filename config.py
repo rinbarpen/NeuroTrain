@@ -1,12 +1,18 @@
 # output/{task_name}/{timestamp}/{train|valid|test|predict}/{classification|detection|segmentation|weights|..}
 
+TRAIN_MODE = 1
+TEST_MODE  = 2
+PREDICT_MODE = 4
+
+ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
+
 CONFIG = {
     "output_dir": "./output",
     "task": "TestModel",
     "run_id": "0",
     "device": "cuda",
     "seed": 42,
-    "classes": ["Background", "Retina"],
+    "classes": ["label0", "label1"],
     "model": {
         "name": "unet",
         "continue_checkpoint": "",
@@ -59,7 +65,7 @@ CONFIG = {
         "wandb": False,
         "log": True,
         "verbose": False,
-        "mode": 0, # 0 for train, 1 for test, 2 for predict
+        "mode": 0, # 1 for train, 2 for test, 4 for predict
     }
 }
 
@@ -70,11 +76,14 @@ CONFIG = {
 def is_verbose():
     return CONFIG['private']['verbose']
 def is_train():
-    return CONFIG['private']['mode'] == 0 or CONFIG['private']['mode'] == 3 
+    return CONFIG['private']['mode'] & TRAIN_MODE == TRAIN_MODE 
 def is_test():
-    return CONFIG['private']['mode'] == 1 or CONFIG['private']['mode'] == 3
+    return CONFIG['private']['mode'] & TEST_MODE == TEST_MODE
 def is_predict():
-    return CONFIG['private']['mode'] == 2
+    return CONFIG['private']['mode'] & PREDICT_MODE == PREDICT_MODE
+
+def is_test_after_training():
+    return is_train() and is_test()
 
 def wandb_is_available():
     return CONFIG['private']['wandb']

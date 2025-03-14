@@ -8,7 +8,7 @@ import yaml
 import time
 from pprint import pp
 
-from config import get_config, set_config
+from config import PREDICT_MODE, TEST_MODE, TRAIN_MODE, get_config, set_config
 
 def parse_args():
     parser = ArgumentParser('Neuro Train')
@@ -118,7 +118,6 @@ def parse_args():
                 CONFIG['train']['lr_scheduler']['warmup'] = args.warmup
             if args.warmup_lr:
                 CONFIG['train']['lr_scheduler']['warmup_lr'] = args.warmup_lr
-        CONFIG['private']['mode'] = 0
     if args.test:
         if args.data:
             CONFIG['test']['dataset']['name'] = args.data
@@ -126,13 +125,14 @@ def parse_args():
             CONFIG['test']['dataset']['path'] = args.data_dir
         if args.batch_size:
             CONFIG['test']['batch_size'] = args.batch_size
-        CONFIG['private']['mode'] = 1
     if args.input:
         CONFIG['predict']['input'] = args.input
+    if args.train:
+        CONFIG['private']['mode'] |= TRAIN_MODE
+    if args.test:
+        CONFIG['private']['mode'] |= TEST_MODE
     if args.predict:
-        CONFIG['private']['mode'] = 2
-    if args.train and args.test:
-        CONFIG['private']['mode'] = 3
+        CONFIG['private']['mode'] |= PREDICT_MODE
 
     run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     CONFIG['run_id'] = run_id
@@ -171,6 +171,6 @@ def dump_config(filename: Path):
                 toml.dump(CONFIG, f)
         case '.yaml'|'.yml':
             with filename.open(mode='w', encoding='utf-8') as f:
-                yaml.safe_dump_all(CONFIG, f)
+                yaml.safe_dump_all(CONFIG, f, allow_unicode=True, encoding='utf-8')
 
     logging.info(f'Dumping config to {filename}')

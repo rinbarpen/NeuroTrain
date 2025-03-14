@@ -36,7 +36,7 @@ def image_transform(x: Image.Image|cv2.Mat, size: tuple[int, int], is_rgb=False,
         x /= 255
     return x
 
-
+# VisionTransformersBuilder may be flawed
 from torchvision import transforms
 class VisionTransformersBuilder:
     def __init__(self):
