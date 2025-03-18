@@ -38,7 +38,10 @@ CONFIG = {
             "warmup": 50,
             "warmup_lr": 0.03
         },
-        "amp": False, # default is bfloat16
+        "scaler": {
+            "enabled": False,
+            "compute_type": "bfloat16",
+        },
         "early_stopping": False,
         "patience": 3
     },

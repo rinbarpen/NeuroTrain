@@ -1,9 +1,19 @@
 Overall:
  - [x] Test to train
- - [ ] Test to test
- - [ ] Test to predict
+ - [x] Test to test
+ - [x] Test to predict
 
 Train:
  - [x] Add Mean-Epoch-Metric for every class
  - [x] the score from Mean-Metric for every class may be a fault
  - [x] The image of Mean-Metric on classes is error 
+ - [ ] Support the Trainer, Tester and Predictor to be inherited
+
+Analyzer:
+ - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
+ - [ ] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
+
+Ticker:
+ - [ ] Time cost between two time points
+
+- [ ] Fixup to dump Yaml configuration

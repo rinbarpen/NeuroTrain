@@ -37,8 +37,9 @@ on = false
 warmup = 50
 warmup_lr = 0.03
 
-[train.amp]
-amp = false
+[train.compute_type]
+enabled = false
+compute_type = 'bfloat16'
 
 [train.early_stopping]
 early_stopping = false

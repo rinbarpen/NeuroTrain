@@ -49,7 +49,7 @@ class Trainer:
 
         self.model = self.model.to(device)
 
-        scaler = GradScaler() if CONFIG['train']['amp'] else None
+        scaler = GradScaler(enabled=CONFIG['train']['scaler']['enabled'])
         if early_stop and valid_dataloader is None:
             colorlog.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
@@ -74,28 +74,21 @@ class Trainer:
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
 
-                if scaler:
-                    device_type = 'cuda' if CONFIG['device'] != 'cpu' else 'cpu'
-                    with autocast(device_type, dtype=torch.bfloat16):
-                        outputs = self.model(inputs)
-
-                        loss = criterion(targets, outputs)
-
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
+                device_type = 'cuda' if 'cuda' in CONFIG['device'] else 'cpu'
+                compute_type = torch.float16 if CONFIG['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
+                with autocast(device_type, dtype=compute_type, enabled=CONFIG['scaler']['enabled']):
                     outputs = self.model(inputs)
+
                     loss = criterion(targets, outputs)
 
-                    loss.backward()
-                    optimizer.step()
-
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
 
                 train_loss += loss.item()
                 # logging.info(f'Epoch-Loss Variant: {loss.item() - last_train_loss}')
                 # last_train_loss = loss.item()
-                
+
                 targets[targets >= 0.5] = 1
                 targets[targets < 0.5] = 0
                 outputs[outputs >= 0.5] = 1
