@@ -1,11 +1,11 @@
 import numpy as np
 from sklearn import metrics
-from utils.typed import ALL_METRIC_LABELS, MetricAfterDict, MetricClassOneScoreDict, MetricLabelsList
 
-type MetricMapType = dict[str, dict[str, np.float64]]
+from config import ALL_METRIC_LABELS
+from utils.typed import *
 
 # y_true, y_pred: (B, C, X)
-def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels)
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -18,7 +18,7 @@ def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class
 
     return result
 
-def recall_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def recall_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels)
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -31,7 +31,7 @@ def recall_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, c
 
     return result
 
-def precision_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def precision_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels)
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -44,7 +44,7 @@ def precision_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *
 
     return result
 
-def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels)
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -57,7 +57,7 @@ def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *,
 
     return result
 
-def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels) 
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -72,7 +72,7 @@ def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, cla
 
     return result
 
-def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     n_labels = len(labels)
 
     y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
@@ -87,11 +87,11 @@ def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, clas
 
     return result
 
-def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], 
+def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, 
            metric_labels: MetricLabelsList=ALL_METRIC_LABELS, 
            *, class_axis: int=1, average: str='binary'):
-    result: MetricClassOneScoreDict = {}
-    result_after: MetricAfterDict = {'mean': {}, 'argmin': {}, 'argmax': {}}
+    result: MetricClassOneScoreDict = dict()
+    result_after: MetricAfterDict = create_MetricAfterDict(labels)
 
     MAP = {
         'iou': iou_score,
@@ -157,12 +157,9 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str],
 #            'f1': '2',
 #            'dice': '2'}}
 
-def dice_loss(y_true: np.ndarray, y_pred: np.ndarray, labels: list[str], *, class_axis: int=1, average: str='binary'):
+def dice_loss(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
     result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-    score = 0.0
-    for v in result.values():
-        score += v
-    score /= len(labels)
+    score = np.array(result.values(), dtype=np.float64).mean()
     return -score
 
 def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float=1e-7):
