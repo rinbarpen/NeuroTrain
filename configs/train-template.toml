@@ -7,7 +7,7 @@ classes = ["Retina"]
 
 [model]
 name = "unet"
-continue_checkpoint = "output/TestModel/20250313_171121/train/weights/best.pt"
+continue_checkpoint = ""
 
 [model.config]
 n_channels = 1
@@ -37,7 +37,7 @@ on = false
 warmup = 50
 warmup_lr = 0.03
 
-[train.compute_type]
+[train.scaler]
 enabled = false
 compute_type = 'bfloat16'
 
