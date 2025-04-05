@@ -37,7 +37,7 @@ on = false
 warmup = 50
 warmup_lr = 0.03
 
-[train.compute_type]
+[train.scaler]
 enabled = false
 compute_type = 'bfloat16'
 

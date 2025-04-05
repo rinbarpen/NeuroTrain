@@ -203,7 +203,7 @@ class Subplot:
         for (y_true, y_pred, label) in zip(y_trues, y_preds, labels):
             fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
             self._ax.set_title(title)
-            self._ax.plot(tpr, fpr, label=label)
+            self._ax.plot(fpr, tpr, label=label)
         self._ax.set_xlabel('False Positive Rate')
         self._ax.set_ylabel('True Positive Rate')
         return self

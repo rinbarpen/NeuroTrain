@@ -77,8 +77,8 @@ class Trainer:
                 inputs, targets = inputs.to(device), targets.to(device)
 
                 device_type = 'cuda' if 'cuda' in CONFIG['device'] else 'cpu'
-                compute_type = torch.float16 if CONFIG['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
-                with autocast(device_type, dtype=compute_type, enabled=CONFIG['scaler']['enabled']):
+                compute_type = torch.float16 if CONFIG['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
+                with autocast(device_type, dtype=compute_type, enabled=CONFIG['train']['scaler']['enabled']):
                     outputs = self.model(inputs)
 
                     loss = criterion(targets, outputs)

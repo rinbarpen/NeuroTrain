@@ -136,10 +136,10 @@ if __name__ == "__main__":
         
         last_model_filepath = Path(output_dir / "last.pt")
         best_model_filepath = Path(output_dir / "best.pt")
-        last_model_filepath.symlink_to(handle.last_model_file_path)
-        best_model_filepath.symlink_to(handle.best_model_file_path)
+        # last_model_filepath.symlink_to(handle.last_model_file_path)
+        # best_model_filepath.symlink_to(handle.best_model_file_path)
 
-        logging.info(f'Link(soft) last.pt and best.pt to {output_dir}')
+        # logging.info(f'Link(soft) last.pt and best.pt to {output_dir}')
 
     if is_test():
         if is_train():
