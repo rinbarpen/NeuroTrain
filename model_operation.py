@@ -6,6 +6,7 @@ import numpy as np
 import logging
 import colorlog
 from tqdm import tqdm, trange
+from PIL import Image
 import torch
 from torch import nn
 from torch.amp import GradScaler, autocast
@@ -13,10 +14,11 @@ from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
 from torch.utils.data import DataLoader
 
-from config import get_config
+from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
 from utils.recorder import Recorder
-from utils.util import ScoreCalculator, save_model
+from utils.util import save_model
+from utils.scores import ScoreCalculator
 from utils.painter import Plot
 from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
 
@@ -89,10 +91,7 @@ class Trainer:
                 # logging.info(f'Epoch-Loss Variant: {loss.item() - last_train_loss}')
                 # last_train_loss = loss.item()
 
-                targets[targets >= 0.5] = 1
-                targets[targets < 0.5] = 0
-                outputs[outputs >= 0.5] = 1
-                outputs[outputs < 0.5] = 0
+                targets, outputs = self.postprocess(targets, outputs)
                 train_calculator.add_one_batch(
                     targets.detach().cpu().float().numpy(), 
                     outputs.detach().cpu().float().numpy())
@@ -175,6 +174,15 @@ class Trainer:
         valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
+    @classmethod
+    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
+        targets[targets >= 0.5] = 1
+        targets[targets < 0.5] = 0
+        outputs[outputs >= 0.5] = 1
+        outputs[outputs < 0.5] = 0
+        return targets, outputs
+
+
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
         CONFIG = get_config()
         labels = CONFIG['classes'][1:]
@@ -249,10 +257,7 @@ class Tester:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = self.model(inputs)
 
-            targets[targets >= 0.5] = 1
-            targets[targets < 0.5] = 0
-            outputs[outputs >= 0.5] = 1
-            outputs[outputs < 0.5] = 0
+            targets, outputs = self.postprocess(targets, outputs)
 
             # (B, N, H, W) => N is n_classes
             calculator.add_one_batch(
@@ -260,6 +265,14 @@ class Tester:
                 outputs.detach().cpu().numpy())
 
         calculator.record_batches(self.output_dir)
+    @classmethod
+    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
+        targets[targets >= 0.5] = 1
+        targets[targets < 0.5] = 0
+        outputs[outputs >= 0.5] = 1
+        outputs[outputs < 0.5] = 0
+        return targets, outputs
+
 
 class Vaildator:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -280,14 +293,19 @@ class Vaildator:
         for inputs, targets in valid_dataloader:
             outputs = self.model(inputs)
 
-            targets[targets >= 0.5] = 1
-            targets[targets < 0.5] = 0
-            outputs[outputs >= 0.5] = 1
-            outputs[outputs < 0.5] = 0
+            self.postprocess(targets, outputs)
 
             calculator.add_one_batch(targets.cpu().detach().numpy(), outputs.cpu().detach().numpy())
 
         calculator.record_batches(self.output_dir)
+
+    @classmethod
+    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
+        targets[targets >= 0.5] = 1
+        targets[targets < 0.5] = 0
+        outputs[outputs >= 0.5] = 1
+        outputs[outputs < 0.5] = 0
+        return targets, outputs
 
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -306,21 +324,30 @@ class Predictor:
         self.model.eval()
         for input in tqdm(inputs, desc="Predicting..."):
             input_filename = input.name
-            input = Image.open(input).convert('L')
-            input = image_transform(input, size=(512, 512)).unsqueeze(0)
-            # transform = image_transforms(resize=(512, 512), is_rgb=False, is_PIL_image=True)
-            # input = transform(input).unsqueeze(0)
+            input = self.preprocess(input)
 
             input = input.to(device)
 
             pred = self.model(input)
 
-            pred[pred >= 0.5] = 255
-            pred[pred < 0.5] = 0
-
-            pred = pred.detach().cpu().numpy()
-            pred = pred.squeeze(0).squeeze(0)
-            pred = pred.astype(np.uint8)
-            
-            image = Image.fromarray(pred, mode='L')
+            image = self.postprocess(pred)
             image.save(self.output_dir / input_filename)
+
+    @classmethod
+    def preprocess(self, input: Path):
+        input = Image.open(input).convert('L')
+        input = image_transform(input, size=(512, 512)).unsqueeze(0)
+        # transform = image_transforms(resize=(512, 512), is_rgb=False, is_PIL_image=True)
+        # input = transform(input).unsqueeze(0)
+        return input
+
+    @classmethod
+    def postprocess(self, pred: torch.Tensor):
+        pred[pred >= 0.5] = 255
+        pred[pred < 0.5] = 0
+
+        pred = pred.detach().cpu().numpy()
+        pred = pred.squeeze(0).squeeze(0)
+        pred = pred.astype(np.uint8)
+        image = Image.fromarray(pred, mode='L')
+        return image

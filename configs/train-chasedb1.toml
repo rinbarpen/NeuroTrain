@@ -19,8 +19,8 @@ epoch = 40
 save_every_n_epoch = 0
 
 [train.dataset]
-name = "DRIVE"
-path = "./data/DRIVE"
+name = "CHASEDB1"
+path = "./data/CHASEDB1"
 num_workers = 0
 
 [train.augment_boost]
@@ -49,12 +49,12 @@ patience = 3
 batch_size = 1
 
 [test.dataset]
-name = "DRIVE"
-path = "./data/DRIVE"
+name = "CHASEDB1"
+path = "./data/CHASEDB1"
 num_workers = 0
 
 [predict]
-input = "data/DRIVE/test/images"
+input = "data/CHASEDB1/test/images"
 config = {}
 
 [private]

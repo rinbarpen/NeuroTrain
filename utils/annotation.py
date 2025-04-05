@@ -25,4 +25,4 @@ class timer:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         end = time.time()
-        print(f"{self.name} took {end - self.begin} ns")
+        print(f"{self.name} took {end - self.begin} s")
