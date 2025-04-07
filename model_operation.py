@@ -3,10 +3,9 @@ import os.path
 from pathlib import Path
 from pprint import pp
 import numpy as np
-import logging
-import colorlog
 from tqdm import tqdm, trange
 from PIL import Image
+import wandb
 import torch
 from torch import nn
 from torch.amp import GradScaler, autocast
@@ -45,27 +44,27 @@ class Trainer:
               valid_dataloader: DataLoader | None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False):
-        CONFIG = get_config()
-        device = torch.device(CONFIG['device'])
-        save_every_n_epoch = CONFIG["train"]["save_every_n_epoch"]
+        c = get_config()
+        device = torch.device(c['device'])
+        save_every_n_epoch = c["train"]["save_every_n_epoch"]
         enable_valid_when_training = valid_dataloader is not None
 
         self.model = self.model.to(device)
 
-        scaler = GradScaler(enabled=CONFIG['train']['scaler']['enabled'])
+        scaler = GradScaler(enabled=c['train']['scaler']['enabled'])
         if early_stop and valid_dataloader is None:
             colorlog.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
         elif early_stop and valid_dataloader:
-            early_stopper = EarlyStopping(CONFIG['train']['early_stopping']['patience'])
+            early_stopper = EarlyStopping(c['train']['early_stopping']['patience'])
         else:
             early_stopper = None
 
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
-        class_labels = CONFIG['classes']
-        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
+        class_labels = c['classes']
+        metric_labels = ALL_METRIC_LABELS # TODO: load from c
         train_calculator = ScoreCalculator(class_labels, metric_labels)
         valid_calculator = ScoreCalculator(class_labels, metric_labels) if enable_valid_when_training else None
         for epoch in range(1, num_epochs+1):
@@ -77,9 +76,9 @@ class Trainer:
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
 
-                device_type = 'cuda' if 'cuda' in CONFIG['device'] else 'cpu'
-                compute_type = torch.float16 if CONFIG['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
-                with autocast(device_type, dtype=compute_type, enabled=CONFIG['train']['scaler']['enabled']):
+                device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
+                compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
+                with autocast(device_type, dtype=compute_type, enabled=c['train']['scaler']['enabled']):
                     outputs = self.model(inputs)
 
                     loss = criterion(targets, outputs)
@@ -128,23 +127,23 @@ class Trainer:
                 valid_loss /= len(valid_dataloader)
                 valid_losses.append(valid_loss)
 
-                colorlog.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
+                self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
 
                 valid_calculator.finish_one_epoch()
 
                 if early_stop:
                     early_stopper(valid_loss)
                     if early_stopper.is_stopped():
-                        colorlog.info("Early stopping")
+                        self.logger.info("Early stopping")
                         break
 
             # save
             if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
-                save_model_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}.pt'
-                save_model_ext_filename = self.save_model_dir / f'{CONFIG["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
+                save_model_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.pt'
+                save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
                 save_model(save_model_filename, self.model,             
                            ext_path=save_model_ext_filename, optimizer=optimizer,        scaler=scaler, lr_scheduler=lr_scheduler,
-                           epoch=epoch, version=CONFIG['run_id'])
+                           epoch=epoch, version=c['run_id'])
                 self.logger.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
 
             target_loss = valid_loss if valid_dataloader else train_loss
@@ -153,14 +152,14 @@ class Trainer:
                 save_model(self.best_model_file_path, self.model, 
                             ext_path=self.best_model_ext_file_path,
                             optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                            epoch=epoch, version=CONFIG['run_id'])
+                            epoch=epoch, version=c['run_id'])
                 self.logger.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
                 self.logger.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
             
             save_model(self.last_model_file_path, self.model,
                        ext_path=self.last_model_ext_file_path,
                        optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                       epoch=num_epochs, version=CONFIG['run_id'])
+                       epoch=num_epochs, version=c['run_id'])
 
         train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
         if enable_valid_when_training:
@@ -202,34 +201,30 @@ class Trainer:
 
         if c['private']['wandb']:
             train_c = c['train']
-            import wandb
             wandb.log({
-                'train': {
-                    'losses': train_losses,
-                    'loss_image': self.train_loss_image_path
+                "train": {
+                    "losses": train_losses,
+                    "loss_image": self.train_loss_image_path,
                 },
-                'valid': {
-                    'losses': valid_losses,
-                    'loss_image': self.valid_loss_image_path
+                "valid": {
+                    "losses": valid_losses,
+                    "loss_image": self.valid_loss_image_path,
                 },
                 "config": {
                     "batch_size": train_c['batch_size'],
                     "epoch": train_c['epoch'],
-                    "dataset": {
-                        "name": train_c['dataset']['name'],
-                        "path": train_c['dataset']['path'],
-                        "num_workers": train_c['dataset']['num_workers'],
-                    },
+                    "dataset": train_c['dataset'],
                     "save_every_n_epoch": train_c['save_every_n_epoch'],
-                    "early_stopping": train_c['early_stopping'],
-                    "patience": train_c['patience'],
+                    "early_stopping": {
+                        "patience": train_c['early_stopping']['patience'],
+                    } if train_c['early_stopping']['enabled'] else None,
                 },
                 "model_data": {
                     "model": self.model.state_dict(),
                     "optimizer": optimizer.state_dict() if optimizer else None,
                     "scaler": scaler.state_dict() if scaler else None,
                     "lr_scheduler": {
-                        'weight': lr_scheduler.state_dict(),
+                        'weights': lr_scheduler.state_dict(),
                         "warmup": train_c['lr_scheduler']['warmup'],
                         "warmup_lr": train_c['lr_scheduler']['warmup_lr'],
                     } if lr_scheduler else None,
@@ -242,15 +237,16 @@ class Tester:
         self.model = model
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger('test')
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
-        CONFIG = get_config()
-        device = torch.device(CONFIG['device'])
-        class_labels = CONFIG['classes']
+        c = get_config()
+        device = torch.device(c['device'])
+        class_labels = c['classes']
 
         self.model = self.model.to(device)
-        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
+        metric_labels = ALL_METRIC_LABELS # TODO: load from c
 
         calculator = ScoreCalculator(class_labels, metric_labels)
 
@@ -281,12 +277,13 @@ class Vaildator:
         self.model = model
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger('valid')
 
     @torch.no_grad()
     def valid(self, valid_dataloader: DataLoader):
-        CONFIG = get_config()
-        class_labels = CONFIG['classes']
-        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
+        c = get_config()
+        class_labels = c['classes']
+        metric_labels = ALL_METRIC_LABELS # TODO: load from c
 
         calculator = ScoreCalculator(class_labels, metric_labels)
 
@@ -313,11 +310,12 @@ class Predictor:
         self.model = model
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger('predict')
 
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
-        CONFIG = get_config()
-        device = torch.device(CONFIG['device'])
+        c = get_config()
+        device = torch.device(c['device'])
 
         self.model = self.model.to(device)
         self.model.eval()

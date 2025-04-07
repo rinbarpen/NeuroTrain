@@ -22,7 +22,7 @@ class Recorder:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super().__new__(cls) 
+            cls._instance = super().__new__(cls)
         return cls
 
     @staticmethod
@@ -78,4 +78,3 @@ class Recorder:
         df.to_csv(path / 'mean_metrics.csv')
         df.to_parquet(path / 'mean_metrics.parquet')
         logging.info(f'Save mean metric data under the {path}')
-

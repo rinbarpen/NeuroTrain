@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn import metrics
 from pathlib import Path
+import wandb
 
 from config import get_config, ALL_METRIC_LABELS
 from utils.typed import *
@@ -251,9 +252,8 @@ class ScoreCalculator:
         # Plot(nrows, ncols).metrics(self.metric_record).save(output_dir / "mean-metrics.png")
         Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(output_dir / "mean-metrics.png")
 
-        CONFIG = get_config()
-        if CONFIG['private']['wandb']:
-            import wandb
+        c = get_config()
+        if c['private']['wandb']:
             wandb.log({
                 'metric': {
                     'score': {
@@ -295,9 +295,8 @@ class ScoreCalculator:
         # nrows, ncols = ((n + 2) // 3, 3) if n > 3 else (1, n)
         Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(output_dir / "mean-metrics.png")
 
-        CONFIG = get_config()
-        if CONFIG['private']['wandb']:
-            import wandb
+        c = get_config()
+        if c['private']['wandb']:
             wandb.log({
                 'metric': {
                     'score': {
