@@ -77,10 +77,6 @@ if __name__ == "__main__":
     test_dir = output_dir / "test"
     predict_dir = output_dir / "predict"
 
-    if CONFIG["private"]["wandb"]:
-        import wandb
-        wandb.init(entity="lpoutyoumu", project=CONFIG["task"], id=CONFIG["run_id"])
-
     model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
     if CONFIG['model']['continue_checkpoint'] != "":
         model_path = Path(CONFIG['model']['continue_checkpoint'])
@@ -117,8 +113,8 @@ if __name__ == "__main__":
             weight_decay=CONFIG["train"]["optimizer"]["weight_decay"],
             eps=CONFIG["train"]["optimizer"]["eps"],
         )
-        lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler']['on'] else None
-        # lr_scheduler = None if CONFIG['train']['lr_scheduler']['on'] else None
+        lr_scheduler = LRScheduler(optimizer) if CONFIG['train']['lr_scheduler']['enabled'] else None
+        # lr_scheduler = None if CONFIG['train']['lr_scheduler']['enabled'] else None
         criterion = nn.BCEWithLogitsLoss()
         handle = Trainer(train_dir, model)
         handle.train(
@@ -128,7 +124,7 @@ if __name__ == "__main__":
             train_dataloader=train_loader,
             valid_dataloader=valid_loader,
             lr_scheduler=lr_scheduler,
-            early_stop=CONFIG["train"]["early_stopping"],
+            early_stop=CONFIG["train"]["early_stopping"]["enabled"],
         )
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")

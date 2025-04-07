@@ -1,5 +1,6 @@
 output_dir = "./output"
 task = "TestModel"
+entity = "Lab"
 run_id = "0"
 device = "cuda"
 seed = 42
@@ -24,7 +25,7 @@ path = "./data/DRIVE"
 num_workers = 0
 
 [train.augment_boost]
-on = true
+enabled = true
 config = {}
 
 [train.optimizer]
@@ -33,16 +34,16 @@ weight_decay = 1e-8
 eps = 1e-8
 
 [train.lr_scheduler]
-on = false
+enabled = false
 warmup = 50
 warmup_lr = 0.03
 
-[train.compute_type]
+[train.scaler]
 enabled = false
 compute_type = 'bfloat16'
 
 [train.early_stopping]
-early_stopping = false
+enabled = false
 patience = 3
 
 [test]

@@ -8,7 +8,8 @@ ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 
 CONFIG = {
     "output_dir": "./output",
-    "task": "TestModel",
+    "task": "TestModel", # project
+    "entity": "Lab",
     "run_id": "0",
     "device": "cuda",
     "seed": 42,
@@ -25,12 +26,12 @@ CONFIG = {
         "dataset": {
             "name": "DRIVE",
             "path": "./data/DRIVE",
-            "num_workers": 0
+            "num_workers": 0,
         },
         "batch_size": 1,
         "epoch": 40,
         "augment_boost": {
-            "on": True,
+            "enabled": False,
             "config": {}
         },
         "save_every_n_epoch": 0, # <= 0 is unavailable, > 0 is available
@@ -40,7 +41,7 @@ CONFIG = {
             "eps": 1e-8
         },
         "lr_scheduler": {
-            "on": False,
+            "enabled": False,
             "warmup": 50,
             "warmup_lr": 0.03
         },
@@ -48,8 +49,10 @@ CONFIG = {
             "enabled": False,
             "compute_type": "bfloat16",
         },
-        "early_stopping": False,
-        "patience": 3
+        "early_stopping": {
+            "enabled": False,
+            "patience": 3,
+        },
     },
     "test": {
         "dataset": {

@@ -57,7 +57,7 @@ class Trainer:
             colorlog.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
         elif early_stop and valid_dataloader:
-            early_stopper = EarlyStopping(CONFIG['train']['patience'])
+            early_stopper = EarlyStopping(CONFIG['train']['early_stopping']['patience'])
         else:
             early_stopper = None
 
@@ -65,7 +65,7 @@ class Trainer:
         valid_losses = []
         best_loss = float('inf')
         class_labels = CONFIG['classes']
-        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
         train_calculator = ScoreCalculator(class_labels, metric_labels)
         valid_calculator = ScoreCalculator(class_labels, metric_labels) if enable_valid_when_training else None
         for epoch in range(1, num_epochs+1):
@@ -120,10 +120,7 @@ class Trainer:
                         # logging.info(f'Epoch-Loss Variant: {loss.item() - last_valid_loss}')
                         # last_valid_loss = loss.item()
 
-                        targets[targets >= 0.5] = 1
-                        targets[targets < 0.5] = 0
-                        outputs[outputs >= 0.5] = 1
-                        outputs[outputs < 0.5] = 0
+                        targets, outputs = self.postprocess(targets, outputs)
                         valid_calculator.add_one_batch(
                             targets.detach().cpu().float().numpy(), 
                             outputs.detach().cpu().float().numpy())
@@ -253,17 +250,16 @@ class Tester:
         class_labels = CONFIG['classes']
 
         self.model = self.model.to(device)
-        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
 
         calculator = ScoreCalculator(class_labels, metric_labels)
 
         for inputs, targets in tqdm(test_dataloader, desc="Testing"):
             inputs, targets = inputs.to(device), targets.to(device)
+            # (B, N, H, W) => N is n_classes
             outputs = self.model(inputs)
 
             targets, outputs = self.postprocess(targets, outputs)
-
-            # (B, N, H, W) => N is n_classes
             calculator.add_one_batch(
                 targets.detach().cpu().numpy(), 
                 outputs.detach().cpu().numpy())
@@ -290,7 +286,7 @@ class Vaildator:
     def valid(self, valid_dataloader: DataLoader):
         CONFIG = get_config()
         class_labels = CONFIG['classes']
-        metric_labels = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice'] # TODO: load from CONFIG
+        metric_labels = ALL_METRIC_LABELS # TODO: load from CONFIG
 
         calculator = ScoreCalculator(class_labels, metric_labels)
 
@@ -298,8 +294,8 @@ class Vaildator:
             outputs = self.model(inputs)
 
             self.postprocess(targets, outputs)
-
-            calculator.add_one_batch(targets.cpu().detach().numpy(), outputs.cpu().detach().numpy())
+            calculator.add_one_batch(targets.cpu().detach().numpy(), 
+                                     outputs.cpu().detach().numpy())
 
         calculator.record_batches(self.output_dir)
 
@@ -320,7 +316,6 @@ class Predictor:
 
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
-        from PIL import Image
         CONFIG = get_config()
         device = torch.device(CONFIG['device'])
 

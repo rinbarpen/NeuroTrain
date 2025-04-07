@@ -25,7 +25,8 @@ def parse_args():
     train_parser.add_argument('--save_every_n_epoch', type=int, required=False, help='save_every_n_epoch')
     train_parser.add_argument('-ab', '--augment_boost', type=str, help='augment_boost')
     ## amp mode: bf16 int8 ..
-    train_parser.add_argument('--amp', action='store_true', help='set amp mode')
+    # bfloat16, float16, 
+    train_parser.add_argument('--amp', type=str, default='none', help='set amp mode')
     ## for lr_scheduler
     train_parser.add_argument('--lr_scheduler', action='store_true', default=False, help='lr_scheduler')
     train_parser.add_argument('--warmup', type=int, help='lr_scheduler epoch')
@@ -96,7 +97,7 @@ def parse_args():
         if args.learning_rate:
             CONFIG['train']['optimizer']['learning_rate'] = args.learning_rate
         if args.augment_boost:
-            CONFIG['train']['augment_boost']['on'] = True
+            CONFIG['train']['augment_boost']['enabled'] = True
             for arg in args.augment_boost.split(';'):
                 k, v = arg.split('=')[0], arg.split('=')[1]
                 augment_boost = {k.strip(): v.strip()}
@@ -105,15 +106,16 @@ def parse_args():
             CONFIG['train']['save_every_n_epoch'] = args.save_every_n_epoch
         if args.weight_decay:
             CONFIG['train']['optimizer']['weight_decay'] = args.weight_decay
-        if args.amp:
-            CONFIG['train']['amp'] = True
-            logging.debug('set up amp mode')
+        if args.amp != 'none':
+            CONFIG['train']['scaler']['enabled'] = True
+            CONFIG['train']['scaler']['compute_type'] = args.amp
+            logging.info('set up amp mode: {}'.format(args.amp))
         if args.early_stopping:
-            CONFIG['train']['early_stopping'] = args.early_stopping
-            CONFIG['train']['patience'] = args.patience
-            logging.debug(f'set up early_stopping with patience={args.patience}')
+            CONFIG['train']['early_stopping']['enabled'] = True
+            CONFIG['train']['early_stopping']['patience'] = args.patience
+            logging.info('set up early_stopping with patience={}'.format(args.patience))
         if args.lr_scheduler:
-            CONFIG['train']['lr_scheduler']['on'] = args.lr_scheduler
+            CONFIG['train']['lr_scheduler']['enabled'] = True
             if args.warmup:
                 CONFIG['train']['lr_scheduler']['warmup'] = args.warmup
             if args.warmup_lr:
@@ -134,13 +136,15 @@ def parse_args():
     if args.predict:
         CONFIG['private']['mode'] |= PREDICT_MODE
 
-    run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    run_id = time.strftime('%Y_%m_%d_%H_%M_%S', time.localtime())
     CONFIG['run_id'] = run_id
 
     if args.wandb:
         import wandb
         CONFIG['private']['wandb'] = args.wandb
-        wandb.init(project='NeuroTrain', config=CONFIG)
+        project = CONFIG['task']
+        entity = CONFIG['entity']
+        wandb.init(project=project, entity=entity, config=CONFIG)
 
     pp(CONFIG)
     set_config(CONFIG)
