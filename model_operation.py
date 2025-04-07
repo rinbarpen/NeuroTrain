@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
 from utils.recorder import Recorder
-from utils.util import save_model
+from utils.util import get_logger, save_model
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
 from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
@@ -36,6 +36,7 @@ class Trainer:
         self.model = model
 
         self.save_model_dir.mkdir(exist_ok=True, parents=True)
+        self.logger = get_logger('train')
 
     def train(self, num_epochs: int, 
               criterion: nn.Module, 
@@ -98,7 +99,7 @@ class Trainer:
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
-            colorlog.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
+            self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
 
             train_calculator.finish_one_epoch()
 
@@ -147,7 +148,7 @@ class Trainer:
                 save_model(save_model_filename, self.model,             
                            ext_path=save_model_ext_filename, optimizer=optimizer,        scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=CONFIG['run_id'])
-                colorlog.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
+                self.logger.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
 
             target_loss = valid_loss if valid_dataloader else train_loss
             if target_loss < best_loss:
@@ -156,8 +157,8 @@ class Trainer:
                             ext_path=self.best_model_ext_file_path,
                             optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                             epoch=epoch, version=CONFIG['run_id'])
-                colorlog.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
-                colorlog.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                self.logger.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
+                self.logger.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
             
             save_model(self.last_model_file_path, self.model,
                        ext_path=self.last_model_ext_file_path,
@@ -168,7 +169,7 @@ class Trainer:
         if enable_valid_when_training:
             valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
 
-        colorlog.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
+        self.logger.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
         train_losses = np.array(train_losses, dtype=np.float64)
         valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
@@ -184,25 +185,26 @@ class Trainer:
 
 
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
-        CONFIG = get_config()
-        labels = CONFIG['classes'][1:]
+        c = get_config()
+        labels = c['classes']
         Recorder.record_loss(train_losses, self.output_dir)
 
         plot = Plot(1, 1)
         plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
         plot.save(self.train_loss_image_path)
 
-        logging.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
+        self.logger.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
         if valid_losses:
             Recorder.record_loss(valid_losses, self.output_dir)
             
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()
             plot.save(self.valid_loss_image_path)
-            logging.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
+            self.logger.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
 
 
-        if CONFIG['private']['wandb']:
+        if c['private']['wandb']:
+            train_c = c['train']
             import wandb
             wandb.log({
                 'train': {
@@ -214,15 +216,16 @@ class Trainer:
                     'loss_image': self.valid_loss_image_path
                 },
                 "config": {
-                    "batch_size": CONFIG['train']['batch_size'],
-                    "epoch": CONFIG['train']['epoch'],
+                    "batch_size": train_c['batch_size'],
+                    "epoch": train_c['epoch'],
                     "dataset": {
-                        "name": CONFIG['name'],
-                        "num_workers": CONFIG['num_workers'],
+                        "name": train_c['dataset']['name'],
+                        "path": train_c['dataset']['path'],
+                        "num_workers": train_c['dataset']['num_workers'],
                     },
-                    "save_every_n_epoch": CONFIG['train']['save_every_n_epoch'],
-                    "early_stopping": CONFIG['train']['early_stopping'],
-                    "patience": CONFIG['train']['patience'],
+                    "save_every_n_epoch": train_c['save_every_n_epoch'],
+                    "early_stopping": train_c['early_stopping'],
+                    "patience": train_c['patience'],
                 },
                 "model_data": {
                     "model": self.model.state_dict(),
@@ -230,7 +233,8 @@ class Trainer:
                     "scaler": scaler.state_dict() if scaler else None,
                     "lr_scheduler": {
                         'weight': lr_scheduler.state_dict(),
-                        "warmup": CONFIG['train']['lr_scheduler']['warmup'],
+                        "warmup": train_c['lr_scheduler']['warmup'],
+                        "warmup_lr": train_c['lr_scheduler']['warmup_lr'],
                     } if lr_scheduler else None,
                 },
             })

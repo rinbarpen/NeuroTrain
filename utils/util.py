@@ -12,8 +12,10 @@ from pathlib import Path
 from PIL.Image import Image 
 from torch import nn
 from torchsummary import summary
+from config import get_config
+from typing import Literal
 
-def prepare_logger():
+def prepare_logger(name: str|None = None):
     log_colors = {
         'DEBUG': 'cyan',
         'INFO': 'green',
@@ -22,36 +24,46 @@ def prepare_logger():
         'FATAL': 'bold_red',
     }
     formatter = colorlog.ColoredFormatter(
-        '%(log_color)s%(asctime)s %(levelname)s %(name)s | %(message)s',
+        '%(log_color)s%(asctime)s %(levelname)s | %(name)s | %(message)s',
         log_colors=log_colors
     )
 
-    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
-    # File handler
     os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', strftime('%Y%m%d_%H%M%S.log', time.localtime()))
+    filename = os.path.join('logs', strftime('%Y_%m_%d_%H_%M_%S.log', time.localtime()))
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
     file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s %(name)s | %(message)s'
+        '%(asctime)s %(levelname)s | %(name)s | %(message)s'
     ))
+    def set_logger(name: str, level: int):
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
 
-    # Root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if CONFIG['private']['verbose'] else logging.INFO)
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+    c = get_config()
+    log_level = logging.DEBUG if c['private']['verbose'] else logging.INFO
+    if not name:
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG if c['private']['verbose'] else logging.INFO)
+        root_logger.addHandler(console_handler)
+        root_logger.addHandler(file_handler)
 
-    # train_logger = logging.getLogger('train')
-    # train_logger.setLevel(logging.DEBUG if CONFIG['private']['verbose'] else logging.INFO)
-    # train_logger.addHandler(console_handler)
-    # train_logger.addHandler(file_handler)
-    # recorder_logger = logging.getLogger('recorder')
-    # train_logger.setLevel(logging.DEBUG if CONFIG['private']['verbose'] else logging.INFO)
-    # recorder_logger.addHandler(console_handler)
-    # recorder_logger.addHandler(file_handler)
+        set_logger('train', log_level)
+        set_logger('test', log_level)
+        set_logger('predict', log_level)
+        set_logger('painter', log_level)
+        set_logger('recorder', log_level)
+    else:
+        set_logger(name, log_level)
+
+def get_logger(name: str):
+    logger = logging.getLogger(name)
+    if not logger.hasHandlers():
+        prepare_logger(name)
+    return logger
 
 def save_model(path: Path, model: nn.Module, *, 
                ext_path: Path|None=None,
@@ -117,7 +129,7 @@ def load_numpy_data(path: Path):
         data = np.load(path)
         return data
     except FileNotFoundError as e:
-        colorlog.error(f'File is not found: {e}')
+        logging.error(f'File is not found: {e}')
         raise e
 
 
