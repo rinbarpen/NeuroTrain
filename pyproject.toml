@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "colorlog>=6.9.0",
+    "gputil>=1.4.0",
     "matplotlib>=3.10.1",
     "opencv-python>=4.11.0.86",
     "pandas>=2.2.3",
@@ -20,4 +21,5 @@ dependencies = [
     "torchsummary>=1.5.1",
     "torchvision==0.19.0",
     "tqdm>=4.67.1",
+    "wandb>=0.19.9",
 ]

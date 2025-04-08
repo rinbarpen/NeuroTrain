@@ -12,13 +12,14 @@ import torch
 from PIL import Image
 import cv2
 from argparse import ArgumentParser
+from models.sample.unet import UNet
 
 
-def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tensor, image_np: np.ndarray, target_category: int, mask_path: Path|None=None):
+def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tensor, image_np: np.ndarray, target_category: int, mask_path: Path, *, is_rgb=True, show=False):
     # image_np: (H, W, C) format
     H, W = image_np.shape[0], image_np.shape[1]
-    use_rgb = image_np.ndim == 3
     targets = [ClassifierOutputTarget(target_category)]
+    targets = [SemanticSegmentationTarget(0, mask)]
     
     cam = GradCAM(model, target_layers=target_layers)
     grayscale_cam = cam(input_tensor, targets=targets, eigen_smooth=False)[0, :]
@@ -27,18 +28,20 @@ def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tenso
     grayscale_cam = cv2.resize(grayscale_cam, (W, H))  # 注意这里是 (W, H)
 
     
-    visualization = show_cam_on_image(image_np, grayscale_cam, use_rgb=use_rgb)
+    visualization = show_cam_on_image(image_np, grayscale_cam, use_rgb=is_rgb)
 
     plt.imshow(visualization)
     plt.title(f"Grad-CAM for category {target_category} (all pixels)")
-    if mask_path:
-        plt.savefig(mask_path)
-    else:
+    plt.savefig(mask_path)
+    if show:
         plt.show()
 
-def resnet50_check(image_path: Path, mask_path: Path|None, *, is_rgb: bool):
+
+def resnet50_check(image_path: Path, mask_path: Path, *, is_rgb: bool, show=False):
     # Load a pre-trained ResNet50 model
-    model = resnet50(pretrained=True)
+    # model = resnet50(pretrained=True)
+    model = UNet(1, 1, True)
+    model.load_state_dict(torch.load(r'..\results\train\unet\weights\best_model.pth')['model'])
     model.eval()
 
     # Choose a target layer (e.g., the last convolutional layer)
@@ -52,7 +55,7 @@ def resnet50_check(image_path: Path, mask_path: Path|None, *, is_rgb: bool):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) if is_rgb else transforms.Normalize(mean=[0.5], std=[0.5]),
     ])
     input_tensor = transform(image).unsqueeze(0)  # Add a batch dimension
 
@@ -68,18 +71,17 @@ def resnet50_check(image_path: Path, mask_path: Path|None, *, is_rgb: bool):
     target_category = 0
 
     # Generate and display the Grad-CAM visualization
-    cam_segment(model, target_layers, input_tensor, image_np, target_category, mask_path)
+    cam_segment(model, target_layers, input_tensor, image_np, target_category, mask_path, is_rgb=is_rgb, show=show)
 
 if __name__ == '__main__':
     # image_path = r'data\DRIVE\training\images\21.png'
     parser = ArgumentParser('draw cam')
     parser.add_argument('-i', '--input', type=str, required=True, help='Input Image to Draw Cam')
-    parser.add_argument('-o', '--output', type=str, default='', help='Output Cammed Image to be saved')
+    parser.add_argument('-o', '--output', type=str, required=True, help='Output Cammed Image to be saved')
+    parser.add_argument('--show', action='store_true', help='Show image using plt.show()')
     
     args = parser.parse_args()
     input_image = args.input
     output_image = args.output
-    if not os.path.isfile(args.output):
-        output_image = None
 
-    resnet50_check(input_image, output_image, is_rgb=True)
+    resnet50_check(input_image, output_image, show=args.show, is_rgb=True)

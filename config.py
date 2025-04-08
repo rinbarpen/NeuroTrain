@@ -64,7 +64,9 @@ CONFIG = {
     },
     "predict": {
         "input": "",
-        "config": {}
+        "config": {
+            "show_cam": False,
+        }
     },
 
     "private": {

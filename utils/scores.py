@@ -6,7 +6,6 @@ import wandb
 from config import get_config, ALL_METRIC_LABELS
 from utils.typed import *
 from utils.recorder import Recorder
-from utils.scores import scores
 from utils.painter import Plot
 
 # y_true, y_pred: (B, C, X)
