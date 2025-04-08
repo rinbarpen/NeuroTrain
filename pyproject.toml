@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "colorama>=0.4.6",
     "colorlog>=6.9.0",
+    "gputil>=1.4.0",
     "matplotlib>=3.10.1",
     "opencv-python>=4.11.0.86",
     "pandas>=2.2.3",
