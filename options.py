@@ -136,7 +136,7 @@ def parse_args():
     if args.predict:
         CONFIG['private']['mode'] |= PREDICT_MODE
 
-    run_id = time.strftime('%Y_%m_%d_%H_%M_%S', time.localtime())
+    run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     CONFIG['run_id'] = run_id
 
     if args.wandb:
@@ -176,5 +176,3 @@ def dump_config(filename: Path):
         case '.yaml'|'.yml':
             with filename.open(mode='w', encoding='utf-8') as f:
                 yaml.safe_dump_all(CONFIG, f, allow_unicode=True, encoding='utf-8')
-
-    logging.info(f'Dumping config to {filename}')
