@@ -69,12 +69,18 @@ class Trainer:
         train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
         valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger) if enable_valid_when_training else None
         
-        for epoch in trange(1, num_epochs+1):
+        pbar_total = tqdm(total=num_epochs)
+        for epoch in range(1, num_epochs+1):
+            pbar_total.set_description(f'{epoch}/{num_epochs}, Training...')
             # train
             self.model.train()
             train_loss = 0.0
             # last_train_loss = float('inf')
-            for inputs, targets in tqdm(train_dataloader, desc=f'{epoch}/{num_epochs}, Training...'):
+            
+            pbar = tqdm(total=len(train_dataloader))
+            for i, (inputs, targets) in enumerate(train_dataloader):
+                pbar.set_description(f'{i}/{len(train_dataloader)}, Training...')
+
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
 
@@ -89,9 +95,9 @@ class Trainer:
                 scaler.step(optimizer)
                 scaler.update()
 
-                train_loss += loss.item()
-                # logging.info(f'Epoch-Loss Variant: {loss.item() - last_train_loss}')
-                # last_train_loss = loss.item()
+                batch_loss = loss.item()
+                train_loss += batch_loss
+                pbar.set_postfix({'batch_loss': batch_loss})
 
                 targets, outputs = self.postprocess(targets, outputs)
                 train_calculator.add_one_batch(
@@ -100,6 +106,8 @@ class Trainer:
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
+            pbar_total.set_postfix({'epoch_loss': train_loss})
+
             self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
 
             train_calculator.finish_one_epoch()
@@ -111,13 +119,18 @@ class Trainer:
                 self.model.eval()
 
                 with torch.no_grad():
-                    for inputs, targets in tqdm(valid_dataloader, desc=f'{epoch}/{num_epochs}, Validating...'):
+                    pbar = tqdm(total=len(valid_dataloader))
+                    for i, (inputs, targets) in enumerate(valid_dataloader):
+                        pbar.set_description(f'{i}/{len(valid_dataloader)}, Validating...')
+
                         inputs, targets = inputs.to(device), targets.to(device)
 
                         outputs = self.model(inputs)
                         loss = criterion(targets, outputs)
 
-                        valid_loss += loss.item()
+                        batch_loss = loss.item()
+                        valid_loss += batch_loss
+                        pbar.set_postfix({'batch_loss': batch_loss})
                         # logging.info(f'Epoch-Loss Variant: {loss.item() - last_valid_loss}')
                         # last_valid_loss = loss.item()
 
@@ -128,6 +141,8 @@ class Trainer:
 
                 valid_loss /= len(valid_dataloader)
                 valid_losses.append(valid_loss)
+
+                pbar_total.set_postfix({'valid_epoch_loss': valid_loss})
 
                 self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
 
@@ -148,7 +163,7 @@ class Trainer:
                            epoch=epoch, version=c['run_id'])
                 self.logger.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
 
-            target_loss = valid_loss if valid_dataloader else train_loss
+            target_loss = valid_loss if enable_valid_when_training else train_loss
             if target_loss < best_loss:
                 best_loss = target_loss
                 save_model(self.best_model_file_path, self.model, 
