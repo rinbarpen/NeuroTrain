@@ -53,7 +53,7 @@ class Trainer:
 
         scaler = GradScaler(enabled=c['train']['scaler']['enabled'])
         if early_stop and valid_dataloader is None:
-            colorlog.warning("Validate isn't launched, early_stop will be cancelled")
+            self.logger.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
         elif early_stop and valid_dataloader:
             early_stopper = EarlyStopping(c['train']['early_stopping']['patience'])
@@ -67,7 +67,8 @@ class Trainer:
         metric_labels = ALL_METRIC_LABELS # TODO: load from c
         train_calculator = ScoreCalculator(class_labels, metric_labels)
         valid_calculator = ScoreCalculator(class_labels, metric_labels) if enable_valid_when_training else None
-        for epoch in range(1, num_epochs+1):
+        
+        for epoch in trange(1, num_epochs+1):
             # train
             self.model.train()
             train_loss = 0.0

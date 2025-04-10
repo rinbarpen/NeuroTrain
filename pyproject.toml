@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "colorlog>=6.9.0",
+    "fvcore>=0.1.5.post20221221",
     "gputil>=1.4.0",
     "matplotlib>=3.10.1",
     "opencv-python>=4.11.0.86",

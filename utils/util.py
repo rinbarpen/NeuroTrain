@@ -14,6 +14,7 @@ from torch import nn
 from torchsummary import summary
 from config import get_config
 from typing import Literal
+from fvcore.nn import FlopCountAnalysis
 
 def prepare_logger(name: str|None = None):
     log_colors = {
@@ -149,6 +150,12 @@ def image_to_numpy(img: Image|cv2.Mat) -> np.ndarray:
     
     # output shape: (C, H, W) for RGB or (H, W) for gray
     return img_np
+
+def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
+    dummy_input = torch.randn(input_size).to(device)
+    flops = FlopCountAnalysis(model, dummy_input)
+    total_flops = flops.total()
+    return total_flops / 1e9  # Convert to GFLOPs
 
 
 class Timer:
