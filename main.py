@@ -19,10 +19,10 @@ warnings.filterwarnings("ignore")
 colorama.init()
 from config import get_config, is_predict, is_train, is_test
 from options import dump_config, parse_args
-from utils.util import load_model, prepare_logger, save_model
 from models.models import get_model
-from utils.dataset.dataset import get_test_dataset, get_train_valid_dataset
 from model_operation import Trainer, Tester, Predictor
+from utils.util import get_logger, load_model, prepare_logger, save_model
+from utils.dataset.dataset import get_test_dataset, get_train_valid_dataset
 
 # from torchvision.models import resnet50
 
@@ -130,6 +130,9 @@ if __name__ == "__main__":
         dump_config(train_dir / "config.toml")
         dump_config(train_dir / "config.yaml")
         
+        logger = get_logger('train')
+        logger.info(f'Dumping config under the {train_dir}')
+        
         last_model_filepath = Path(output_dir / "last.pt")
         best_model_filepath = Path(output_dir / "best.pt")
         # last_model_filepath.symlink_to(handle.last_model_file_path)
@@ -138,11 +141,13 @@ if __name__ == "__main__":
         # logging.info(f'Link(soft) last.pt and best.pt to {output_dir}')
 
     if is_test():
+        logger = get_logger('test')
+
         if is_train():
             model_path = train_dir / "weights" / "best.pt"
             # model_path = output_dir / "best.pt"
             model_params = load_model(model_path, 'cuda')
-            logging.info(f'Load model: {model_path}')
+            logger.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
 
         test_dataset = get_test_dataset(
@@ -161,13 +166,16 @@ if __name__ == "__main__":
         dump_config(test_dir / "config.json")
         dump_config(test_dir / "config.toml")
         dump_config(test_dir / "config.yaml")
+        
+        logger.info(f'Dumping config under the {test_dir}')
 
     if is_predict():
+        logger = get_logger('predict')
         if is_train():
             model_path = train_dir / "weights" / "best.pt"
             # model_path = output_dir / "best.pt"
             model_params = load_model(model_path, 'cuda')
-            logging.info(f'Load model: {model_path}')
+            logger.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
 
         handle = Predictor(predict_dir, model)
@@ -178,5 +186,7 @@ if __name__ == "__main__":
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")
         dump_config(predict_dir / "config.yaml")
+        
+        logger.info(f'Dumping config under the {predict_dir}')
 
     end_task()

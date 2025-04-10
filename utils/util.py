@@ -33,7 +33,7 @@ def prepare_logger(name: str|None = None):
     console_handler.setFormatter(formatter)
 
     os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', strftime('%Y_%m_%d_%H_%M_%S.log', time.localtime()))
+    filename = os.path.join('logs', strftime('%Y%m%d_%H%M%S.log', time.localtime()))
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s %(levelname)s | %(name)s | %(message)s'
@@ -55,12 +55,10 @@ def prepare_logger(name: str|None = None):
         set_logger('train', log_level)
         set_logger('test', log_level)
         set_logger('predict', log_level)
-        set_logger('painter', log_level)
-        set_logger('recorder', log_level)
     else:
         set_logger(name, log_level)
 
-def get_logger(name: str):
+def get_logger(name: str|None = None):
     logger = logging.getLogger(name)
     if not logger.hasHandlers():
         prepare_logger(name)

@@ -7,6 +7,7 @@ from config import get_config, ALL_METRIC_LABELS
 from utils.typed import *
 from utils.recorder import Recorder
 from utils.painter import Plot
+from utils.util import get_logger
 
 # y_true, y_pred: (B, C, X)
 def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
@@ -192,7 +193,8 @@ def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float
     return np.mean(kl_div)
 
 class ScoreCalculator:
-    def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList=ALL_METRIC_LABELS):
+    def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList=ALL_METRIC_LABELS, *, logger=None):
+        self.logger = logger if logger is not None else get_logger()
         self.class_labels = class_labels
         self.metric_labels = metric_labels
         self.is_prepared = False
@@ -242,8 +244,8 @@ class ScoreCalculator:
 
         for label, metrics in self.mean_record.items():
             label_dir = output_dir / label
-            Recorder.record_mean_metrics(metrics, label_dir)
-        Recorder.record_metrics(self.metric_record, output_dir)
+            Recorder.record_mean_metrics(metrics, label_dir, logger=self.logger)
+        Recorder.record_metrics(self.metric_record, output_dir, logger=self.logger)
 
         # paint mean metrics for all classes
         # n = len(self.class_labels)
@@ -275,11 +277,11 @@ class ScoreCalculator:
 
         for label, metrics in epoch_mean_metrics.items():
             label_dir = output_dir / label
-            Recorder.record_all_metrics(metrics, label_dir)
+            Recorder.record_all_metrics(metrics, label_dir, logger=self.logger)
         for label, metrics in self.mean_record.items():
             label_dir = output_dir / label
-            Recorder.record_mean_metrics(metrics, label_dir)
-        Recorder.record_metrics(self.metric_record, output_dir)
+            Recorder.record_mean_metrics(metrics, label_dir, logger=self.logger)
+        Recorder.record_metrics(self.metric_record, output_dir, logger=self.logger)
 
         # paint metrics curve for all classes in one figure
         n = len(self.metric_labels)

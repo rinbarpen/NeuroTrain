@@ -7,6 +7,7 @@ from tqdm import tqdm, trange
 from PIL import Image
 import wandb
 import torch
+import logging
 from torch import nn
 from torch.amp import GradScaler, autocast
 from torch.optim import AdamW, Adam
@@ -65,8 +66,8 @@ class Trainer:
         best_loss = float('inf')
         class_labels = c['classes']
         metric_labels = ALL_METRIC_LABELS # TODO: load from c
-        train_calculator = ScoreCalculator(class_labels, metric_labels)
-        valid_calculator = ScoreCalculator(class_labels, metric_labels) if enable_valid_when_training else None
+        train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
+        valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger) if enable_valid_when_training else None
         
         for epoch in trange(1, num_epochs+1):
             # train
@@ -184,7 +185,7 @@ class Trainer:
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
         c = get_config()
         labels = c['classes']
-        Recorder.record_loss(train_losses, self.output_dir)
+        Recorder.record_loss(train_losses, self.output_dir, logger=self.logger)
 
         plot = Plot(1, 1)
         plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
@@ -192,7 +193,7 @@ class Trainer:
 
         self.logger.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
         if valid_losses:
-            Recorder.record_loss(valid_losses, self.output_dir)
+            Recorder.record_loss(valid_losses, self.output_dir, logger=self.logger)
             
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()
@@ -249,7 +250,7 @@ class Tester:
         self.model = self.model.to(device)
         metric_labels = ALL_METRIC_LABELS # TODO: load from c
 
-        calculator = ScoreCalculator(class_labels, metric_labels)
+        calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
 
         for inputs, targets in tqdm(test_dataloader, desc="Testing"):
             inputs, targets = inputs.to(device), targets.to(device)
