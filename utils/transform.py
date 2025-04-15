@@ -3,6 +3,7 @@ import torch
 from PIL import Image
 import cv2
 from pathlib import Path
+from torchvision import transforms
 
 def to_rgb(filename: Path|str, use_opencv=False):
     if use_opencv:
@@ -37,7 +38,6 @@ def image_transform(x: Image.Image|cv2.Mat, size: tuple[int, int], is_rgb=False,
     return x
 
 # VisionTransformersBuilder may be flawed
-from torchvision import transforms
 class VisionTransformersBuilder:
     def __init__(self):
         self._transforms = []
@@ -88,7 +88,7 @@ class VisionTransformersBuilder:
 def image_transforms(resize: tuple[int, int]|None=None, 
                      hflip_p: float|None=None, vflip_p: float|None=None, 
                      rotation: float|None=None, 
-                     is_rgb: bool=False, is_PIL_image: bool=False) -> transforms.Compose:
+                     is_rgb: bool=False, is_PIL_image: bool=False, use_normalize: bool=False) -> transforms.Compose:
     transforms = VisionTransformersBuilder()
     if resize:
         transforms = transforms.resize(resize)
@@ -103,20 +103,28 @@ def image_transforms(resize: tuple[int, int]|None=None,
         transforms = transforms.PIL_to_tensor()
     else:
         transforms = transforms.to_tensor()
-    transforms = transforms.normalize(is_rgb)
+    if use_normalize:
+        transforms = transforms.normalize(is_rgb)
     return transforms.build()
 
 
 if __name__ == '__main__':
     filename = r'E:\Program\Projects\py\lab\NeuroTrain\data\DRIVE\training\images\21.png'
-    image = cv2.imread(filename)
-    # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # print(gray_image.shape)
-    # x = np.array(gray_image, dtype=np.float32)
-    # tensor_x = torch.tensor(x).permute(1, 0).unsqueeze(0)
+    # image = cv2.imread(filename)
+    # # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # # print(gray_image.shape)
+    # # x = np.array(gray_image, dtype=np.float32)
+    # # tensor_x = torch.tensor(x).permute(1, 0).unsqueeze(0)
+    # # print(tensor_x.shape)
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # print(image.shape)
+    # x = np.array(image, dtype=np.float32)
+    # tensor_x = torch.tensor(x).permute(2, 1, 0)
     # print(tensor_x.shape)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    print(image.shape)
-    x = np.array(image, dtype=np.float32)
-    tensor_x = torch.tensor(x).permute(2, 1, 0)
-    print(tensor_x.shape)
+    image = Image.open(filename).convert('L')
+
+    # output = image_transform(image, (512, 512), False)
+    transformers = image_transforms((512, 512), is_PIL_image=True)
+    output = transformers(image)
+    print(output.shape, output.max())
+

@@ -3,7 +3,6 @@ import pandas as pd
 import os
 from argparse import ArgumentParser
 
-
 def to_parquet(filename):
     in_type = os.path.splitext(filename)[-1].lower()
     output = os.path.join('output', os.path.basename(filename) + '.parquet')
@@ -12,7 +11,11 @@ def to_parquet(filename):
         case '.csv': df = pd.read_csv(filename)
         case '.xls'|'.xlsx': df = pd.read_excel(filename)
 
-    df.to_parquet(output)
+    try:
+        import fastparquet
+        fastparquet.write(output, df)
+    except Exception:
+        df.to_parquet(output)
 
 if __name__ == '__main__':
     parser = ArgumentParser()

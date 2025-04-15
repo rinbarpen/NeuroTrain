@@ -64,8 +64,9 @@ def set_seed(seed: int):
 
 
 if __name__ == "__main__":
-    prepare_logger()
     parse_args()
+
+    prepare_logger()
 
     # register models
     CONFIG = get_config()
@@ -80,11 +81,18 @@ if __name__ == "__main__":
     model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
     if CONFIG['model']['continue_checkpoint'] != "":
         model_path = Path(CONFIG['model']['continue_checkpoint'])
-        model_params = load_model(model_path, 'cuda')
+        model_params = load_model(model_path, CONFIG['device'])
         logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)
 
     if is_train():
+        finished_epoch = 0
+        if CONFIG['model']['continue_checkpoint'] != "":
+            model_ext_path = Path(CONFIG['model']['continue_ext_checkpoint'])
+            model_ext_params = load_model(model_path, 'cpu')
+            finished_epoch = model_ext_params['epoch']
+            logging.info(f'Continue Train from {finished_epoch}')
+
         train_dataset, valid_dataset = get_train_valid_dataset(
             dataset_name=CONFIG["train"]["dataset"]["name"],
             base_dir=Path(CONFIG["train"]["dataset"]["path"]),
@@ -125,6 +133,7 @@ if __name__ == "__main__":
             valid_dataloader=valid_loader,
             lr_scheduler=lr_scheduler,
             early_stop=CONFIG["train"]["early_stopping"]["enabled"],
+            last_epoch=finished_epoch,
         )
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")

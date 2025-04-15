@@ -10,6 +10,7 @@ import cv2
 from PIL import Image
 from utils.transform import image_transforms
 from models.sample.unet import UNet
+from models.transformer.deit import vit_base_patch16_224
 
 def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: int=0) -> None:
     # Load a pre-trained ResNet50 model

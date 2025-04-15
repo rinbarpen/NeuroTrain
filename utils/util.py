@@ -2,6 +2,7 @@ import logging
 import colorlog
 import os.path
 import os
+from pydantic import Field, BaseModel
 import time
 from time import strftime
 
@@ -13,7 +14,6 @@ from PIL.Image import Image
 from torch import nn
 from torchsummary import summary
 from config import get_config
-from typing import Literal
 from fvcore.nn import FlopCountAnalysis
 
 def prepare_logger(name: str|None = None):
@@ -24,8 +24,9 @@ def prepare_logger(name: str|None = None):
         'ERROR': 'red',
         'FATAL': 'bold_red',
     }
+    c = get_config()
     formatter = colorlog.ColoredFormatter(
-        '%(log_color)s%(asctime)s %(levelname)s | %(name)s | %(message)s',
+        '%(log_color)s' + c['private']['log_format'],
         log_colors=log_colors
     )
 
@@ -33,10 +34,10 @@ def prepare_logger(name: str|None = None):
     console_handler.setFormatter(formatter)
 
     os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', strftime('%Y%m%d_%H%M%S.log', time.localtime()))
+    filename = os.path.join('logs', strftime(c['private']['log_file_format']+'.log', time.localtime()))
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
     file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s | %(name)s | %(message)s'
+        c['private']['log_format']
     ))
     def set_logger(name: str, level: int):
         logger = logging.getLogger(name)
@@ -44,11 +45,18 @@ def prepare_logger(name: str|None = None):
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
 
-    c = get_config()
-    log_level = logging.DEBUG if c['private']['verbose'] else logging.INFO
+    def get_log_level():
+        if c['private']['debug']:
+            return logging.DEBUG
+        elif c['private']['verbose']:
+            return logging.INFO
+        else:
+            return logging.WARNING
+
+    log_level = get_log_level()
     if not name:
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG if c['private']['verbose'] else logging.INFO)
+        root_logger.setLevel(log_level)
         root_logger.addHandler(console_handler)
         root_logger.addHandler(file_handler)
 
@@ -94,10 +102,10 @@ def save_model(path: Path, model: nn.Module, *,
             torch.save(ext_cp, ext_path)
 
 
-def load_model(path: Path, map_location: str = 'cuda'):
+def load_model(path: str|Path, map_location: str = 'cuda'):
     return torch.load(path, 
                       map_location=torch.device(map_location))
-def load_model_ext(ext_path: Path, map_location: str = 'cuda'):
+def load_model_ext(ext_path: str|Path, map_location: str = 'cuda'):
     return torch.load(ext_path, 
                       map_location=torch.device(map_location))
 
@@ -156,19 +164,37 @@ def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> f
     return total_flops / 1e9  # Convert to GFLOPs
 
 
+class TimerUnit(BaseModel):
+    start_time: float = Field(float('NAN'))
+    end_time: float = Field(float('NAN'))
+
 class Timer:
+
     def __init__(self):
-        self.start_time = time.time()
-        self.end_time = None
+        self.time_map: dict[str, TimerUnit] = {}
 
-    def start(self):
-        self.start_time = time.time()
+    def start(self, task: str=""):
+        unit = TimerUnit()
+        unit.start_time = time.time()
+        self.time_map[task] = unit
 
-    def stop(self):
-        self.end_time = time.time()
+    def stop(self, task: str=""):
+        try:
+            self.time_map[task].end_time = time.time()
+        except Exception:
+            pass
 
-    def elapsed_time(self):
-        if self.end_time is None:
-            return time.time() - self.start_time
-        else:
-            return self.end_time - self.start_time
+    def elapsed_time(self, task: str=""):
+        try:
+            return self.time_map[task].end_time - self.time_map[task].start_time
+        except Exception:
+            return float('NAN')
+    def all_elapsed_time(self):
+        costs = {}
+        for task in self.time_map.keys():
+            costs[task] = self.elapsed_time(task)
+        return costs
+    
+    def total_elapsed_time(self) -> float:
+        total_cost = np.array(self.all_elapsed_time().values()).sum()
+        return total_cost

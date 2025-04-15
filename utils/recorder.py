@@ -18,6 +18,14 @@ def to_numpy(l: LIST_TYPE):
         l = np.array(l)
     return l
 
+def to_parquet(filename: str|Path, df: pd.DataFrame):
+    try:
+        import fastparquet
+        fastparquet.write(filename, df)
+    except Exception:
+        df.to_parquet(filename)
+
+
 class Recorder:
     _instance = None
 
@@ -34,8 +42,8 @@ class Recorder:
             # df['loss'] = losses
 
         df.to_csv(path / 'loss.csv')
-        df.to_parquet(path / 'loss.parquet')
-        
+        to_parquet(path / 'loss.parquet', df)
+
         if logger is None:
             logger = get_logger()
         logger.info(f'Save loss data under the {path}')
@@ -47,7 +55,7 @@ class Recorder:
         df['loss'] = loss
 
         df.to_csv(path / 'loss.csv')
-        df.to_parquet(path / 'loss.parquet')
+        to_parquet(path / 'loss.parquet', df)
         
         if logger is None:
             logger = get_logger()
@@ -62,7 +70,7 @@ class Recorder:
             df[k] = to_numpy([v])
 
         df.to_csv(path / 'metrics.csv')
-        df.to_parquet(path / 'metrics.parquet')
+        to_parquet(path / 'metrics.parquet', df)
         
         if logger is None:
             logger = get_logger()
@@ -75,7 +83,7 @@ class Recorder:
             df[k] = to_numpy(v)
 
         df.to_csv(path / 'all_metrics.csv')
-        df.to_parquet(path / 'all_metrics.parquet')
+        to_parquet(path / 'all_metrics.parquet', df)
         
         if logger is None:
             logger = get_logger()
@@ -89,7 +97,7 @@ class Recorder:
             df[k] = to_numpy([v])
 
         df.to_csv(path / 'mean_metrics.csv')
-        df.to_parquet(path / 'mean_metrics.parquet')
+        to_parquet(path / 'mean_metrics.parquet', df)
         
         if logger is None:
             logger = get_logger()

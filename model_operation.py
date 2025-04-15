@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
 from utils.recorder import Recorder
-from utils.util import get_logger, save_model
+from utils.util import Timer, get_logger, save_model
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
 from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
@@ -44,7 +44,7 @@ class Trainer:
               train_dataloader: DataLoader,
               valid_dataloader: DataLoader | None, 
               lr_scheduler: LRScheduler | None = None,
-              *, early_stop: bool = False):
+              *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
@@ -69,16 +69,15 @@ class Trainer:
         train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
         valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger) if enable_valid_when_training else None
         
-        pbar_total = tqdm(total=num_epochs)
-        for epoch in range(1, num_epochs+1):
-            pbar_total.set_description(f'{epoch}/{num_epochs}, Training...')
+        pbar_total = tqdm(total=num_epochs-last_epoch, desc='Training...')
+        for epoch in range(last_epoch+1, num_epochs+1):
             # train
             self.model.train()
             train_loss = 0.0
             # last_train_loss = float('inf')
             
             pbar = tqdm(total=len(train_dataloader))
-            for i, (inputs, targets) in enumerate(train_dataloader):
+            for i, (inputs, targets) in enumerate(train_dataloader, 1):
                 pbar.set_description(f'{i}/{len(train_dataloader)}, Training...')
 
                 optimizer.zero_grad()
@@ -86,17 +85,22 @@ class Trainer:
 
                 device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
                 compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
-                with autocast(device_type, dtype=compute_type, enabled=c['train']['scaler']['enabled']):
+                if c['train']['scaler']['enabled']:
+                    with autocast(device_type, dtype=compute_type):
+                        outputs = self.model(inputs)
+                        loss = criterion(targets, outputs)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
                     outputs = self.model(inputs)
-
                     loss = criterion(targets, outputs)
-
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                    loss.backward()
+                    optimizer.step()
 
                 batch_loss = loss.item()
                 train_loss += batch_loss
+                pbar.update()
                 pbar.set_postfix({'batch_loss': batch_loss})
 
                 targets, outputs = self.postprocess(targets, outputs)
@@ -106,6 +110,7 @@ class Trainer:
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
+            pbar_total.update()
             pbar_total.set_postfix({'epoch_loss': train_loss})
 
             self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
@@ -119,9 +124,8 @@ class Trainer:
                 self.model.eval()
 
                 with torch.no_grad():
-                    pbar = tqdm(total=len(valid_dataloader))
-                    for i, (inputs, targets) in enumerate(valid_dataloader):
-                        pbar.set_description(f'{i}/{len(valid_dataloader)}, Validating...')
+                    pbar = tqdm(total=len(valid_dataloader), desc='Validating...')
+                    for i, (inputs, targets) in enumerate(valid_dataloader, 1):
 
                         inputs, targets = inputs.to(device), targets.to(device)
 
@@ -130,6 +134,7 @@ class Trainer:
 
                         batch_loss = loss.item()
                         valid_loss += batch_loss
+                        pbar.update()
                         pbar.set_postfix({'batch_loss': batch_loss})
                         # logging.info(f'Epoch-Loss Variant: {loss.item() - last_valid_loss}')
                         # last_valid_loss = loss.item()
@@ -267,7 +272,7 @@ class Tester:
 
         calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
 
-        for inputs, targets in tqdm(test_dataloader, desc="Testing"):
+        for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
             inputs, targets = inputs.to(device), targets.to(device)
             # (B, N, H, W) => N is n_classes
             outputs = self.model(inputs)
@@ -328,6 +333,7 @@ class Predictor:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger('predict')
+        self.timer = Timer()
 
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
@@ -336,16 +342,26 @@ class Predictor:
 
         self.model = self.model.to(device)
         self.model.eval()
+        
         for input in tqdm(inputs, desc="Predicting..."):
             input_filename = input.name
+
+            self.timer.start(input_filename + '.preprocess')
             input = self.preprocess(input)
+            self.timer.stop(input_filename + '.preprocess')
 
+            self.timer.start(input_filename + '.inference')
             input = input.to(device)
-
             pred = self.model(input)
+            self.timer.stop(input_filename + '.inference')
 
+            self.timer.start(input_filename + '.postprocess')
             image = self.postprocess(pred)
+            self.timer.stop(input_filename + '.postprocess')
+
             image.save(self.output_dir / input_filename)
+        cost = self.timer.total_elapsed_time()
+        logging.info(f'Predicting had cost {cost}s')
 
     @classmethod
     def preprocess(self, input: Path):

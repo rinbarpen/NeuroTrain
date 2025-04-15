@@ -1,4 +1,3 @@
-import os
 from argparse import ArgumentParser
 import logging
 from pathlib import Path
@@ -11,7 +10,7 @@ from pprint import pp
 from config import PREDICT_MODE, TEST_MODE, TRAIN_MODE, get_config, set_config
 
 def parse_args():
-    parser = ArgumentParser('Neuro Train')
+    parser = ArgumentParser('NeuroTrain')
     # model_parser
     model_parser = parser.add_argument_group(title='Model Options', description='Model options')
     model_parser.add_argument('-m', '--model', type=str, help='Model name')
@@ -45,7 +44,8 @@ def parse_args():
     # Common
     parser.add_argument('--wandb', action='store_true', default=False, help='setup wandb')
     parser.add_argument('--verbose', action='store_true', default=False, help='verbose')
-    parser.add_argument('-c', '--config', type=str, help='Configuration of Train or Test or Predict')
+    parser.add_argument('--debug', action='store_true', default=False, help='debug')
+    parser.add_argument('-c', '--config', type=str, default='configs/train-template.toml', help='Configuration of Train or Test or Predict')
     # parser.add_argument('--dump', default=False)
     parser.add_argument('--seed', type=int, default=42, help='Seed of Train or Test or Predict')
     parser.add_argument('--device', type=str, default='cuda', help='Devices for Training or Testing or Predicting')
@@ -57,10 +57,8 @@ def parse_args():
     parser.add_argument('--task', type=str, help='Task name')
 
     args = parser.parse_args()
-    CONFIG = get_config()
-    if args.config:
-        config_file = Path(args.config)
-        CONFIG = load_config(config_file)
+    config_file = Path(args.config)
+    CONFIG = load_config(config_file)
 
     if args.seed:
         CONFIG['seed'] = args.seed
@@ -72,6 +70,8 @@ def parse_args():
         CONFIG['task'] = args.task
     if args.verbose:
         CONFIG['private']['verbose'] = args.verbose
+    if args.debug:
+        CONFIG['private']['debug'] = args.debug
 
     if args.continue_checkpoint:
         CONFIG['model']['continue_checkpoint'] = args.continue_checkpoint
@@ -109,11 +109,11 @@ def parse_args():
         if args.amp != 'none':
             CONFIG['train']['scaler']['enabled'] = True
             CONFIG['train']['scaler']['compute_type'] = args.amp
-            logging.info('set up amp mode: {}'.format(args.amp))
+            print('set up amp mode: {}'.format(args.amp))
         if args.early_stopping:
             CONFIG['train']['early_stopping']['enabled'] = True
             CONFIG['train']['early_stopping']['patience'] = args.patience
-            logging.info('set up early_stopping with patience={}'.format(args.patience))
+            print('set up early_stopping with patience={}'.format(args.patience))
         if args.lr_scheduler:
             CONFIG['train']['lr_scheduler']['enabled'] = True
             if args.warmup:
@@ -140,11 +140,15 @@ def parse_args():
     CONFIG['run_id'] = run_id
 
     if args.wandb:
-        import wandb
-        CONFIG['private']['wandb'] = args.wandb
-        project = CONFIG['task']
-        entity = CONFIG['entity']
-        wandb.init(project=project, entity=entity, config=CONFIG)
+        try:
+            import wandb
+            CONFIG['private']['wandb'] = True
+            project = CONFIG['task']
+            entity = CONFIG['entity']
+            wandb.init(project=project, entity=entity, config=CONFIG)
+        except Exception:
+            CONFIG['private']['wandb'] = False
+            print("wandb isn't installed, disable to launch wandb")
 
     pp(CONFIG)
     set_config(CONFIG)
