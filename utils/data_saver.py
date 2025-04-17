@@ -1,13 +1,11 @@
-from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 import fastparquet
-
-from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict,
-    MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict)
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from pathlib import Path
 
+from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict, MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict)
 
 # sync mode
 class _DataSaver:

@@ -1,0 +1,11 @@
+[drive]
+config = "configs/single/train-drive.toml"
+ext_args = ["--check"]
+
+[stare]
+config = "configs/single/train-stare.toml"
+ext_args = ["--check"]
+
+[chasedb1]
+config = "configs/single/train-chasedb1.toml"
+ext_args = ["--check"]

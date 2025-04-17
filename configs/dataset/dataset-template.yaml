@@ -1,0 +1,48 @@
+drive:
+  root_dir: "data/DRIVE"
+  classes: ["Retina"]
+  train:
+    base_dir: "training"
+    source: "images/*.png"
+    target: "1st_manual/*.png"
+  test:
+    base_dir: "test"
+    source: "images/*.png"
+    target: "1st_manual/*.png"
+stare:
+  root_dir: "data/STARE"
+  classes: ["Retina"]
+  train:
+    base_dir: "training"
+    source: "images/*.png"
+    target: "1st_labels_ah/*.png"
+  test:
+    base_dir: "test"
+    source: "images/*.png"
+    target: "1st_labels_ah/*.png"
+chasedb1:
+  root_dir: "data/CHASEDB1"
+  classes: ["Retina"]
+  train:
+    base_dir: "training"
+    source: "images/*.png"
+    target: "1st_label/*.png"
+  test:
+    base_dir: "test"
+    source: "images/*.png"
+    target: "1st_label/*.png"
+isic2017:
+  root_dir: "data/ISIC2017"
+  classes: [""]
+  train:
+    base_dir: ""
+    source: "2017_Training_Data/*.jpg"
+    target: "2017_Training_Part1_GroundTruth/*.jpg"
+  valid:
+    base_dir: ""
+    source: "ISIC-2017_Validation_Data/*.jpg"
+    target: "ISIC-2017_Validation_Part1_GroundTruth/*.jpg"
+  test:
+    base_dir: ""
+    source: "ISIC-2017_Test_v2_Data/*.jpg"
+    target: "ISIC-2017_Test_v2_Part1_GroundTruth/*.jpg"

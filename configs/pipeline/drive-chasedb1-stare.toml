@@ -1,11 +1,11 @@
 [drive]
-config = "configs/train-drive.toml"
+config = "configs/single/train-drive.toml"
 ext_args = ["--train", "--test", "--predict"]
 
 [stare]
-config = "configs/train-stare.toml"
+config = "configs/single/train-stare.toml"
 ext_args = ["--train", "--test", "--predict"]
 
 [chasedb1]
-config = "configs/train-chasedb1.toml"
+config = "configs/single/train-chasedb1.toml"
 ext_args = ["--train", "--test", "--predict"]

@@ -4,21 +4,31 @@ from torchvision import transforms
 import yaml
 import numpy as np
 from PIL import Image
+from typing import Literal
 
 from utils.util import save_numpy_data
-from utils.dataset.custom_dataset import CustomDataset
-
+from utils.dataset.custom_dataset import CustomDataset, Betweens
 
 class DriveDataset(CustomDataset):
-    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False):
+    mapping = {"train": ("training/images/*.png", "training/1st_manual/*.png"), 
+               "test":  ("test/images/*.png", "test/1st_manual/*.png")}
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
         super(DriveDataset, self).__init__(base_dir, between, use_numpy=use_numpy)
 
-        self.transforms = transforms
-        self.config = {"is_rgb": is_rgb}
+        if 'source' in kwargs.keys() and 'target' in kwargs.keys():
+            image_glob, label_glob = kwargs['source'], kwargs['target']
+        else:
+            image_glob, label_glob = self.mapping[dataset_type]
 
-        image, label = "images", "1st_manual"
-        images = [p for p in (base_dir / image).glob('*.png')] if not use_numpy else [p for p in (base_dir / image).glob('*.npy')]
-        masks = [p for p in (base_dir / label).glob('*.png')] if not use_numpy else [p for p in (base_dir / label).glob('*.npy')]
+        self.transforms = transforms
+        self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
+
+        if use_numpy:
+            image_glob = image_glob.replace('*.png', '*.npy')
+            label_glob = label_glob.replace('*.png', '*.npy')
+
+        images = [p for p in base_dir.glob(image_glob)]
+        masks = [p for p in base_dir.glob(label_glob)]
 
         self.n = len(images)
         bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
@@ -39,22 +49,21 @@ class DriveDataset(CustomDataset):
         return image, mask
 
     @staticmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
         save_dir = save_dir / DriveDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
+        train_dir = base_dir / "training"
+        test_dir = base_dir / "test"
 
-        image_dir = save_dir / "images"
-        mask_dir = save_dir / "1st_manual"
+        train_dataset = DriveDataset.get_train_dataset(train_dir, between=betweens['train'])
+        test_dataset = DriveDataset.get_test_dataset(test_dir, between=betweens['test'])
 
-        train_dataset = DriveDataset.get_train_dataset(base_dir / "training", between=betweens['train'], **kwargs)
-        test_dataset = DriveDataset.get_test_dataset(base_dir / "test", between=betweens['test'], **kwargs)
-
-        for i, (image, mask) in enumerate(train_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
-        for i, (image, mask) in enumerate(test_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (train_dir, test_dir), ('train', 'test')):
+            for i, (image, mask) in enumerate(dataset):
+                image_dir = data_dir / DriveDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_dir = data_dir / DriveDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
+                save_numpy_data(image_dir, image)
+                save_numpy_data(mask_dir, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
@@ -63,3 +72,14 @@ class DriveDataset(CustomDataset):
     @staticmethod
     def name():
         return "DRIVE"
+
+    @staticmethod
+    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return DriveDataset(base_dir, between, 'train', use_numpy=use_numpy, **kwargs)
+        return DriveDataset(base_dir, 'train', between=between, use_numpy=use_numpy, **kwargs)
+    @staticmethod
+    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return None
+    @staticmethod
+    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return DriveDataset(base_dir, 'test', between=between, use_numpy=use_numpy, **kwargs)

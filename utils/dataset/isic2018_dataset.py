@@ -6,22 +6,30 @@ from torchvision import transforms
 import yaml
 from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset
+from utils.dataset.custom_dataset import CustomDataset, Betweens
 from utils.util import save_numpy_data
 
 class ISIC2018Dataset(CustomDataset):
-    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, *, dataset_type: Literal['train', 'test', 'valid']):
-        super(ISIC2018Dataset, self).__init__(base_dir, between, use_numpy=use_numpy)
+    mapping = {"train": ("ISIC2018_Task1-2_Training_Input/*.jpg", "ISIC2018_Task1-2_Training_Input/*.jpg"), 
+               "valid": ("ISIC2018_Task1-2_Validation_Input/*.jpg", "ISIC2018_Task1_Validation_GroundTruth/*.jpg"),
+               "test":  ("ISIC2018_Task1-2_Test_Input/*.jpg", "ISIC2018_Task1_Test_GroundTruth/*.jpg")}
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
+        super(ISIC2018Dataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
+
+        if 'source' in kwargs.keys() and 'target' in kwargs.keys():
+            image_glob, label_glob = kwargs['source'], kwargs['target']
+        else:
+            image_glob, label_glob = self.mapping[dataset_type]
 
         self.transforms = transforms
         self.config = {"is_rgb": is_rgb, "dataset_type": dataset_type}
 
-        self.mapping = {"train": ("ISIC2018_Task1-2_Training_Input", "ISIC2018_Task1-2_Training_Input"), 
-                        "valid": ("ISIC2018_Task1-2_Validation_Input", "ISIC2018_Task1_Validation_GroundTruth"),
-                        "test":  ("ISIC2018_Task1-2_Test_Input", "ISIC2018_Task1_Test_GroundTruth")}
-        image, label = self.mapping[dataset_type]
-        images = [p for p in (base_dir / image).glob('*.jpg')] if not use_numpy else [p for p in (base_dir / image).glob('*.npy')]
-        masks = [p for p in (base_dir / label).glob('*.jpg')] if not use_numpy else [p for p in (base_dir / label).glob('*.npy')]
+        if use_numpy:
+            image_glob = image_glob.replace('*.jpg', '*.npy')
+            label_glob = label_glob.replace('*.jpg', '*.npy')
+
+        images = [p for p in base_dir.glob(image_glob)]
+        masks = [p for p in base_dir.glob(label_glob)]
 
         self.n = len(images)
         bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
@@ -42,7 +50,7 @@ class ISIC2018Dataset(CustomDataset):
         return image, mask
 
     @staticmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
         save_dir = save_dir / ISIC2018Dataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -50,21 +58,12 @@ class ISIC2018Dataset(CustomDataset):
         valid_dataset = ISIC2018Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
         test_dataset  = ISIC2018Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        mapping = {"train": ("ISIC2018_Task1-2_Training_Input", "ISIC2018_Task1-2_Training_Input"), 
-                   "valid": ("ISIC2018_Task1-2_Validation_Input", "ISIC2018_Task1_Validation_GroundTruth"),
-                   "test":  ("ISIC2018_Task1-2_Test_Input", "ISIC2018_Task1_Test_GroundTruth")}
-        for i, (image, mask) in enumerate(train_dataset):
-            image_dir, mask_dir = mapping['train']
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
-        for i, (image, mask) in enumerate(valid_dataset):
-            image_dir, mask_dir = mapping['valid']
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
-        for i, (image, mask) in enumerate(test_dataset):
-            image_dir, mask_dir = mapping['test']
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for dataset, dataset_type in zip((train_dataset, valid_dataset, test_dataset), ('train', 'valid', 'test')):
+            for i, (image, mask) in enumerate(dataset):
+                image_dir = base_dir / ISIC2018Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
+                mask_dir = base_dir / ISIC2018Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
+                save_numpy_data(image_dir, image)
+                save_numpy_data(mask_dir, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
@@ -73,3 +72,13 @@ class ISIC2018Dataset(CustomDataset):
     @staticmethod
     def name():
         return "ISIC2018"
+    @staticmethod
+    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return ISIC2018Dataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
+    @staticmethod
+    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return ISIC2018Dataset(base_dir, 'valid', between, use_numpy=use_numpy, **kwargs)
+    @staticmethod
+    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return ISIC2018Dataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)
+

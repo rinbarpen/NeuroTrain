@@ -4,20 +4,31 @@ from pathlib import Path
 from PIL import Image
 import yaml
 import numpy as np
+from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset
+from utils.dataset.custom_dataset import CustomDataset, Betweens
 from utils.util import save_numpy_data
 
 class StareDataset(CustomDataset):
-    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False):
-        super(StareDataset, self).__init__(base_dir, between, use_numpy=use_numpy)
+    mapping = {"train": ("training/images/*.png", "training/1st_labels_ah/*.png"), 
+               "test":  ("test/images/*.png", "test/1st_labels_ah/*.png")}
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
+        super(StareDataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
+
+        if 'source' in kwargs.keys() and 'target' in kwargs.keys():
+            image_glob, label_glob = kwargs['source'], kwargs['target']
+        else:
+            image_glob, label_glob = self.mapping[dataset_type]
 
         self.transforms = transforms
-        self.config = {"is_rgb": is_rgb}
+        self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
 
-        image, label = "images", "1st_labels_ah"
-        images = [p for p in (base_dir / image).glob('*.png')] if not use_numpy else [p for p in (base_dir / image).glob('*.npy')]
-        masks = [p for p in (base_dir / label).glob('*.png')] if not use_numpy else [p for p in (base_dir / label).glob('*.npy')]
+        if use_numpy:
+            image_glob = image_glob.replace('*.png', '*.npy')
+            label_glob = label_glob.replace('*.png', '*.npy')
+
+        images = [p for p in base_dir.glob(image_glob)]
+        masks = [p for p in base_dir.glob(label_glob)]
 
         self.n = len(images)
         bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
@@ -41,19 +52,18 @@ class StareDataset(CustomDataset):
     def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
         save_dir = save_dir / StareDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
+        train_dir = base_dir / "training"
+        test_dir = base_dir / "test"
 
-        image_dir = save_dir / "images"
-        mask_dir = save_dir / "1st_labels_ah"
+        train_dataset = StareDataset.get_train_dataset(train_dir, between=betweens['train'])
+        test_dataset = StareDataset.get_test_dataset(test_dir, between=betweens['test'])
 
-        train_dataset = StareDataset.get_train_dataset(base_dir / "training", between=betweens['train'])
-        test_dataset = StareDataset.get_test_dataset(base_dir / "test", between=betweens['test'])
-
-        for i, (image, mask) in enumerate(train_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
-        for i, (image, mask) in enumerate(test_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (train_dir, test_dir), ('train', 'test')):
+            for i, (image, mask) in enumerate(dataset):
+                image_dir = data_dir / StareDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_dir = data_dir / StareDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
+                save_numpy_data(image_dir, image)
+                save_numpy_data(mask_dir, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
@@ -62,3 +72,12 @@ class StareDataset(CustomDataset):
     @staticmethod
     def name():
         return "STARE"
+    @staticmethod
+    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return StareDataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
+    @staticmethod
+    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return None
+    @staticmethod
+    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        return StareDataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)

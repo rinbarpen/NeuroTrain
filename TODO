@@ -1,13 +1,9 @@
-Overall:
- - [x] Test to train
- - [x] Test to test
- - [x] Test to predict
+- [ ] Fixup to dump Yaml configuration
 
-Train:
- - [x] Add Mean-Epoch-Metric for every class
- - [x] the score from Mean-Metric for every class may be a fault
- - [x] The image of Mean-Metric on classes is error 
- - [x] Support the Trainer, Tester and Predictor to be inherited
+Trainer:
+ - [ ] Support config for Dataset.to_numpy()
+
+
 
 Analyzer:
  - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
@@ -16,4 +12,3 @@ Analyzer:
 Timer:
  - [x] Time cost between two time points
 
-- [ ] Fixup to dump Yaml configuration

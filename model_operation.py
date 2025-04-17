@@ -6,9 +6,9 @@ import wandb
 import torch
 from torch import nn
 from torch.amp import GradScaler, autocast
-from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
 from torch.utils.data import DataLoader
+from abc import abstractmethod
 
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
@@ -16,15 +16,14 @@ from utils.data_saver import DataSaver
 from utils.util import Timer, get_logger, save_model
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
-from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
+from utils.transform import get_transforms, image_transform, image_transforms, VisionTransformersBuilder
 from utils.criterion import CombineCriterion
-from utils.see_cam import ImageHeatMapGenerator
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
-        self.train_loss_image_path = output_dir / "train-epoch-loss.png"
-        self.valid_loss_image_path = output_dir / "valid-epoch-loss.png"
+        self.train_loss_image_path = output_dir / "train_epoch_loss.png"
+        self.valid_loss_image_path = output_dir / "valid_epoch_loss.png"
         self.save_model_dir = output_dir / "weights"
         self.last_model_file_path = self.save_model_dir / "last.pt"
         self.best_model_file_path = self.save_model_dir / "best.pt"
@@ -39,7 +38,7 @@ class Trainer:
         
         c = get_config()
         class_labels = c['classes']
-        metric_labels = c['metrics'] # TODO: load from c
+        metric_labels = c['metrics']
         self.train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
         self.valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
         
@@ -49,7 +48,7 @@ class Trainer:
               optimizer: torch.optim.Optimizer,
               train_dataloader: DataLoader,
               valid_dataloader: DataLoader | None = None, 
-              scaler: torch.amp.GradScaler | None = None, 
+              scaler: GradScaler | None = None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
@@ -205,7 +204,7 @@ class Trainer:
         self.logger.info(f'Save train loss info under the {self.output_dir}')
 
         plot = Plot(1, 1)
-        plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
+        plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train/Epoch-Loss').complete()
         plot.save(self.train_loss_image_path)
 
         self.logger.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
@@ -214,7 +213,7 @@ class Trainer:
             self.logger.info(f'Save valid loss info under the {self.output_dir}')
             
             plot = Plot(1, 1)
-            plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()
+            plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid/Epoch-Loss').complete()
             plot.save(self.valid_loss_image_path)
             self.logger.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
 
@@ -357,16 +356,17 @@ class Predictor:
             self.timer.stop(input_filename + '.inference')
 
             self.timer.start(input_filename + '.postprocess')
-            image = self.postprocess(pred)
+            pred = self.postprocess(pred)
             self.timer.stop(input_filename + '.postprocess')
 
-            self.do(input.cpu().numpy(), image.cpu().numpy(), filename=input_filename, original_size=original_size)
+            self.record(input.cpu().numpy(), pred.cpu().numpy(), filename=input_filename, original_size=original_size)
             
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
 
     @classmethod
-    def do(self, input: np.ndarray, pred: np.ndarray, *args, **kwargs):
+    # @abstractmethod
+    def record(self, input: np.ndarray, pred: np.ndarray, **kwargs):
         output_filename = self.output_dir / (kwargs['filename'] + '.png')
         original_size = kwargs['original_size'] # (W, H)
 
@@ -375,14 +375,12 @@ class Predictor:
 
         pred_image.save(output_filename)
 
-
     @classmethod
     def preprocess(self, input: Path):
         input = Image.open(input).convert('L')
-        size = input.size
-        input = image_transform(input, size=(512, 512)).unsqueeze(0)
-        # transform = image_transforms(resize=(512, 512), is_rgb=False, is_PIL_image=True)
-        # input = transform(input).unsqueeze(0)
+        size = input.size # (H, W)
+        transforms = get_transforms()
+        input = transforms(input).unsqueeze(0)
         return input, size
 
     @classmethod

@@ -51,18 +51,17 @@ if __name__ == '__main__':
     match config_path.suffix:
         case '.toml':
             with config_path.open('r', encoding='utf-8') as f:
-                config = toml.load(f)
+                pipeline_config = toml.load(f)
         case '.yaml'|'.yml':
             with config_path.open('r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+                pipeline_config = yaml.safe_load(f)
         case '.json':
             with config_path.open('r', encoding='utf-8') as f:
-                config = json.load(args.config)
+                pipeline_config = json.load(f)
         case _:
             raise ValueError(f"Unsupported file format: {config_path.suffix}")
 
-
-    for name, config in config.items():
+    for name, config in pipeline_config.items():
         config_file = config['config']
         ext_args = config['ext_args']
         
@@ -70,4 +69,4 @@ if __name__ == '__main__':
             process = subprocess.Popen(["main.py", "-c", config_file, *ext_args])
             process.wait()
         except Exception as e:
-            logging.error(f"Name: {name}, Config: {config_path}, Exception: {e}")
+            logging.error(f"Name: {name}, Config: {config_file}, Exception: {e}")
