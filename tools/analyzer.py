@@ -22,6 +22,42 @@ class AnalyzeMetricParams(BaseModel):
     class_metrics: ClassLabelManyScoreDict
     super_params: dict
 
+"""
+Data Format:
+task:
+    run_id:
+        predict:
+            {xx}
+            config[.json|.toml|.yaml]
+        test:
+            {class}:
+                mean_metrics[.csv|.parquet]
+            mean_metric.png
+            mean_metrics[.csv|.parquet]
+            config[.json|.toml|.yaml]
+        train:
+            {class}:
+                all_metrics[.csv|.parquet]
+                mean_metrics[.csv|.parquet]
+            weights:
+                best.pt
+                last.pt
+                {net}-{epoch}of{num_epochs}.pt
+                best-ext.pt                         | optional
+                last-ext.pt                         | optional
+                {net}-{epoch}of{num_epochs}-ext.pt  | optional
+            train_loss[.csv|.parquet]
+            train_epoch_loss.png
+            valid_loss[.csv|.parquet]               | optional
+            valid_epoch_loss.png                    | optional
+            epoch_metrics.png
+            mean_metric.png
+            mean_metrics[.csv|.parquet]
+            config[.json|.toml|.yaml]
+            best.pt                                 | optional, soft link
+            last.pt                                 | optional, soft link
+"""
+
 class Analyzer:
     def __init__(self):
         pass

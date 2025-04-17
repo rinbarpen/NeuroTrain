@@ -1,89 +1,75 @@
-import os
 import torch
-from torch.utils.data import Dataset
 from pathlib import Path
-
+from PIL import Image
+import numpy as np
+from torchvision import transforms
 import yaml
+from typing import Literal
 
-from utils.transform import to_gray, to_rgb, image_transform
-from utils.util import load_numpy_data, save_numpy_data
+from utils.dataset.custom_dataset import CustomDataset
+from utils.util import save_numpy_data
 
-def get_isic2017_train_dataset(base_dir: Path, to_rgb=False):
-    train_dataset = ISIC2017Dataset(base_dir / "ISIC-2017_Training_Data",
-                                    base_dir / "ISIC-2017_Training_Part1_GroundTruth",
-                                    to_rgb)
-    return train_dataset
+class ISIC2017Dataset(CustomDataset):
+    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, *, dataset_type: Literal['train', 'test', 'valid']):
+        super(ISIC2017Dataset, self).__init__(base_dir, between, use_numpy=use_numpy)
 
-def get_isic2017_valid_dataset(base_dir: Path, to_rgb=False):
-    valid_dataset = ISIC2017Dataset(base_dir / "ISIC-2017_Validation_Data",
-                                    base_dir / "ISIC-2017_Validation_Part1_GroundTruth",
-                                    to_rgb)
-    return valid_dataset
+        self.transforms = transforms
+        self.config = {"is_rgb": is_rgb, "dataset_type": dataset_type}
 
-def get_isic2017_test_dataset(base_dir: Path, *, to_rgb=False):
-    test_dataset = ISIC2017Dataset(base_dir / "ISIC-2017_Test_v2_Data",
-                                   base_dir / "ISIC-2017_Test_v2_Part1_GroundTruth",
-                                   to_rgb)
-    return test_dataset
+        self.mapping = {"train": ("2017_Training_Data", "2017_Training_Part1_GroundTruth"), 
+                        "valid": ("ISIC-2017_Validation_Data", "ISIC-2017_Validation_Part1_GroundTruth"),
+                        "test":  ("ISIC-2017_Test_v2_Data", "ISIC-2017_Test_v2_Part1_GroundTruth")}
+        image, label = self.mapping[dataset_type]
+        images = [p for p in (base_dir / image).glob('*.jpg')] if not use_numpy else [p for p in (base_dir / image).glob('*.npy')]
+        masks = [p for p in (base_dir / label).glob('*.jpg')] if not use_numpy else [p for p in (base_dir / label).glob('*.npy')]
 
-# output / ISIC2017
-def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
-    save_dir = save_dir / "ISIC2017"
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    train_dataset = get_isic2017_train_dataset(base_dir, to_rgb=to_rgb)
-    image_dir = save_dir / train_dataset.image_dir.stem
-    mask_dir = save_dir / train_dataset.mask_dir.stem
-    
-    for i, (image, mask) in enumerate(train_dataset):
-        save_numpy_data(image_dir / f'{i}.npy', image)
-        save_numpy_data(mask_dir / f'{i}.npy', mask)
-    
-    valid_dataset = get_isic2017_valid_dataset(base_dir, to_rgb=to_rgb)
-    image_dir = save_dir / valid_dataset.image_dir.stem
-    mask_dir = save_dir / valid_dataset.mask_dir.stem
-    
-    for i, (image, mask) in enumerate(valid_dataset):
-        save_numpy_data(image_dir / f'{i}.npy', image)
-        save_numpy_data(mask_dir / f'{i}.npy', mask)
-
-    test_dataset = get_isic2017_test_dataset(base_dir, to_rgb=to_rgb)
-    image_dir = save_dir / test_dataset.image_dir.stem
-    mask_dir = save_dir / test_dataset.mask_dir.stem
-    
-    for i, (image, mask) in enumerate(test_dataset):
-        save_numpy_data(image_dir / f'{i}.npy', image)
-        save_numpy_data(mask_dir / f'{i}.npy', mask)
-
-    config_file = save_dir / "config.yaml"
-    with config_file.open('w', encoding='utf-8') as f:
-        yaml.dump({"to_rgb": to_rgb}, f)
-
-
-class ISIC2017Dataset(Dataset):
-    def __init__(self, image_dir: Path, mask_dir: Path, to_rgb=False, *, is_numpy=False):
-        super(ISIC2017Dataset, self).__init__()
-
-        self.is_numpy = is_numpy
-        self.to_rgb = to_rgb
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.image_paths = [p for p in image_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npy')]
-        self.mask_paths = [p for p in mask_dir.glob('*.jpg')] if not self.is_numpy else [p for p in image_dir.glob('*.npy')]
+        self.n = len(images)
+        bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
+        self.images = images[bw[0]:bw[1]]
+        self.masks = masks[bw[0]:bw[1]]
 
     def __getitem__(self, index):
-        image_file, mask_file = self.image_paths[index], self.mask_paths[index]
-        if self.is_numpy:
-            return torch.from_numpy(load_numpy_data(image_file)), torch.from_numpy(load_numpy_data(mask_file)) 
-
-        if self.to_rgb:
-            image, mask = to_rgb(image_file), to_rgb(mask_file)
+        image, mask = self.images[index], self.masks[index]
+        if self.use_numpy:
+            return torch.from_numpy(np.load(image)), torch.from_numpy(np.load(mask))
+        
+        if self.config['is_rgb']:
+            image, mask = Image.open(image).convert('RGB'), Image.open(mask).convert('RGB')
         else:
-            image, mask = to_gray(image_file), to_gray(mask_file)
-
-        image, mask = image_transform(image, (512, 512), self.to_rgb), image_transform(mask, (512, 512), self.to_rgb)
-
+            image, mask = Image.open(image).convert('L'), Image.open(mask).convert('L')
+        
+        image, mask = self.transforms(image), self.transforms(mask)
         return image, mask
 
-    def __len__(self):
-        return len(self.image_paths)
+    @staticmethod
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+        save_dir = save_dir / ISIC2017Dataset.name()
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        train_dataset = ISIC2017Dataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
+        valid_dataset = ISIC2017Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
+        test_dataset  = ISIC2017Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
+
+        mapping = {"train": ("2017_Training_Data", "2017_Training_Part1_GroundTruth"), 
+                   "valid": ("ISIC-2017_Validation_Data", "ISIC-2017_Validation_Part1_GroundTruth"),
+                   "test":  ("ISIC-2017_Test_v2_Data", "ISIC-2017_Test_v2_Part1_GroundTruth")}
+        for i, (image, mask) in enumerate(train_dataset):
+            image_dir, mask_dir = mapping['train']
+            save_numpy_data(image_dir / f'{i}.npy', image)
+            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for i, (image, mask) in enumerate(valid_dataset):
+            image_dir, mask_dir = mapping['valid']
+            save_numpy_data(image_dir / f'{i}.npy', image)
+            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for i, (image, mask) in enumerate(test_dataset):
+            image_dir, mask_dir = mapping['test']
+            save_numpy_data(image_dir / f'{i}.npy', image)
+            save_numpy_data(mask_dir / f'{i}.npy', mask)
+
+        config_file = save_dir / "config.yaml"
+        with config_file.open('w', encoding='utf-8') as f:
+            yaml.dump({"betweens": betweens, **kwargs}, f)
+
+    @staticmethod
+    def name():
+        return "ISIC2017"

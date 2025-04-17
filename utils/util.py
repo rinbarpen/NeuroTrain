@@ -9,12 +9,18 @@ from time import strftime
 import cv2
 import numpy as np
 import torch
+from torch import nn
+import random
+
+from torch.utils.data import DataLoader
+
 from pathlib import Path
 from PIL.Image import Image 
-from torch import nn
 from torchsummary import summary
-from config import get_config
 from fvcore.nn import FlopCountAnalysis
+
+from config import get_config
+from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset, to_numpy
 
 def prepare_logger(name: str|None = None):
     log_colors = {
@@ -72,6 +78,72 @@ def get_logger(name: str|None = None):
         prepare_logger(name)
     return logger
 
+def set_seed(seed: int):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+def get_train_tools(model: nn.Module):
+    c = get_config()
+    match c['train']['optimizer']['type'].lower():
+        case 'adam':
+            optimizer = torch.optim.Adam(
+                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'], eps=c['train']['optimizer']['eps'])
+        case 'adamw':
+            optimizer = torch.optim.AdamW(
+                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'], eps=c['train']['optimizer']['eps'])
+
+    return {
+        'optimizer': optimizer,
+        'lr_scheduler': torch.optim.lr_scheduler.LRScheduler(optimizer) if c['train']['lr_scheduler']['enabled'] else None,
+        'scaler': torch.amp.GradScaler() if c['train']['scaler']['enabled'] else None,
+    }
+
+def get_train_valid_test_dataloader(use_valid=False):
+    c = get_config()
+    train_dataset = get_train_dataset(
+        dataset_name=c["dataset"]["name"],
+        base_dir=Path(c["dataset"]["path"]),
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=c["train"]["batch_size"],
+        pin_memory=True,
+        num_workers=c["dataset"]["num_workers"],
+        shuffle=True,
+    )
+    test_dataset = get_train_dataset(
+        dataset_name=c["dataset"]["name"],
+        base_dir=Path(c["dataset"]["path"]),
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=c["test"]["batch_size"],
+        pin_memory=True,
+        num_workers=c["dataset"]["num_workers"],
+        shuffle=True,
+    )
+    if use_valid:
+        valid_dataset = get_valid_dataset(
+            dataset_name=c["dataset"]["name"],
+            base_dir=Path(c["dataset"]["path"]),
+        )
+        valid_loader = DataLoader(
+            valid_dataset,
+            batch_size=c["valid"]["batch_size"],
+            pin_memory=True,
+            num_workers=c["dataset"]["num_workers"],
+            shuffle=True,
+        )
+
+        return train_loader, valid_loader, test_loader
+    
+    return train_loader, None, test_loader
+
 def save_model(path: Path, model: nn.Module, *, 
                ext_path: Path|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
@@ -100,8 +172,6 @@ def save_model(path: Path, model: nn.Module, *,
             ext_path = ext_path.parent / (ext_path.stem +
                                 strftime("%Y%m%d_%H%M%S", time.localtime()))
             torch.save(ext_cp, ext_path)
-
-
 def load_model(path: str|Path, map_location: str = 'cuda'):
     return torch.load(path, 
                       map_location=torch.device(map_location))
@@ -112,7 +182,6 @@ def load_model_ext(ext_path: str|Path, map_location: str = 'cuda'):
 def save_model_to_onnx(path: Path, model: nn.Module, input_size: tuple):
     dummy_input = torch.randn(input_size)
     torch.onnx.export(model, dummy_input, path)
-
 def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
     if isinstance(model_src, Path):
         checkpoint = load_model(model_src, device)

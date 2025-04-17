@@ -1,76 +1,64 @@
-import os
 import torch
-from torch.utils.data import Dataset
 from pathlib import Path
 import yaml
+from PIL import Image
+import numpy as np
+from torchvision import transforms
 
-from utils.transform import to_rgb, to_gray, image_transform
-from utils.util import load_numpy_data, save_numpy_data
+from utils.dataset.custom_dataset import CustomDataset
+from utils.util import save_numpy_data
 
+class ChaseDB1Dataset(CustomDataset):
+    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False):
+        super(ChaseDB1Dataset, self).__init__(base_dir, between, use_numpy=use_numpy)
 
-def get_chasedb1_train_valid_dataset(base_dir: Path, split: float, to_rgb=False):
-    base_dir = base_dir / "training"
-    train_dataset = CHASEDB1Dataset(base_dir, (0.0, split), to_rgb)
-    valid_dataset = CHASEDB1Dataset(base_dir, (split, 1.0), to_rgb)
-    return train_dataset, valid_dataset
+        self.transforms = transforms
+        self.config = {"is_rgb": is_rgb}
 
-def get_chasedb1_test_dataset(base_dir: Path, to_rgb=False):
-    base_dir = base_dir / "test"
-    test_dataset = CHASEDB1Dataset(base_dir, (0.0, 1.0), to_rgb)
-    return test_dataset
+        image, label = "images", "1st_label"
+        images = [p for p in (base_dir / image).glob('*.png')] if not use_numpy else [p for p in (base_dir / image).glob('*.npy')]
+        masks = [p for p in (base_dir / label).glob('*.png')] if not use_numpy else [p for p in (base_dir / label).glob('*.npy')]
 
-def convert_to_numpy(save_dir: Path, base_dir: Path, to_rgb=False):
-    save_dir = save_dir / "CHASEDB1"
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    train_dataset, _ = get_chasedb1_train_valid_dataset(base_dir, 1.0, to_rgb=to_rgb)
-    image_dir = save_dir / "images"
-    mask_dir = save_dir / "1st_manual"
-    
-    for i, (image, mask) in enumerate(train_dataset):
-        save_numpy_data(image_dir / f'{i}.npy', image)
-        save_numpy_data(mask_dir / f'{i}.npy', mask)
-
-    test_dataset = get_chasedb1_test_dataset(base_dir, to_rgb=to_rgb)
-    image_dir = save_dir / "images"
-    mask_dir = save_dir / "1st_manual"
-    
-    for i, (image, mask) in enumerate(test_dataset):
-        save_numpy_data(image_dir / f'{i}.npy', image)
-        save_numpy_data(mask_dir / f'{i}.npy', mask)
-
-    config_file = save_dir / "config.yaml"
-    with config_file.open('w', encoding='utf-8') as f:
-        yaml.dump({"to_rgb": to_rgb}, f)
-
-
-class CHASEDB1Dataset(Dataset):
-    def __init__(self, base_dir: Path, between: tuple[float, float], to_rgb=False, *, is_numpy=False):
-        super(CHASEDB1Dataset, self).__init__()
-
-        self.is_numpy = is_numpy
-        self.to_rgb = to_rgb
-        self.base_dir = base_dir
-        image_paths = [p for p in (base_dir / "images").iterdir()]
-        mask_paths = [p for p in (base_dir / "1st_label").iterdir()]
-        self.between = (len(image_paths) * between[0], len(image_paths) * between[1])
-        self.image_paths = image_paths[self.between[0]:self.between[1]]
-        self.mask_paths = mask_paths[self.between[0]:self.between[1]]
+        self.n = len(images)
+        bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
+        self.images = images[bw[0]:bw[1]]
+        self.masks = masks[bw[0]:bw[1]]
 
     def __getitem__(self, index):
-        image_file, mask_file = self.image_paths[index], self.mask_paths[index]
-        if self.is_numpy:
-            return torch.from_numpy(load_numpy_data(image_file)), torch.from_numpy(load_numpy_data(mask_file))
-
-        if self.to_rgb:
-            image, mask = to_rgb(image_file), to_rgb(mask_file)
+        image, mask = self.images[index], self.masks[index]
+        if self.use_numpy:
+            return torch.from_numpy(np.load(image)), torch.from_numpy(np.load(mask))
+        
+        if self.config['is_rgb']:
+            image, mask = Image.open(image).convert('RGB'), Image.open(mask).convert('RGB')
         else:
-            image, mask = to_gray(image_file), to_gray(mask_file)
-
-        image, mask = image_transform(image, (512, 512), self.to_rgb), image_transform(mask, (512, 512), self.to_rgb)
-
+            image, mask = Image.open(image).convert('L'), Image.open(mask).convert('L')
+        
+        image, mask = self.transforms(image), self.transforms(mask)
         return image, mask
 
+    @staticmethod
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+        save_dir = save_dir / ChaseDB1Dataset.name()
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-    def __len__(self):
-        return len(self.image_paths)
+        image_dir = save_dir / "images"
+        mask_dir = save_dir / "1st_label"
+
+        train_dataset = ChaseDB1Dataset.get_train_dataset(base_dir / "training", between=betweens['train'], **kwargs)
+        test_dataset  = ChaseDB1Dataset.get_test_dataset(base_dir / "test", between=betweens['test'], **kwargs)
+
+        for i, (image, mask) in enumerate(train_dataset):
+            save_numpy_data(image_dir / f'{i}.npy', image)
+            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for i, (image, mask) in enumerate(test_dataset):
+            save_numpy_data(image_dir / f'{i}.npy', image)
+            save_numpy_data(mask_dir / f'{i}.npy', mask)
+
+        config_file = save_dir / "config.yaml"
+        with config_file.open('w', encoding='utf-8') as f:
+            yaml.dump({"betweens": betweens, **kwargs}, f)
+
+    @staticmethod
+    def name():
+        return "CHASEDB1"

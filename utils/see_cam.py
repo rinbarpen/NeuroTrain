@@ -86,3 +86,34 @@ def get_cam_mask_image(image_path: Path) -> Image:
     mask_image = resnet50_check(image_path, is_rgb=True, target_category=0)
 
     return mask_image
+
+class ImageHeatMapGenerator():
+    def __init__(self, model: nn.Module, target_layers: list[nn.Module], targets: list, model_params_file: str|Path|None=None):
+        self.model = model
+        if model_params_file:
+            self.model.load_state_dict(torch.load(model_params_file))
+        self.model.eval()
+        self.target_layers = target_layers
+        self.targets = targets
+    
+    def check(self, image: Image, transform_fn):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        H, W, C = image.shape
+        input_tensor = transform_fn(image).unsqueeze(0)
+        image_np = np.array(image) / 255.0
+
+        self.model = self.model.to(device)
+        input_tensor = input_tensor.to(device)
+
+        is_rgb = (C == 3)
+        with GradCAM(self.model, target_layers=self.target_layers) as cam: 
+            grayscale_cam = cam(input_tensor, targets=self.targets, eigen_smooth=False)[0, :]
+            grayscale_cam = cv2.resize(grayscale_cam, (W, H))
+
+            cam_image = show_cam_on_image(image_np, grayscale_cam, use_rgb=is_rgb)
+            heatmap_image = Image.fromarray(cam_image, mode='RGB' if is_rgb else 'L')
+        return heatmap_image
+
+    def check_batch(self, images: list[Image], transform_fn):
+        return [self.check(image, transform_fn) for image in images]

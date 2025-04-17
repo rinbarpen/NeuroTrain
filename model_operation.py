@@ -1,13 +1,9 @@
-import os
-import os.path
 from pathlib import Path
-from pprint import pp
 import numpy as np
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from PIL import Image
 import wandb
 import torch
-import logging
 from torch import nn
 from torch.amp import GradScaler, autocast
 from torch.optim import AdamW, Adam
@@ -16,11 +12,13 @@ from torch.utils.data import DataLoader
 
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
-from utils.recorder import Recorder
+from utils.data_saver import DataSaver
 from utils.util import Timer, get_logger, save_model
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
 from utils.transform import image_transform, image_transforms, VisionTransformersBuilder
+from utils.criterion import CombineCriterion
+from utils.see_cam import ImageHeatMapGenerator
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -37,12 +35,21 @@ class Trainer:
 
         self.save_model_dir.mkdir(exist_ok=True, parents=True)
         self.logger = get_logger('train')
+        self.data_saver = DataSaver(output_dir)
+        
+        c = get_config()
+        class_labels = c['classes']
+        metric_labels = c['metrics'] # TODO: load from c
+        self.train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        
 
     def train(self, num_epochs: int, 
-              criterion: nn.Module, 
-              optimizer: torch.optim.Optimizer, 
+              criterion: CombineCriterion, 
+              optimizer: torch.optim.Optimizer,
               train_dataloader: DataLoader,
-              valid_dataloader: DataLoader | None, 
+              valid_dataloader: DataLoader | None = None, 
+              scaler: torch.amp.GradScaler | None = None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
@@ -52,7 +59,6 @@ class Trainer:
 
         self.model = self.model.to(device)
 
-        scaler = GradScaler(enabled=c['train']['scaler']['enabled'])
         if early_stop and valid_dataloader is None:
             self.logger.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
@@ -64,28 +70,20 @@ class Trainer:
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
-        class_labels = c['classes']
-        metric_labels = ALL_METRIC_LABELS # TODO: load from c
-        train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
-        valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger) if enable_valid_when_training else None
-        
+
         pbar_total = tqdm(total=num_epochs-last_epoch, desc='Training...')
         for epoch in range(last_epoch+1, num_epochs+1):
-            # train
             self.model.train()
             train_loss = 0.0
-            # last_train_loss = float('inf')
             
-            pbar = tqdm(total=len(train_dataloader))
-            for i, (inputs, targets) in enumerate(train_dataloader, 1):
-                pbar.set_description(f'{i}/{len(train_dataloader)}, Training...')
-
+            pbar = tqdm(total=len(train_dataloader), desc='Training...')
+            for inputs, targets in train_dataloader:
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
 
-                device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
-                compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
-                if c['train']['scaler']['enabled']:
+                if scaler:
+                    device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
+                    compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
                     with autocast(device_type, dtype=compute_type):
                         outputs = self.model(inputs)
                         loss = criterion(targets, outputs)
@@ -104,9 +102,12 @@ class Trainer:
                 pbar.set_postfix({'batch_loss': batch_loss})
 
                 targets, outputs = self.postprocess(targets, outputs)
-                train_calculator.add_one_batch(
+                self.train_calculator.add_one_batch(
                     targets.detach().cpu().float().numpy(), 
                     outputs.detach().cpu().float().numpy())
+
+            if lr_scheduler:
+                lr_scheduler.step()
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
@@ -114,19 +115,16 @@ class Trainer:
             pbar_total.set_postfix({'epoch_loss': train_loss})
 
             self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
-
-            train_calculator.finish_one_epoch()
+            self.train_calculator.finish_one_epoch()
 
             # validate
-            if enable_valid_when_training:
+            if valid_dataloader:
                 valid_loss = 0.0
-                # last_valid_loss = float('inf')
                 self.model.eval()
 
                 with torch.no_grad():
                     pbar = tqdm(total=len(valid_dataloader), desc='Validating...')
-                    for i, (inputs, targets) in enumerate(valid_dataloader, 1):
-
+                    for inputs, targets in valid_dataloader:
                         inputs, targets = inputs.to(device), targets.to(device)
 
                         outputs = self.model(inputs)
@@ -136,11 +134,9 @@ class Trainer:
                         valid_loss += batch_loss
                         pbar.update()
                         pbar.set_postfix({'batch_loss': batch_loss})
-                        # logging.info(f'Epoch-Loss Variant: {loss.item() - last_valid_loss}')
-                        # last_valid_loss = loss.item()
 
                         targets, outputs = self.postprocess(targets, outputs)
-                        valid_calculator.add_one_batch(
+                        self.valid_calculator.add_one_batch(
                             targets.detach().cpu().float().numpy(), 
                             outputs.detach().cpu().float().numpy())
 
@@ -150,8 +146,7 @@ class Trainer:
                 pbar_total.set_postfix({'valid_epoch_loss': valid_loss})
 
                 self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
-
-                valid_calculator.finish_one_epoch()
+                self.valid_calculator.finish_one_epoch()
 
                 if early_stop:
                     early_stopper(valid_loss)
@@ -164,7 +159,8 @@ class Trainer:
                 save_model_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.pt'
                 save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
                 save_model(save_model_filename, self.model,             
-                           ext_path=save_model_ext_filename, optimizer=optimizer,        scaler=scaler, lr_scheduler=lr_scheduler,
+                           ext_path=save_model_ext_filename, optimizer=optimizer,        
+                           scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=c['run_id'])
                 self.logger.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
 
@@ -183,9 +179,9 @@ class Trainer:
                        optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
                        epoch=num_epochs, version=c['run_id'])
 
-        train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+        self.train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
         if enable_valid_when_training:
-            valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+            self.valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
 
         self.logger.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
@@ -201,11 +197,12 @@ class Trainer:
         outputs[outputs < 0.5] = 0
         return targets, outputs
 
-
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
         c = get_config()
         labels = c['classes']
-        Recorder.record_loss(train_losses, self.output_dir, logger=self.logger)
+
+        self.data_saver.save_train_loss(train_losses)
+        self.logger.info(f'Save train loss info under the {self.output_dir}')
 
         plot = Plot(1, 1)
         plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train-Epoch-Loss').complete()
@@ -213,13 +210,13 @@ class Trainer:
 
         self.logger.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
         if valid_losses:
-            Recorder.record_loss(valid_losses, self.output_dir, logger=self.logger)
+            self.data_saver.save_valid_loss(train_losses)
+            self.logger.info(f'Save valid loss info under the {self.output_dir}')
             
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid-Epoch-Loss').complete()
             plot.save(self.valid_loss_image_path)
             self.logger.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
-
 
         if c['private']['wandb']:
             train_c = c['train']
@@ -260,29 +257,31 @@ class Tester:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger('test')
+        self.data_saver = DataSaver(output_dir)
+        
+        c = get_config()
+        class_labels = c['classes']
+        metric_labels = c['metrics']
+        self.calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
         c = get_config()
         device = torch.device(c['device'])
-        class_labels = c['classes']
+        self.calculator.clear()
 
         self.model = self.model.to(device)
-        metric_labels = ALL_METRIC_LABELS # TODO: load from c
-
-        calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger)
-
         for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
             inputs, targets = inputs.to(device), targets.to(device)
             # (B, N, H, W) => N is n_classes
             outputs = self.model(inputs)
 
             targets, outputs = self.postprocess(targets, outputs)
-            calculator.add_one_batch(
-                targets.detach().cpu().numpy(), 
+            self.calculator.add_one_batch(
+                targets.detach().cpu().numpy(),
                 outputs.detach().cpu().numpy())
 
-        calculator.record_batches(self.output_dir)
+        self.calculator.record_batches(self.output_dir)
     @classmethod
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
         targets[targets >= 0.5] = 1
@@ -290,7 +289,6 @@ class Tester:
         outputs[outputs >= 0.5] = 1
         outputs[outputs < 0.5] = 0
         return targets, outputs
-
 
 class Vaildator:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -300,23 +298,25 @@ class Vaildator:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger('valid')
+        self.data_saver = DataSaver(output_dir) 
+        
+        c = get_config()
+        class_labels = c['classes']
+        metric_labels = c['metrics']
+        self.calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
     @torch.no_grad()
     def valid(self, valid_dataloader: DataLoader):
-        c = get_config()
-        class_labels = c['classes']
-        metric_labels = ALL_METRIC_LABELS # TODO: load from c
-
-        calculator = ScoreCalculator(class_labels, metric_labels)
-
+        self.calculator.clear()
         for inputs, targets in valid_dataloader:
             outputs = self.model(inputs)
 
             self.postprocess(targets, outputs)
-            calculator.add_one_batch(targets.cpu().detach().numpy(), 
-                                     outputs.cpu().detach().numpy())
+            self.calculator.add_one_batch(
+                targets.cpu().detach().numpy(), outputs.cpu().detach().numpy()
+            )
 
-        calculator.record_batches(self.output_dir)
+        self.calculator.record_batches(self.output_dir)
 
     @classmethod
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
@@ -326,6 +326,7 @@ class Vaildator:
         outputs[outputs < 0.5] = 0
         return targets, outputs
 
+# TODO: Easy to inherit to be used
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
@@ -342,12 +343,12 @@ class Predictor:
 
         self.model = self.model.to(device)
         self.model.eval()
-        
+
         for input in tqdm(inputs, desc="Predicting..."):
             input_filename = input.name
 
             self.timer.start(input_filename + '.preprocess')
-            input = self.preprocess(input)
+            input, original_size = self.preprocess(input)
             self.timer.stop(input_filename + '.preprocess')
 
             self.timer.start(input_filename + '.inference')
@@ -359,17 +360,30 @@ class Predictor:
             image = self.postprocess(pred)
             self.timer.stop(input_filename + '.postprocess')
 
-            image.save(self.output_dir / input_filename)
+            self.do(input.cpu().numpy(), image.cpu().numpy(), filename=input_filename, original_size=original_size)
+            
         cost = self.timer.total_elapsed_time()
-        logging.info(f'Predicting had cost {cost}s')
+        self.logger.info(f'Predicting had cost {cost}s')
+
+    @classmethod
+    def do(self, input: np.ndarray, pred: np.ndarray, *args, **kwargs):
+        output_filename = self.output_dir / (kwargs['filename'] + '.png')
+        original_size = kwargs['original_size'] # (W, H)
+
+        pred_image = Image.fromarray(pred, mode='L')
+        pred_image = pred_image.resize(original_size)
+
+        pred_image.save(output_filename)
+
 
     @classmethod
     def preprocess(self, input: Path):
         input = Image.open(input).convert('L')
+        size = input.size
         input = image_transform(input, size=(512, 512)).unsqueeze(0)
         # transform = image_transforms(resize=(512, 512), is_rgb=False, is_PIL_image=True)
         # input = transform(input).unsqueeze(0)
-        return input
+        return input, size
 
     @classmethod
     def postprocess(self, pred: torch.Tensor):

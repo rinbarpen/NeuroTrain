@@ -1,4 +1,9 @@
 # output/{task_name}/{timestamp}/{train|valid|test|predict}/{classification|detection|segmentation|weights|..}
+import json
+import yaml
+import toml
+from pathlib import Path
+import logging
 
 TRAIN_MODE = 1
 TEST_MODE  = 2
@@ -104,5 +109,33 @@ def set_config(config):
 
 def get_config():
     return CONFIG
+
+def load_config(filename: Path):
+    match filename.suffix:
+        case '.json':
+            with filename.open(mode='r', encoding='utf-8') as f:
+                config = json.load(f)
+        case '.yaml'|'.yml':
+            with filename.open(mode='r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+        case '.toml':
+            with filename.open(mode='r', encoding='utf-8') as f:
+                config = toml.load(f)
+
+    logging.info(f'Loading config from {filename}')
+    return config
+
+def dump_config(filename: Path):
+    CONFIG = get_config()
+    match filename.suffix:
+        case '.json':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                json.dump(CONFIG, f)
+        case '.toml':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                toml.dump(CONFIG, f)
+        case '.yaml'|'.yml':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                yaml.safe_dump_all(CONFIG, f, allow_unicode=True, encoding='utf-8')
 
 # GLOBAL CONSTANTS

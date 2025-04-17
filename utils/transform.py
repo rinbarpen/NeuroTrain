@@ -4,6 +4,7 @@ from PIL import Image
 import cv2
 from pathlib import Path
 from torchvision import transforms
+from config import get_config
 
 def to_rgb(filename: Path|str, use_opencv=False):
     if use_opencv:
@@ -82,7 +83,7 @@ class VisionTransformersBuilder:
                 transforms.Normalize(mean=[0.5], std=[0.5]))
         return self
 
-    def build(self):
+    def build(self) -> transforms.Compose:
         return transforms.Compose(self._transforms)
 
 def image_transforms(resize: tuple[int, int]|None=None, 
@@ -107,6 +108,30 @@ def image_transforms(resize: tuple[int, int]|None=None,
         transforms = transforms.normalize(is_rgb)
     return transforms.build()
 
+def get_transforms() -> transforms.Compose:
+    c = get_config()
+    builder = VisionTransformersBuilder()
+    for k, v in c['transform'].items():
+        match k.upper():
+            case 'RESIZE':
+                builder = builder.resize(tuple(v))
+            case 'HFLIP':
+                builder = builder.random_horizontal_flip(*v)
+            case 'VFLIP':
+                builder = builder.random_vertical_flip(*v)
+            case 'ROTATION':
+                builder = builder.random_rotation(*v)
+            case 'INVERT':
+                builder = builder.random_invert(*v)
+            case 'CROP':
+                builder = builder.crop(tuple(v))
+            case 'NORMALIZE':
+                builder = builder.normalize(*v)
+            case 'TO_TENSOR':
+                builder = builder.to_tensor()
+            case 'PIL_TO_TENSOR':
+                builder = builder.PIL_to_tensor()
+    return builder.build()
 
 if __name__ == '__main__':
     filename = r'E:\Program\Projects\py\lab\NeuroTrain\data\DRIVE\training\images\21.png'

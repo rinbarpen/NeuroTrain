@@ -5,14 +5,47 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 import pandas as pd
+from abc import abstractmethod
 
 class CustomDataset(Dataset):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy: bool=False):
         super(Dataset, self).__init__()
-    
-    def __getitem__(self, index):
-        return super().__getitem__(index)
 
+        self.base_dir = base_dir
+        self.between = between
+        self.use_numpy = use_numpy
+        self.n = 0
+
+    def __len__(self):
+        return self.n
+
+    @classmethod
+    @abstractmethod
+    def __getitem__(self, index):
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def name():
+        ...
+
+    @staticmethod
+    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        dataset = CustomDataset(base_dir, between, use_numpy, **kwargs)
+        return dataset
+    @staticmethod
+    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        dataset = CustomDataset(base_dir, between, use_numpy, **kwargs)
+        return dataset
+    @staticmethod
+    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+        dataset = CustomDataset(base_dir, between, use_numpy, **kwargs)
+        return dataset
 
 class ImageClassificationCustomDataset(Dataset):
     def __init__(self, base_dir: Path, between: tuple[float, float], transforms: transforms.Compose|None=None, *, is_rgb: bool, is_numpy: bool=False, **kwargs):
