@@ -6,7 +6,6 @@ import numpy as np
 from PIL import Image
 from typing import Literal
 
-from utils.util import save_numpy_data
 from utils.dataset.custom_dataset import CustomDataset, Betweens
 
 class DriveDataset(CustomDataset):
@@ -58,12 +57,15 @@ class DriveDataset(CustomDataset):
         train_dataset = DriveDataset.get_train_dataset(train_dir, between=betweens['train'])
         test_dataset = DriveDataset.get_test_dataset(test_dir, between=betweens['test'])
 
-        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (train_dir, test_dir), ('train', 'test')):
+        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (save_dir, save_dir), ('train', 'test')):
             for i, (image, mask) in enumerate(dataset):
-                image_dir = data_dir / DriveDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
-                mask_dir = data_dir / DriveDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
-                save_numpy_data(image_dir, image)
-                save_numpy_data(mask_dir, mask)
+                image_path = data_dir / DriveDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_path = data_dir / DriveDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+
+                np.save(image_path, image)
+                np.save(mask_path, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
@@ -72,10 +74,8 @@ class DriveDataset(CustomDataset):
     @staticmethod
     def name():
         return "DRIVE"
-
     @staticmethod
     def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return DriveDataset(base_dir, between, 'train', use_numpy=use_numpy, **kwargs)
         return DriveDataset(base_dir, 'train', between=between, use_numpy=use_numpy, **kwargs)
     @staticmethod
     def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):

@@ -26,11 +26,12 @@ n_classes = 1
 # (PIL_TO_TENSOR)
 # (NORMALIZE, is_rgb)
 RESIZE=[512, 512]
-ROTATION=[10]
-HFLIP=[0.1]
-VFLIP=[0.1]
+# ROTATION=[10]
+# HFLIP=[0.1]
+# VFLIP=[0.1]
 # INVERT=[0.1]
 PIL_TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
 # TO_TENSOR=[]
 
 [dataset]
@@ -40,7 +41,7 @@ num_workers = 4
 
 [train]
 batch_size = 1
-epoch = 3
+epoch = 20
 save_every_n_epoch = 1
 
 [train.optimizer]

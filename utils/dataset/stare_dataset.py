@@ -7,7 +7,6 @@ import numpy as np
 from typing import Literal
 
 from utils.dataset.custom_dataset import CustomDataset, Betweens
-from utils.util import save_numpy_data
 
 class StareDataset(CustomDataset):
     mapping = {"train": ("training/images/*.png", "training/1st_labels_ah/*.png"), 
@@ -49,7 +48,7 @@ class StareDataset(CustomDataset):
         return image, mask
 
     @staticmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
+    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
         save_dir = save_dir / StareDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
         train_dir = base_dir / "training"
@@ -58,12 +57,15 @@ class StareDataset(CustomDataset):
         train_dataset = StareDataset.get_train_dataset(train_dir, between=betweens['train'])
         test_dataset = StareDataset.get_test_dataset(test_dir, between=betweens['test'])
 
-        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (train_dir, test_dir), ('train', 'test')):
+        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (save_dir, save_dir), ('train', 'test')):
             for i, (image, mask) in enumerate(dataset):
-                image_dir = data_dir / StareDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
-                mask_dir = data_dir / StareDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
-                save_numpy_data(image_dir, image)
-                save_numpy_data(mask_dir, mask)
+                image_path = data_dir / StareDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_path = data_dir / StareDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+
+                np.save(image_path, image)
+                np.save(mask_path, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:

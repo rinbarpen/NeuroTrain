@@ -10,9 +10,12 @@ class CombineCriterion(nn.Module):
         else:
             self.criterions = [loss_fns]
 
-    def backward(self):
+    def forward(self, targets: torch.Tensor, preds: torch.Tensor):
+        all_loss = []
         for criterion in self.criterions:
-            criterion.backward()
+            loss = criterion(targets, preds)
+            all_loss.append(loss)
+        return all_loss
 
 class DiceLoss(nn.Module):
     def __init__(self):

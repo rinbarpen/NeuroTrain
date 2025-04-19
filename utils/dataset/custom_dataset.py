@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 from pathlib import Path
 from abc import abstractmethod
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, Tuple
 
 class Betweens(TypedDict):
     train: tuple[float, float]
@@ -9,6 +9,7 @@ class Betweens(TypedDict):
     test: tuple[float, float]
 
 class CustomDataset(Dataset):
+    mapping=... # {'train': (), 'valid': (), 'test': ()}
     def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), use_numpy: bool=False):
         super(Dataset, self).__init__()
 

@@ -19,80 +19,78 @@ from utils.transform import get_transforms
 from model_operation import Trainer, Tester, Predictor
 from utils.util import (get_logger, get_train_tools, get_train_valid_test_dataloader, load_model, prepare_logger, set_seed)
 from utils.criterion import CombineCriterion
-from utils.see_cam import ImageHeatMapGenerator, ClassifierOutputTarget, SemanticSegmentationTarget
+# from utils.see_cam import ImageHeatMapGenerator, ClassifierOutputTarget, SemanticSegmentationTarget
 
-class UNetPredictor(Predictor):
-    def __init__(self, output_dir: Path, model: nn.Module):
-        super(UNetPredictor, self).__init__(output_dir, model)
+# class UNetPredictor(Predictor):
+#     def __init__(self, output_dir: Path, model: nn.Module):
+#         super(UNetPredictor, self).__init__(output_dir, model)
 
-    def record(self, input: np.ndarray, pred: np.ndarray, **kwargs):
-        output_filename = self.output_dir / (kwargs['filename'] + '.png')
-        heatmap_filename = self.output_dir / (kwargs['filename'] + '_heat.png')
-        original_size = kwargs['original_size'] # (W, H)
-        c = get_config()
-        device = c['device']
+#     def record(self, input: np.ndarray, pred: np.ndarray, **kwargs):
+#         output_filename = self.output_dir / (kwargs['filename'] + '.png')
+#         heatmap_filename = self.output_dir / (kwargs['filename'] + '_heat.png')
+#         original_size = kwargs['original_size'] # (W, H)
+#         c = get_config()
+#         device = c['device']
 
-        input_tensor = torch.from_numpy(input)
-        input_tensor = input_tensor.to(device)
-        self.model = self.model.to(device)
-        self.model.eval()
+#         input_tensor = torch.from_numpy(input)
+#         input_tensor = input_tensor.to(device)
+#         self.model = self.model.to(device)
+#         self.model.eval()
 
-        pred = self.model(input_tensor)
-        pred = pred.squeeze(0).squeeze(0)
-        pred = Image.fromarray(pred.detach().cpu().numpy(), mode='L')
-        pred = pred.resize(original_size)
-        pred.save(output_filename)
+#         pred = self.model(input_tensor)
+#         pred = pred.squeeze(0).squeeze(0)
+#         pred = Image.fromarray(pred.detach().cpu().numpy(), mode='L')
+#         pred = pred.resize(original_size)
+#         pred.save(output_filename)
 
-        generator = ImageHeatMapGenerator(self.model, target_layers=[self.model[-1]], targets=[ClassifierOutputTarget(0)], model_params_file=c['model']['continue_checkpoint'])
+#         generator = ImageHeatMapGenerator(self.model, target_layers=[self.model[-1]], targets=[ClassifierOutputTarget(0)], model_params_file=c['model']['continue_checkpoint'])
 
-        def transform_fn(x):
-            transforms = get_transforms()
-            y = transforms(x).unsqueeze(0)
-            return y
+#         def transform_fn(x):
+#             transforms = get_transforms()
+#             y = transforms(x).unsqueeze(0)
+#             return y
 
-        heatmap = generator.check(Image.fromarray(input, mode='L'), transform_fn=transform_fn)
-        heatmap.save(heatmap_filename)
+#         heatmap = generator.check(Image.fromarray(input, mode='L'), transform_fn=transform_fn)
+#         heatmap.save(heatmap_filename)
 
+#     @classmethod
+#     def preprocess(self, input: Path):
+#         input = Image.open(input).convert('L')
+#         size = input.size # (H, W)
+#         transforms = get_transforms()
+#         input = transforms(input).unsqueeze(0)
+#         return input, size
 
+#     @classmethod
+#     def postprocess(self, pred: torch.Tensor):
+#         pred[pred >= 0.5] = 255
+#         pred[pred < 0.5] = 0
 
-
-    @classmethod
-    def preprocess(self, input: Path):
-        input = Image.open(input).convert('L')
-        size = input.size # (H, W)
-        transforms = get_transforms()
-        input = transforms(input).unsqueeze(0)
-        return input, size
-
-    @classmethod
-    def postprocess(self, pred: torch.Tensor):
-        pred[pred >= 0.5] = 255
-        pred[pred < 0.5] = 0
-
-        pred = pred.detach().cpu().numpy()
-        pred = pred.squeeze(0).squeeze(0)
-        pred = pred.astype(np.uint8)
-        image = Image.fromarray(pred, mode='L')
-        return image
+#         pred = pred.detach().cpu().numpy()
+#         pred = pred.squeeze(0).squeeze(0)
+#         pred = pred.astype(np.uint8)
+#         image = Image.fromarray(pred, mode='L')
+#         return image
 
 
 if __name__ == "__main__":
     parse_args()
-    prepare_logger()
+    c = get_config()
+    if c['private']['log']:
+        prepare_logger()
 
-    CONFIG = get_config()
-    if CONFIG["seed"] >= 0:
-        set_seed(CONFIG["seed"])
-    device = CONFIG["device"]
+    if c["seed"] >= 0:
+        set_seed(c["seed"])
+    device = c["device"]
 
-    output_dir = Path(CONFIG["output_dir"]) / CONFIG["task"] / CONFIG["run_id"]
+    output_dir = Path(c["output_dir"]) / c["task"] / c["run_id"]
     train_dir = output_dir / "train"
     test_dir = output_dir / "test"
     predict_dir = output_dir / "predict"
 
-    model = get_model(CONFIG["model"]["name"], CONFIG["model"]["config"])
-    if CONFIG['model']['continue_checkpoint'] != "":
-        model_path = Path(CONFIG['model']['continue_checkpoint'])
+    model = get_model(c["model"]["name"], c["model"]["config"])
+    if c['model']['continue_checkpoint'] != "":
+        model_path = Path(c['model']['continue_checkpoint'])
         model_params = load_model(model_path, device)
         logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)
@@ -107,8 +105,8 @@ if __name__ == "__main__":
         scaler = tools['scaler']
         criterion = CombineCriterion(nn.BCEWithLogitsLoss())
 
-        if CONFIG['model']['continue_ext_checkpoint'] != "":
-            model_ext_path = Path(CONFIG['model']['continue_ext_checkpoint'])
+        if c['model']['continue_ext_checkpoint'] != "":
+            model_ext_path = Path(c['model']['continue_ext_checkpoint'])
             model_ext_params = load_model(model_path, device)
             finished_epoch = model_ext_params['epoch']
             logging.info(f'Continue Train from {finished_epoch}')
@@ -121,13 +119,13 @@ if __name__ == "__main__":
 
         handle = Trainer(train_dir, model)
         handle.train(
-            num_epochs=CONFIG["train"]["epoch"],
+            num_epochs=c["train"]["epoch"],
             criterion=criterion,
             optimizer=optimizer,
             train_dataloader=train_loader,
             valid_dataloader=valid_loader,
             lr_scheduler=lr_scheduler,
-            early_stop=CONFIG["train"]["early_stopping"]["enabled"],
+            early_stop=c["train"]["early_stopping"]["enabled"],
             last_epoch=finished_epoch,
         )
         dump_config(train_dir / "config.json")
@@ -153,7 +151,6 @@ if __name__ == "__main__":
             logger.info(f'Load model: {model_path}')
             model.load_state_dict(model_params)
 
-        # callback = lambda outputs: return outputs
         handle = Tester(test_dir, model)
         handle.test(test_dataloader=test_loader)
         dump_config(test_dir / "config.json")
@@ -171,10 +168,10 @@ if __name__ == "__main__":
             model.load_state_dict(model_params)
 
         handle = Predictor(predict_dir, model)
-        input_path = Path(CONFIG["predict"]["input"])
+        input_path = Path(c["predict"]["input"])
         if input_path.is_dir():
             inputs = [filename for filename in input_path.iterdir()]
-            handle.predict(inputs, **CONFIG["predict"]["config"])
+            handle.predict(inputs, **c["predict"]["config"])
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")
         dump_config(predict_dir / "config.yaml")

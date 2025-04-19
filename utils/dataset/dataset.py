@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
-from typing import TypedDict
 
+from utils.dataset.custom_dataset import Betweens
 from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
 from utils.transform import get_transforms 
 
@@ -69,8 +69,7 @@ def get_test_dataset(dataset_name: str, base_dir: Path, between: tuple[float, fl
 
     return None
 
-def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: dict[str, tuple[float, float]], **kwargs):
-def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: TypedDict('Betweens', {'train': tuple[float, float], 'valid': tuple[float, float], 'test': tuple[float, float]}), **kwargs):
+def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
     transforms = get_transforms()
 
     match dataset_name.lower():
@@ -88,5 +87,3 @@ def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: TypedD
             return chasedb1_dataset.ChaseDB1Dataset.to_numpy(save_dir, base_dir, betweens, transforms=transforms, **kwargs)
         case _:
             logging.warning(f'No target dataset: {dataset_name}')
-
-

@@ -10,6 +10,7 @@ from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassM
 # sync mode
 class _DataSaver:
     def __init__(self, base_dir: Path):
+        base_dir.mkdir(parents=True, exist_ok=True)
         self.base_dir = base_dir
 
     def save_loss(self, losses: list[np.ndarray], label: Literal["train", "valid"]):
@@ -78,11 +79,7 @@ class _DataSaver:
     def _get_filenames(self, back: str):
         csv_filename = self.base_dir / (back + ".csv")
         parquet_filename = self.base_dir / (back + ".parquet")
-        csv_filename.mkdir(parents=True, exist_ok=True)
-        parquet_filename.mkdir(parents=True, exist_ok=True)
         return csv_filename, parquet_filename
-
-
 
 # async mode
 class DataSaver:

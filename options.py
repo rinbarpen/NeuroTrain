@@ -70,6 +70,13 @@ def parse_args():
     if args.debug:
         CONFIG['private']['debug'] = args.debug
 
+    if args.data:
+        CONFIG['dataset']['name'] = args.data
+    if args.data_dir:
+        CONFIG['dataset']['path'] = args.data_dir
+    if args.num_workers:
+        CONFIG['dataset']['num_workers'] = args.num_workers
+
     if args.continue_checkpoint:
         checkpoint_filename = args.continue_checkpoint
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
@@ -83,13 +90,6 @@ def parse_args():
                 model_config = {k.strip(): v.strip()}
             CONFIG['model']['config'] = model_config
     if args.train:
-        if args.data:
-            CONFIG['train']['dataset']['name'] = args.data
-        if args.data_dir:
-            CONFIG['train']['dataset']['path'] = args.data_dir
-        if args.num_workers:
-            CONFIG['train']['dataset']['num_workers'] = args.num_workers
-
         if args.batch_size:
             CONFIG['train']['batch_size'] = args.batch_size
         if args.epoch:
@@ -116,17 +116,7 @@ def parse_args():
                 CONFIG['train']['lr_scheduler']['warmup'] = args.warmup
             if args.warmup_lr:
                 CONFIG['train']['lr_scheduler']['warmup_lr'] = args.warmup_lr
-        if args.check:
-            CONFIG['train']['batch_size'] = 1
-            CONFIG['train']['epoch'] = 3
-            CONFIG['train']['save_every_n_epoch'] = 1
     if args.test:
-        if args.data:
-            CONFIG['test']['dataset']['name'] = args.data
-        if args.data_dir:
-            CONFIG['test']['dataset']['path'] = args.data_dir
-        if args.num_workers:
-            CONFIG['test']['dataset']['num_workers'] = args.num_workers
         if args.batch_size:
             CONFIG['test']['batch_size'] = args.batch_size
     if args.input:
@@ -140,6 +130,12 @@ def parse_args():
 
     run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     CONFIG['run_id'] = run_id
+
+    if args.check:
+        CONFIG['private']['mode'] |= (TRAIN_MODE | TEST_MODE | PREDICT_MODE)
+        CONFIG['train']['batch_size'] = 1
+        CONFIG['train']['epoch'] = 3
+        CONFIG['train']['save_every_n_epoch'] = 1
 
     if args.wandb:
         try:

@@ -7,7 +7,6 @@ import yaml
 from typing import Literal
 
 from utils.dataset.custom_dataset import CustomDataset, Betweens
-from utils.util import save_numpy_data
 
 class ISIC2018Dataset(CustomDataset):
     mapping = {"train": ("ISIC2018_Task1-2_Training_Input/*.jpg", "ISIC2018_Task1-2_Training_Input/*.jpg"), 
@@ -60,10 +59,13 @@ class ISIC2018Dataset(CustomDataset):
 
         for dataset, dataset_type in zip((train_dataset, valid_dataset, test_dataset), ('train', 'valid', 'test')):
             for i, (image, mask) in enumerate(dataset):
-                image_dir = base_dir / ISIC2018Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
-                mask_dir = base_dir / ISIC2018Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
-                save_numpy_data(image_dir, image)
-                save_numpy_data(mask_dir, mask)
+                image_path = base_dir / ISIC2018Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
+                mask_path = base_dir / ISIC2018Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+
+                np.save(image_path, image)
+                np.save(mask_path, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:

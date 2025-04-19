@@ -1,7 +1,7 @@
 output_dir = "./output"
 task = "Test"
 entity = "Lab"
-run_id = "" # be Random set by program
+run_id = "" # be Random set by program  
 device = "cuda"
 seed = 42
 classes = ["Retina"]
@@ -9,6 +9,8 @@ metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1']
 
 [model]
 name = "unet"
+# continue_checkpoint = "output/Test/20250418_211416/train/weights/best.pt"
+# continue_ext_checkpoint = "output/Test/20250418_211416/train/weights/best-ext.pt"
 continue_checkpoint = ""
 continue_ext_checkpoint = ""
 
@@ -24,14 +26,17 @@ n_classes = 1
 # (INVERT, p)
 # (TO_TENSOR)
 # (PIL_TO_TENSOR)
+# (CONVERT_IMAGE_DTYPE, uint8|float32|float64)
 # (NORMALIZE, is_rgb)
 RESIZE=[512, 512]
-ROTATION=[10]
-HFLIP=[0.1]
-VFLIP=[0.1]
+# ROTATION=[10]
+# HFLIP=[0.1]
+# VFLIP=[0.1]
 # INVERT=[0.1]
 PIL_TO_TENSOR=[]
 # TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
+# NORMALIZE=[False]
 
 [dataset]
 name = "DRIVE"
@@ -40,8 +45,8 @@ num_workers = 4
 
 [train]
 batch_size = 1
-epoch = 3
-save_every_n_epoch = 1
+epoch = 40
+save_every_n_epoch = 10
 
 [train.optimizer]
 learning_rate = 3e-6

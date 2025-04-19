@@ -22,22 +22,6 @@ def to_gray(filename: Path|str, use_opencv=False):
         x = Image.open(filename).convert('L')
     return x
 
-
-def image_transform(x: Image.Image|cv2.Mat, size: tuple[int, int], is_rgb=False, *, dtype=np.float32):    
-    x = x.resize(size)
-    x = np.array(x, dtype=dtype)
-
-    tensor_x = torch.tensor(x)
-    if is_rgb:
-        if isinstance(x, Image.Image):
-            x = tensor_x.permute(2, 0, 1)
-    else:
-        x = tensor_x.unsqueeze(0)
-
-    if x.max() > 1:
-        x /= 255
-    return x
-
 # VisionTransformersBuilder may be flawed
 class VisionTransformersBuilder:
     def __init__(self):
@@ -63,15 +47,17 @@ class VisionTransformersBuilder:
         self._transforms.append(transforms.RandomInvert(p))
         return self
 
-    def PIL_to_tensor(self, dtype=torch.float32):
+    def PIL_to_tensor(self):
         self._transforms.append(transforms.PILToTensor())
-        self._transforms.append(transforms.ConvertImageDtype(dtype))
         return self
     def to_tensor(self):
         self._transforms.append(transforms.ToTensor())
         return self
     def to_pil_image(self):
         self._transforms.append(transforms.ToPILImage())
+        return self
+    def convert_image_dtype(self, ttype: torch.dtype=torch.float32):
+        self._transforms.append(transforms.ConvertImageDtype(ttype))
         return self
 
     def normalize(self, is_rgb: bool):
@@ -85,28 +71,6 @@ class VisionTransformersBuilder:
 
     def build(self) -> transforms.Compose:
         return transforms.Compose(self._transforms)
-
-def image_transforms(resize: tuple[int, int]|None=None, 
-                     hflip_p: float|None=None, vflip_p: float|None=None, 
-                     rotation: float|None=None, 
-                     is_rgb: bool=False, is_PIL_image: bool=False, use_normalize: bool=False) -> transforms.Compose:
-    transforms = VisionTransformersBuilder()
-    if resize:
-        transforms = transforms.resize(resize)
-    if hflip_p:
-        transforms = transforms.random_horizontal_flip(hflip_p)
-    if vflip_p:
-        transforms = transforms.random_vertical_flip(vflip_p)
-    if rotation:
-        transforms = transforms.random_rotation(rotation)
-
-    if is_PIL_image:
-        transforms = transforms.PIL_to_tensor()
-    else:
-        transforms = transforms.to_tensor()
-    if use_normalize:
-        transforms = transforms.normalize(is_rgb)
-    return transforms.build()
 
 def get_transforms() -> transforms.Compose:
     c = get_config()
@@ -131,25 +95,31 @@ def get_transforms() -> transforms.Compose:
                 builder = builder.to_tensor()
             case 'PIL_TO_TENSOR':
                 builder = builder.PIL_to_tensor()
+            case 'CONVERT_IMAGE_DTYPE':
+                match v[0]:
+                    case 'float16':
+                        ttype = torch.float16
+                    case 'float32':
+                        ttype = torch.float32
+                    case 'float64':
+                        ttype = torch.float64
+                    case 'bfloat16':
+                        ttype = torch.bfloat16
+                    case 'uint8':
+                        ttype = torch.uint8
+                    case 'uint16':
+                        ttype = torch.uint16
+                    case 'uint32':
+                        ttype = torch.uint32
+                    case 'uint64':
+                        ttype = torch.uint64
+                    case 'int8':
+                        ttype = torch.int8
+                    case 'int16':
+                        ttype = torch.int16
+                    case 'int32':
+                        ttype = torch.int32
+                    case 'int64':
+                        ttype = torch.int64
+                builder = builder.convert_image_dtype(ttype)
     return builder.build()
-
-if __name__ == '__main__':
-    filename = r'E:\Program\Projects\py\lab\NeuroTrain\data\DRIVE\training\images\21.png'
-    # image = cv2.imread(filename)
-    # # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # # print(gray_image.shape)
-    # # x = np.array(gray_image, dtype=np.float32)
-    # # tensor_x = torch.tensor(x).permute(1, 0).unsqueeze(0)
-    # # print(tensor_x.shape)
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    # print(image.shape)
-    # x = np.array(image, dtype=np.float32)
-    # tensor_x = torch.tensor(x).permute(2, 1, 0)
-    # print(tensor_x.shape)
-    image = Image.open(filename).convert('L')
-
-    # output = image_transform(image, (512, 512), False)
-    transformers = image_transforms((512, 512), is_PIL_image=True)
-    output = transformers(image)
-    print(output.shape, output.max())
-

@@ -8,7 +8,6 @@ from torch import nn
 from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
 from torch.utils.data import DataLoader
-from abc import abstractmethod
 
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
@@ -16,7 +15,7 @@ from utils.data_saver import DataSaver
 from utils.util import Timer, get_logger, save_model
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
-from utils.transform import get_transforms, image_transform, image_transforms, VisionTransformersBuilder
+from utils.transform import get_transforms
 from utils.criterion import CombineCriterion
 
 class Trainer:
@@ -51,6 +50,9 @@ class Trainer:
               scaler: GradScaler | None = None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False, last_epoch: int=0):
+        self.train_calculator.clear()
+        self.valid_calculator.clear()
+
         c = get_config()
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
@@ -70,12 +72,12 @@ class Trainer:
         valid_losses = []
         best_loss = float('inf')
 
-        pbar_total = tqdm(total=num_epochs-last_epoch, desc='Training...')
+        pbar_total = tqdm(total=num_epochs-last_epoch, desc='Training(Epoch)...')
         for epoch in range(last_epoch+1, num_epochs+1):
             self.model.train()
             train_loss = 0.0
-            
-            pbar = tqdm(total=len(train_dataloader), desc='Training...')
+
+            pbar = tqdm(total=len(train_dataloader), desc='Training(Batch)...')
             for inputs, targets in train_dataloader:
                 optimizer.zero_grad()
                 inputs, targets = inputs.to(device), targets.to(device)
@@ -85,14 +87,16 @@ class Trainer:
                     compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
                     with autocast(device_type, dtype=compute_type):
                         outputs = self.model(inputs)
-                        loss = criterion(targets, outputs)
-                    scaler.scale(loss).backward()
+                        losses = criterion(targets, outputs)
+                    for loss in losses:
+                        scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     outputs = self.model(inputs)
-                    loss = criterion(targets, outputs)
-                    loss.backward()
+                    losses = criterion(targets, outputs)
+                    for loss in losses:
+                        loss.backward()
                     optimizer.step()
 
                 batch_loss = loss.item()
@@ -122,7 +126,7 @@ class Trainer:
                 self.model.eval()
 
                 with torch.no_grad():
-                    pbar = tqdm(total=len(valid_dataloader), desc='Validating...')
+                    pbar = tqdm(total=len(valid_dataloader), desc='Validating(Batch)...')
                     for inputs, targets in valid_dataloader:
                         inputs, targets = inputs.to(device), targets.to(device)
 
@@ -172,7 +176,7 @@ class Trainer:
                             epoch=epoch, version=c['run_id'])
                 self.logger.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
                 self.logger.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
-            
+
             save_model(self.last_model_file_path, self.model,
                        ext_path=self.last_model_ext_file_path,
                        optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
@@ -207,15 +211,15 @@ class Trainer:
         plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train/Epoch-Loss').complete()
         plot.save(self.train_loss_image_path)
 
-        self.logger.info(f'Save train-epoch-loss graph to {self.train_loss_image_path}')
+        self.logger.info(f'Save train/epoch_loss graph to {self.train_loss_image_path}')
         if valid_losses:
-            self.data_saver.save_valid_loss(train_losses)
-            self.logger.info(f'Save valid loss info under the {self.output_dir}')
+            self.data_saver.save_valid_loss(valid_losses)
+            self.logger.info(f'Save valid/loss info under the {self.output_dir}')
             
             plot = Plot(1, 1)
             plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid/Epoch-Loss').complete()
             plot.save(self.valid_loss_image_path)
-            self.logger.info(f'Save valid-epoch-loss graph to {self.valid_loss_image_path}')
+            self.logger.info(f'Save valid/epoch_loss graph to {self.valid_loss_image_path}')
 
         if c['private']['wandb']:
             train_c = c['train']
@@ -231,7 +235,7 @@ class Trainer:
                 "config": {
                     "batch_size": train_c['batch_size'],
                     "epoch": train_c['epoch'],
-                    "dataset": train_c['dataset'],
+                    "dataset": c['dataset'],
                     "save_every_n_epoch": train_c['save_every_n_epoch'],
                     "early_stopping": {
                         "patience": train_c['early_stopping']['patience'],
@@ -265,9 +269,10 @@ class Tester:
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
+        self.calculator.clear()
+
         c = get_config()
         device = torch.device(c['device'])
-        self.calculator.clear()
 
         self.model = self.model.to(device)
         for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
@@ -347,49 +352,42 @@ class Predictor:
             input_filename = input.name
 
             self.timer.start(input_filename + '.preprocess')
-            input, original_size = self.preprocess(input)
+            input_tensor, original_size = self.preprocess(input)
             self.timer.stop(input_filename + '.preprocess')
 
             self.timer.start(input_filename + '.inference')
-            input = input.to(device)
-            pred = self.model(input)
+            input_tensor = input_tensor.to(device)
+            pred_tensor = self.model(input_tensor)
             self.timer.stop(input_filename + '.inference')
 
             self.timer.start(input_filename + '.postprocess')
-            pred = self.postprocess(pred)
+            pred_np = self.postprocess(pred_tensor)
             self.timer.stop(input_filename + '.postprocess')
 
-            self.record(input.cpu().numpy(), pred.cpu().numpy(), filename=input_filename, original_size=original_size)
+            self.record(input, pred_np, filename=input_filename, original_size=original_size)
             
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
 
-    @classmethod
-    # @abstractmethod
-    def record(self, input: np.ndarray, pred: np.ndarray, **kwargs):
-        output_filename = self.output_dir / (kwargs['filename'] + '.png')
+    def record(self, input: Path, pred: np.ndarray, **kwargs):
+        output_filename = self.output_dir / kwargs['filename']
         original_size = kwargs['original_size'] # (W, H)
 
         pred_image = Image.fromarray(pred, mode='L')
         pred_image = pred_image.resize(original_size)
 
         pred_image.save(output_filename)
-
-    @classmethod
     def preprocess(self, input: Path):
         input = Image.open(input).convert('L')
         size = input.size # (H, W)
         transforms = get_transforms()
         input = transforms(input).unsqueeze(0)
         return input, size
-
-    @classmethod
-    def postprocess(self, pred: torch.Tensor):
+    def postprocess(self, pred: torch.Tensor) -> np.ndarray:
         pred[pred >= 0.5] = 255
         pred[pred < 0.5] = 0
 
         pred = pred.detach().cpu().numpy()
         pred = pred.squeeze(0).squeeze(0)
         pred = pred.astype(np.uint8)
-        image = Image.fromarray(pred, mode='L')
-        return image
+        return pred

@@ -7,7 +7,6 @@ from torchvision import transforms
 from typing import Literal
 
 from utils.dataset.custom_dataset import CustomDataset, Betweens
-from utils.util import save_numpy_data
 
 class ChaseDB1Dataset(CustomDataset):
     mapping = {"train": ("training/images/*.png", "training/1st_label/*.png"),
@@ -53,18 +52,20 @@ class ChaseDB1Dataset(CustomDataset):
         save_dir = save_dir / ChaseDB1Dataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        image_dir = save_dir / "images"
-        mask_dir = save_dir / "1st_label"
+        train_dir, test_dir = base_dir / "training", base_dir / "test"
 
-        train_dataset = ChaseDB1Dataset.get_train_dataset(base_dir / "training", between=betweens['train'], **kwargs)
-        test_dataset  = ChaseDB1Dataset.get_test_dataset(base_dir / "test", between=betweens['test'], **kwargs)
+        train_dataset = ChaseDB1Dataset.get_train_dataset(train_dir, between=betweens['train'], **kwargs)
+        test_dataset  = ChaseDB1Dataset.get_test_dataset(test_dir, between=betweens['test'], **kwargs)
 
-        for i, (image, mask) in enumerate(train_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
-        for i, (image, mask) in enumerate(test_dataset):
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            save_numpy_data(mask_dir / f'{i}.npy', mask)
+        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (save_dir, save_dir), ('train', 'test')):
+            for i, (image, mask) in enumerate(dataset):
+                image_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy') 
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                mask_path.parent.mkdir(parents=True, exist_ok=True)
+
+                np.save(image_path, image)
+                np.save(mask_path, mask)
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:

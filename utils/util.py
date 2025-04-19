@@ -252,7 +252,6 @@ class Timer:
             self.time_map[task].end_time = time.time()
         except Exception:
             pass
-
     def elapsed_time(self, task: str=""):
         try:
             return self.time_map[task].end_time - self.time_map[task].start_time
@@ -263,7 +262,6 @@ class Timer:
         for task in self.time_map.keys():
             costs[task] = self.elapsed_time(task)
         return costs
-    
     def total_elapsed_time(self) -> float:
         total_cost = np.array(self.all_elapsed_time().values()).sum()
         return total_cost

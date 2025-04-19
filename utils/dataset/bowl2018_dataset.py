@@ -7,7 +7,6 @@ from torchvision import transforms
 from typing import Literal
 
 from utils.dataset.custom_dataset import CustomDataset, Betweens
-from utils.util import save_numpy_data
 
 # Instance Segmentation Dataset
 class BOWL2018Dataset(CustomDataset):
@@ -72,21 +71,16 @@ class BOWL2018Dataset(CustomDataset):
         valid_dataset = BOWL2018Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
         test_dataset  = BOWL2018Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        for i, (image, masks) in enumerate(train_dataset):
-            image_dir, mask_dir = save_dir / f'{i}' / "images", save_dir / f'{i}' / "masks"
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            for j, mask in enumerate(masks):
-                save_numpy_data(mask_dir / f'{i}_{j}.npy', mask)
-        for i, (image, masks) in enumerate(valid_dataset):
-            image_dir, mask_dir = save_dir / f'{i}' / "images", save_dir / f'{i}' / "masks"
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            for j, mask in enumerate(masks):
-                save_numpy_data(mask_dir / f'{i}_{j}.npy', mask)
-        for i, (image, masks) in enumerate(test_dataset):
-            image_dir, mask_dir = save_dir / f'{i}' / "images", save_dir / f'{i}' / "masks"
-            save_numpy_data(image_dir / f'{i}.npy', image)
-            for j, mask in enumerate(masks):
-                save_numpy_data(mask_dir / f'{i}_{j}.npy', mask)
+        for dataset, data_dir in zip((train_dataset, valid_dataset, test_dataset), (save_dir, save_dir, save_dir)):
+            for i, (image, masks) in enumerate(dataset):
+                image_dir, mask_dir = data_dir / f'{i}' / "images", data_dir / f'{i}' / "masks"
+                image_dir.mkdir(parents=True, exist_ok=True)
+                mask_dir.mkdir(parents=True, exist_ok=True)
+                image_path = image_dir / f'{i}.npy'
+                np.save(image_path, image)
+                for j, mask in enumerate(masks):
+                    mask_path = mask_dir / f'{i}_{j}.npy'
+                    np.save(mask_path, mask)
 
         if kwargs.__contains__("n_instance"):
             n_instance = kwargs["n_instance"]
