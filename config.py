@@ -126,16 +126,16 @@ def load_config(filename: Path):
     return config
 
 def dump_config(filename: Path):
-    CONFIG = get_config()
+    c = get_config()
     match filename.suffix:
         case '.json':
             with filename.open(mode='w', encoding='utf-8') as f:
-                json.dump(CONFIG, f)
-        case '.toml':
-            with filename.open(mode='w', encoding='utf-8') as f:
-                toml.dump(CONFIG, f)
+                json.dump(c, f)
         case '.yaml'|'.yml':
             with filename.open(mode='w', encoding='utf-8') as f:
-                yaml.safe_dump_all(CONFIG, f, allow_unicode=True, encoding='utf-8')
+                yaml.safe_dump(c, f)
+        case '.toml':
+            with filename.open(mode='w', encoding='utf-8') as f:
+                toml.dump(c, f)
 
 # GLOBAL CONSTANTS

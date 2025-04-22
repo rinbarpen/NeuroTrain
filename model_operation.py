@@ -165,7 +165,7 @@ class Trainer:
                            ext_path=save_model_ext_filename, optimizer=optimizer,        
                            scaler=scaler, lr_scheduler=lr_scheduler,
                            epoch=epoch, version=c['run_id'])
-                self.logger.info(f'save model to {save_model_filename} when {epoch=}, {train_loss=}')
+                self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
 
             target_loss = valid_loss if enable_valid_when_training else train_loss
             if target_loss < best_loss:
@@ -174,19 +174,17 @@ class Trainer:
                             ext_path=self.best_model_ext_file_path,
                             optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                             epoch=epoch, version=c['run_id'])
-                self.logger.info(f'save model params to {self.best_model_file_path} when {epoch=}, {best_loss=}')
-                self.logger.info(f'save model ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
 
             save_model(self.last_model_file_path, self.model,
                        ext_path=self.last_model_ext_file_path,
                        optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
                        epoch=num_epochs, version=c['run_id'])
+            self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
         self.train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
         if enable_valid_when_training:
             self.valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
-
-        self.logger.info(f'save model to {self.last_model_file_path} when meeting to the last epoch')
 
         train_losses = np.array(train_losses, dtype=np.float64)
         valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
@@ -377,7 +375,7 @@ class Predictor:
         pred_image = pred_image.resize(original_size)
 
         pred_image.save(output_filename)
-    def preprocess(self, input: Path):
+    def preprocess(self, input: Path) -> (torch.Tensor, tuple[int, int]):
         input = Image.open(input).convert('L')
         size = input.size # (H, W)
         transforms = get_transforms()

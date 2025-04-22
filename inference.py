@@ -10,7 +10,8 @@ from tqdm import tqdm
 
 from model_operation import Predictor
 from config import get_config
-from utils.transform import image_transforms, get_transforms
+from utils.transform import get_transforms
+
 class SegmentPredictor(Predictor):
     def __init__(self, output_dir: Path, 
                  model: nn.Module, 
@@ -52,16 +53,14 @@ class SegmentPredictor(Predictor):
         self.logger.info(f'Predicting had cost {cost}s')
 
     @classmethod
-    def preprocess(self, input: Path):
+    def preprocess(self, input: Path) -> torch.Tensor:
         input = Image.open(input).convert('L')
         transforms = get_transforms()
-        input: torch.Tensor = transforms(input).unsqueeze(0)
-        if input.max() > 1:
-            input = input / 255.0
+        input = transforms(input).unsqueeze(0)
         return input
 
     @classmethod
-    def postprocess(self, pred: torch.Tensor):
+    def postprocess(self, pred: torch.Tensor) -> Image.Image:
         pred[pred >= 0.5] = 255
         pred[pred < 0.5] = 0
 

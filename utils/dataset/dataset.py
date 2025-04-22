@@ -3,9 +3,8 @@ from pathlib import Path
 
 from utils.dataset.custom_dataset import Betweens
 from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
-from utils.transform import get_transforms 
+from utils.transform import get_transforms
 
-# transforms, is_rgb, 
 def get_train_dataset(dataset_name: str, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
     transforms = get_transforms()
 

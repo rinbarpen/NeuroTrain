@@ -26,26 +26,32 @@ class CustomDataset(Dataset):
     @abstractmethod
     def __getitem__(self, index):
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
 
     @staticmethod
     @abstractmethod
     def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
 
     @staticmethod
     @abstractmethod
     def name():
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
 
     @staticmethod
     @abstractmethod
     def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
     @staticmethod
     @abstractmethod
     def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
     @staticmethod
     @abstractmethod
     def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         ...
+        # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
