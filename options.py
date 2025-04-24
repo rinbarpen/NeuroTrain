@@ -19,6 +19,7 @@ def parse_args():
     train_parser.add_argument('--eps', type=float, help='eps')
     train_parser.add_argument('--weight_decay', type=float, help='weight_decay')
     train_parser.add_argument('--save_every_n_epoch', type=int, required=False, help='save_every_n_epoch')
+    train_parser.add_argument('--grad_accumulation_steps', type=int, help='grad_accumulation_steps')
     ## amp mode: bf16 int8 ..
     # bfloat16, float16, 
     train_parser.add_argument('--amp', type=str, default='none', help='set amp mode')
@@ -84,9 +85,10 @@ def parse_args():
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
     if args.model:
         CONFIG['model']['name'] = args.model
-        if args.model_config: # n_channels=1;n_classes=1
+        if args.model_config: # n_channels=1; n_classes=1
+            model_config = {}
             for arg in args.model_config.split(';'):
-                k, v = arg.split('=')[0], arg.split('=')[1]
+                k, v = arg.split('=', 1)
                 model_config = {k.strip(): v.strip()}
             CONFIG['model']['config'] = model_config
     if args.train:
@@ -94,6 +96,8 @@ def parse_args():
             CONFIG['train']['batch_size'] = args.batch_size
         if args.epoch:
             CONFIG['train']['epoch'] = args.epoch
+        if args.grad_accumulation_steps:
+            CONFIG['train']['grad_accumulation_steps'] = args.grad_accumulation_steps
         if args.eps:
             CONFIG['train']['optimizer']['eps'] = args.eps
         if args.learning_rate:

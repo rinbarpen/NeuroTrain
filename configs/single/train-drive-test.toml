@@ -1,17 +1,20 @@
 output_dir = "./output"
 task = "Test"
 entity = "Lab"
-run_id = "" # be Random set by program
+run_id = "" # be Random set by program  
 device = "cuda"
 seed = 42
 classes = ["Retina"]
 metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1']
 
 [model]
-name = "simple-net"
+name = "test-net"
 continue_checkpoint = ""
 continue_ext_checkpoint = ""
-config = {n_channels = 1, n_classes = 1}
+
+[model.config]
+n_channels = 1
+n_classes = 1
 
 [transform]
 # (RESIZE, resize)
@@ -21,6 +24,7 @@ config = {n_channels = 1, n_classes = 1}
 # (INVERT, p)
 # (TO_TENSOR)
 # (PIL_TO_TENSOR)
+# (CONVERT_IMAGE_DTYPE, uint8|float32|float64)
 # (NORMALIZE, is_rgb)
 RESIZE=[512, 512]
 # ROTATION=[10]
@@ -28,8 +32,9 @@ RESIZE=[512, 512]
 # VFLIP=[0.1]
 # INVERT=[0.1]
 PIL_TO_TENSOR=[]
-CONVERT_IMAGE_DTYPE=['float32']
 # TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
+# NORMALIZE=[False]
 
 [dataset]
 name = "DRIVE"
@@ -38,15 +43,14 @@ num_workers = 4
 
 [train]
 batch_size = 1
-epoch = 3
-save_every_n_epoch = 1
-grad_accumulation_steps = 0 # <= 0 for disabled
+epoch = 40
+save_every_n_epoch = 10
 
 [train.optimizer]
 learning_rate = 3e-6
 weight_decay = 1e-8
 eps = 1e-8
-type = 'adam' # adam, adamw
+type = 'adamw' # adam, adamw
 
 [train.lr_scheduler]
 enabled = false
@@ -69,13 +73,14 @@ batch_size = 1
 
 [predict]
 input = "data/DRIVE/test/images"
-config = {}
+
+[predict.config]
 
 [private]
 wandb = false
 log = true
 verbose = false # info mode
 debug = false # debug mode
-mode = 7
+mode = 0
 log_file_format = '%Y-%m-%d %H_%M_%S'
 log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'

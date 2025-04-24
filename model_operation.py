@@ -12,7 +12,8 @@ from torch.utils.data import DataLoader
 from config import get_config, ALL_METRIC_LABELS
 from utils.early_stopping import EarlyStopping
 from utils.data_saver import DataSaver
-from utils.util import Timer, get_logger, save_model
+from utils.util import get_logger, save_model
+from utils.timer import Timer
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
 from utils.transform import get_transforms
@@ -57,6 +58,7 @@ class Trainer:
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
         enable_valid_when_training = valid_dataloader is not None
+        accumulation_steps = c["train"]["grad_accumulation_steps"]
 
         self.model = self.model.to(device)
 
@@ -78,8 +80,7 @@ class Trainer:
             train_loss = 0.0
 
             pbar = tqdm(total=len(train_dataloader), desc='Training(Batch)...')
-            for inputs, targets in train_dataloader:
-                optimizer.zero_grad()
+            for i, (inputs, targets) in enumerate(train_dataloader, 1):
                 inputs, targets = inputs.to(device), targets.to(device)
 
                 if scaler:
@@ -87,17 +88,39 @@ class Trainer:
                     compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
                     with autocast(device_type, dtype=compute_type):
                         outputs = self.model(inputs)
-                        losses = criterion(targets, outputs)
-                    for loss in losses:
-                        scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    
+                        if accumulation_steps <= 0:
+                            losses = criterion(targets, outputs)
+                            for loss in losses:
+                                scaler.scale(loss).backward()
+                            scaler.step(optimizer)
+                            scaler.update()
+                            optimizer.zero_grad()
+                        elif accumulation_steps > 0:
+                            losses = criterion(targets, outputs)
+                            for loss in losses:
+                                loss /= accumulation_steps
+                                scaler.scale(loss).backward()
+                            if i % accumulation_steps == 0:
+                                scaler.step(optimizer)
+                                scaler.update()
+                                optimizer.zero_grad()
                 else:
                     outputs = self.model(inputs)
-                    losses = criterion(targets, outputs)
-                    for loss in losses:
-                        loss.backward()
-                    optimizer.step()
+                    if accumulation_steps <= 0:
+                        losses = criterion(targets, outputs)
+                        for loss in losses:
+                            loss.backward()
+                        optimizer.step()
+                        optimizer.zero_grad()
+                    elif accumulation_steps > 0:
+                        losses = criterion(targets, outputs)
+                        for loss in losses:
+                            loss /= accumulation_steps
+                            loss.backward()
+                        if i % accumulation_steps == 0:
+                            optimizer.step()
+                            optimizer.zero_grad()
 
                 batch_loss = loss.item()
                 train_loss += batch_loss

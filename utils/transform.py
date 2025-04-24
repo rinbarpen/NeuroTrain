@@ -123,3 +123,36 @@ def get_transforms() -> transforms.Compose:
                         ttype = torch.int64
                 builder = builder.convert_image_dtype(ttype)
     return builder.build()
+
+def build_image_transforms(resize: tuple[int, int]|None=None, 
+                           crop: tuple[int, int]|None=None, 
+                           rotation: float|None=None, 
+                           vflip: float|None=None,
+                           hflip: float|None=None,
+                           invert: float|None=None,
+                           is_pil_image: bool=False,
+                           ttype: torch.dtype=torch.float32,
+                           norm: bool=False,
+                           is_rgb: bool=False, **kwargs) -> transforms.Compose:
+    builder = VisionTransformersBuilder()
+    if resize: 
+        builder = builder.resize(resize)
+    if crop: 
+        builder = builder.crop(crop)
+    if rotation: 
+        builder = builder.random_rotation(rotation)
+    if vflip: 
+        builder = builder.random_vertical_flip(vflip)
+    if hflip: 
+        builder = builder.random_horizontal_flip(vflip)
+    if invert: 
+        builder = builder.random_invert(invert)
+    if is_pil_image: 
+        builder = builder.PIL_to_tensor()
+        builder = builder.convert_image_dtype(ttype)
+    else:
+        builder = builder.to_tensor()
+    if norm:
+        builder = builder.normalize(is_rgb)
+
+    return builder.build()

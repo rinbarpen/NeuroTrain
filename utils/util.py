@@ -2,18 +2,15 @@ import logging
 import colorlog
 import os.path
 import os
-from pydantic import Field, BaseModel
 import time
 from time import strftime
-
+import math
+import random
 import cv2
 import numpy as np
 import torch
 from torch import nn
-import random
-
 from torch.utils.data import DataLoader
-
 from pathlib import Path
 from PIL.Image import Image 
 from torchsummary import summary
@@ -189,6 +186,12 @@ def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tens
     elif isinstance(model_src, torch.nn.Module):
         summary(model_src, input_size=input_size, device=device)
 
+# def disable_torch_init():
+#     """
+#     Disable the redundant torch default initialization to accelerate model creation.
+#     """
+#     setattr(torch.nn.Linear, "reset_parameters", lambda self: None)
+#     setattr(torch.nn.LayerNorm, "reset_parameters", lambda self: None)
 
 def save_numpy_data(path: Path, data: np.ndarray | torch.Tensor):
     if isinstance(data, torch.Tensor):
@@ -199,7 +202,6 @@ def save_numpy_data(path: Path, data: np.ndarray | torch.Tensor):
     except FileNotFoundError as e:
         path.parent.mkdir(parents=True)
         np.save(path, data)
-
 def load_numpy_data(path: Path):
     try:
         data = np.load(path)
@@ -208,10 +210,8 @@ def load_numpy_data(path: Path):
         logging.error(f'File is not found: {e}')
         raise e
 
-
 def tuple2list(t: tuple):
     return list(t)
-
 def list2tuple(l: list):
     return tuple(l)
 
@@ -233,35 +233,46 @@ def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> f
     return total_flops / 1e9  # Convert to GFLOPs
 
 
-class TimerUnit(BaseModel):
-    start_time: float = Field(float('NAN'))
-    end_time: float = Field(float('NAN'))
+def split_image(
+    image: Image, num_patches: int, *, output_dir: Path | None = None
+) -> list[Image]:
+    """
+    将图像分割成小块并保存到指定目录。
 
-class Timer:
+    Args:
+        image (Image): 图像文件实例。
+        num_patches (int): 小块的数量。
+        output_dir (Path): 保存小块图像的目录。
+    """
 
-    def __init__(self):
-        self.time_map: dict[str, TimerUnit] = {}
+    width, height = image.size
+    n_rows, n_cols = (int(math.sqrt(num_patches)), int(math.sqrt(num_patches)))
+    tile_width, tile_height = width // n_cols, height // n_rows
 
-    def start(self, task: str=""):
-        unit = TimerUnit()
-        unit.start_time = time.time()
-        self.time_map[task] = unit
+    tile_images = []
+    for i in range(0, height, tile_height):
+        for j in range(0, width, tile_width):
+            # 定义当前小块的边界
+            box = (j, i, j + tile_height, i + tile_width)
 
-    def stop(self, task: str=""):
-        try:
-            self.time_map[task].end_time = time.time()
-        except Exception:
-            pass
-    def elapsed_time(self, task: str=""):
-        try:
-            return self.time_map[task].end_time - self.time_map[task].start_time
-        except Exception:
-            return float('NAN')
-    def all_elapsed_time(self):
-        costs = {}
-        for task in self.time_map.keys():
-            costs[task] = self.elapsed_time(task)
-        return costs
-    def total_elapsed_time(self) -> float:
-        total_cost = np.array(self.all_elapsed_time().values()).sum()
-        return total_cost
+            # 避免超出图像边界
+            if box[2] > width:
+                box = (box[0], box[1], width, box[3])  # Adjust right boundary
+            if box[3] > height:
+                box = (box[0], box[1], box[2], height)  # Adjust bottom boundary
+
+            # 提取小块
+            try:
+                tile_image = image.crop(box)
+            except Exception as e:
+                logging.error(f"切除图像失败。 边界：{box},错误：{e}")
+                raise e
+
+            tile_images.append(tile_image)
+
+    if output_dir:
+        for i, tile_image in enumerate(tile_images):
+            output_filename = output_dir / f"tile_{i:04d}.png"
+            tile_image.save(output_filename, "PNG")
+
+    return tile_images

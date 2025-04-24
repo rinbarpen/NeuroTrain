@@ -9,9 +9,9 @@ import torch
 import cv2
 from PIL import Image
 
-from utils.transform import image_transforms
+from utils.transform import build_image_transforms
 from models.sample.unet import UNet
-from models.transformer.deit import vit_base_patch16_224
+from models.transformer.deit_vit import vit_base_patch16_224
 
 def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: int=0) -> None:
     # Load a pre-trained ResNet50 model
@@ -26,7 +26,7 @@ def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: 
     image = Image.open(image)
     image = image.convert('RGB') if is_rgb else image.convert('L')
 
-    transform = image_transforms(resize=(224, 224), is_rgb=is_rgb)
+    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, is_rgb=is_rgb)
     input_tensor = transform(image).unsqueeze(0)  # Add a batch dimension
 
     # Move the model and input tensor to the GPU if available
@@ -60,7 +60,7 @@ def resnet50_check(image: Path, is_rgb: bool, *, target_category: int=0) -> None
     image = Image.open(image)
     image = image.convert('RGB') if is_rgb else image.convert('L')
 
-    transform = image_transforms(resize=(224, 224), is_rgb=is_rgb)
+    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, is_rgb=is_rgb)
     input_tensor = transform(image).unsqueeze(0)  # Add a batch dimension
 
     # Move the model and input tensor to the GPU if available
@@ -83,10 +83,6 @@ def resnet50_check(image: Path, is_rgb: bool, *, target_category: int=0) -> None
 
     return Image.fromarray(cam_image, mode='RGB')
 
-def get_cam_mask_image(image_path: Path) -> Image:
-    mask_image = resnet50_check(image_path, is_rgb=True, target_category=0)
-
-    return mask_image
 
 class ImageHeatMapGenerator():
     def __init__(self, model: nn.Module, target_layers: list[nn.Module], targets: list, model_params_file: str|Path|None=None):

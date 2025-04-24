@@ -44,7 +44,7 @@ from timm.models.helpers import build_model_with_cfg, named_apply, adapt_input_c
 from timm.models.layers import PatchEmbed, Mlp, DropPath, trunc_normal_, lecun_normal_
 from timm.models.registry import register_model
 
-from ..transformer.deit import Block
+from .deit_vit import Block
 
 _logger = logging.getLogger(__name__)
 

@@ -7,6 +7,12 @@ def doc(desc: str):
         return f
     return decorator
 
+def buildup(desc: str):
+    def decorator(f):
+        f.__doc__ = desc
+        return f
+    return decorator
+
 def time_cost(f):
     def wrapper(*args, **kwargs):
         begin = time.time()
@@ -19,6 +25,7 @@ def time_cost(f):
 class timer:
     def __init__(self, name="block"):
         self.name = name
+        self.begin = None
 
     def __enter__(self):
         self.begin = time.time()

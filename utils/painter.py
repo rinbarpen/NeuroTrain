@@ -1,15 +1,22 @@
+import logging
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 from pathlib import Path
 import numpy as np
 from sklearn import metrics
+from typing import Literal
+from PIL import Image
+import cv2
+
+from utils.annotation import buildup
 from utils.typed import ClassMetricOneScoreDict
 
 # x, y, shape-like ['-o', '-D'] | font, color, label
 # labelsize for tick_params
 # linewidth linestyle for grid
 
+AXIS = Literal['x', 'y', 'xy']
 
 class Font:
     _family = 'Times New Roman'
@@ -73,12 +80,30 @@ class Subplot:
     def ylabel(self, ylabel: str, *args, **kwargs):
         self._ax.set_xlabel(ylabel, *args, **kwargs)
         return self
-    def xticks(self, xticks: np.array):
+    def label(self, axis: AXIS, label: str, *args, **kwargs):
+        if axis == 'x':
+            self.xlabel(label, *args, **kwargs)
+        elif axis == 'y':
+            self.ylabel(label, *args, **kwargs)
+        else:
+            self.xlabel(label, *args, **kwargs)
+            self.ylabel(label, *args, **kwargs)
+
+    def xticks(self, xticks: np.ndarray):
         self._ax.set_xticks(xticks)
         return self
-    def yticks(self, yticks: np.array):
+    def yticks(self, yticks: np.ndarray):
         self._ax.set_yticks(yticks)
         return self
+    def ticks(self, axis: AXIS, ticks: np.ndarray):
+        if axis == 'x':
+            self.xticks(ticks)
+        elif axis == 'y':
+            self.yticks(ticks)
+        else:
+            self.xticks(ticks)
+            self.yticks(ticks)
+
     def tick_params(self, **kwargs):
         self._ax.tick_parmas(**kwargs)
         return self
@@ -88,6 +113,28 @@ class Subplot:
     def ylim(self, *args):
         self._ax.set_ylim(*args)
         return self
+    def lim(self, axis: AXIS, *args):
+        if axis == 'x':
+            self.xlim(*args)
+        elif axis == 'y':
+            self.ylim(*args)
+        else:
+            self.xlim(*args)
+            self.ylim(*args)
+
+    def xaxis_visible(self, visible: bool=True):
+        self._ax.xaxis.set_visible(visible)
+    def yaxis_visible(self, visible: bool=True):
+        self._ax.yaxis.set_visible(visible)
+    def axis_visible(self, axis: AXIS, visible: bool=True):
+        if axis == 'x':
+            self.xaxis_visible(visible)
+        elif axis == 'y':
+            self.yaxis_visible(visible)
+        else:
+            self.xaxis_visible(visible)
+            self.yaxis_visible(visible)
+
     def title(self, title: str):
         self._ax.set_title(title)
         return self
@@ -95,6 +142,7 @@ class Subplot:
     def complete(self):
         return self._parent
 
+    @buildup(desc="loss by epoch")
     def epoch_loss(self, 
                    num_epoch: int, 
                    losses: list[np.ndarray], 
@@ -112,7 +160,7 @@ class Subplot:
         self._ax.set_xlim(1, num_epoch)
         self._ax.legend()
         return self
-
+    @buildup(desc="metrics by epoch with one class")
     def epoch_metrics(self, 
                    num_epoch: int, 
                    metrics: list[np.ndarray], 
@@ -130,7 +178,7 @@ class Subplot:
         self._ax.set_xlim(1, num_epoch)
         self._ax.legend()
         return self
-
+    @buildup(desc="metrics by epoch with many classes")
     def many_epoch_metrics(self, 
                    num_epoch: int, 
                    class_metrics: dict[str, list[np.ndarray]], 
@@ -148,11 +196,11 @@ class Subplot:
         self._ax.set_xlim(1, num_epoch)
         self._ax.legend()
         return self
-
+    @buildup(desc="loss by epoch with tasks")
     def many_epoch_loss(self, 
                    num_epoch: int, 
                    losses: list[np.ndarray], 
-                   labels: list[str]='Loss', 
+                   labels: list[str]=['Loss'], 
                    title='Epoch-Loss'):        
         epoches = np.arange(1, num_epoch+1, dtype=np.int32)
 
@@ -166,7 +214,7 @@ class Subplot:
         self._ax.legend()
         return self
 
-
+    @buildup(desc="confusion matrix")
     def confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray, labels=None, xlabel='True', ylabel='Prediction', title='Confusion Matrix', cmap='Blues'):
         cm = metrics.confusion_matrix(y_true, y_pred)
         sns.heatmap(cm, xticklabels=labels, yticklabels=labels, cmap=cmap, annot=True, fmt='d')
@@ -177,11 +225,12 @@ class Subplot:
         return self
 
     # scores_map: {'metric_label': {'label'： label_score, ...}, ...}
+    @buildup(desc="many metrics")
     def many_metrics(self, label_metric_score: ClassMetricOneScoreDict, title: str|None=None, *, width=0.35):
         colors = sns.color_palette("husl", len(label_metric_score))
         for color, (class_label, metric_score) in zip(colors, label_metric_score.items()):
             metric_labels, scores = metric_score.keys(), metric_score.values()
-            self._ax.bar(metric_labels, scores, width, color=color, label=class_label)
+            self._ax.barh(metric_labels, scores, width, color=color, label=class_label)
 
         self._ax.set_title(title)
         self._ax.set_ylim(0, 1)
@@ -220,8 +269,11 @@ class Subplot:
         self._ax.legend(loc='lower right')
         return self
 
-    def image(self, image_path: Path):
-        img = self._ax.imread(image_path)
+    def image(self, image: Path|Image|cv2.Mat):
+        if isinstance(image, Path):
+            img = self._ax.imread(image)
+        if isinstance(image, Image) or isinstance(image, cv2.Mat):
+            img = image
         self._ax.axis('off')
         self._ax.imshow(img)
         return self
@@ -264,6 +316,18 @@ class Plot:
     def title(self, title: str):
         self._title = title
 
+    @buildup(desc="image pack")
+    def images(self, images: list[Path|Image|cv2.Mat]):
+        n = self._nrows * self._ncols
+        if n < len(images):
+            logging.warning(f"{len(images) - n} is still empty")
+        elif n > len(images):
+            logging.error(f"The room isn't enough. {n - len(images)} blocks is needed")
+
+        plot = self
+        for image in images:
+            plot = plot.subplot().image(image).complete()
+
     def show(self):
         self._setup_params()
         plt.show()
@@ -287,47 +351,3 @@ class Plot:
             sns.set_theme(self._theme)
         if self._title:
             self._axs.set_title(self._title)
-
-
-if __name__ == '__main__':
-    # y_true = [0, 1, 2, 2, 0, 1, 0, 2, 1, 0]
-    # y_pred = [0, 2, 1, 2, 0, 0, 0, 2, 1, 1]
-    # labels = ['c0', 'c1', 'c2']
-
-    # plot = Plot(1, 2)
-    # plot.subplot().confusion_matrix(y_true, y_pred, labels=labels).complete()
-    # plot.show()
-
-    # c = {
-    #     'f1': {
-    #         'c0': 0.56,
-    #         'c1': 0.67,
-    #         'c2': 0.99,
-    #     },
-    #     'recall': {
-    #         'c0': 0.56,
-    #         'c1': 0.67,
-    #         'c2': 0.99,
-    #     }
-    # }
-    # # plot.subplot().metric(c).complete()
-    # plot.metrics(c)
-    # plot.show()
-
-    # losses = [np.random.rand(20), np.random.rand(20), np.random.rand(20)]
-    # plot = Plot(1, 1)
-    # plot.subplot().epoch_loss(20, losses, labels=('Loss1', 'Loss2', 'Loss3'))
-    # plot.save_and_show(Path('epoch_loss.png'))
-
-    # y_true = np.array([0, 0, 1, 1])
-    # y_pred = np.array([0.1, 0.4, 0.35, 0.8])
-
-    # plot = Plot(1, 2)
-    # plot.subplot().roc([y_true], [y_pred], labels=['test']).complete()
-    # plot.subplot().auc([y_true], [y_pred], labels=['test']).complete()
-    # plot.show()
-
-    img = plt.imread('epoch_loss.png')
-    plt.imshow(img)
-    plt.axis('off')
-    plt.show()

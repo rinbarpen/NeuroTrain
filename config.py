@@ -8,6 +8,9 @@ import logging
 TRAIN_MODE = 1
 TEST_MODE  = 2
 PREDICT_MODE = 4
+TRAIN_TEST_MODE = TRAIN_MODE | TEST_MODE
+TEST_PREIDCT_MODE = TEST_MODE | PREDICT_MODE
+ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 

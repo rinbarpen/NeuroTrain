@@ -1,7 +1,11 @@
 - [ ] Fixup to dump Yaml configuration
+- [ ] Email Alert
 
 Trainer:
  - [ ] Support config for Dataset.to_numpy()
+ - [ ] Support Wandb for full-recording and full-alerting
+ - [x] Support gradient accumulation steps
+
 
 Analyzer:
  - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
