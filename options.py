@@ -2,7 +2,11 @@ from argparse import ArgumentParser
 import os
 from pathlib import Path
 import time
-from pprint import pp
+from rich.json import JSON
+from rich.console import Console
+import json
+
+import wandb
 
 from config import PREDICT_MODE, TEST_MODE, TRAIN_MODE, set_config, load_config
 
@@ -11,7 +15,7 @@ def parse_args():
     # model_parser
     model_parser = parser.add_argument_group(title='Model Options', description='Model options')
     model_parser.add_argument('-m', '--model', type=str, help='Model name')
-    model_parser.add_argument('-mc', '--model_config', type=dict, help='Model config')
+    model_parser.add_argument('-mc', '--model_config', type=str, help='Model config')
     # Train
     train_parser = parser.add_argument_group(title='Train', description='Train options')
     train_parser.add_argument('-e', '--epoch', type=int, help='epoch')
@@ -22,13 +26,13 @@ def parse_args():
     train_parser.add_argument('--grad_accumulation_steps', type=int, help='grad_accumulation_steps')
     ## amp mode: bf16 int8 ..
     # bfloat16, float16, 
-    train_parser.add_argument('--amp', type=str, default='none', help='set amp mode')
+    train_parser.add_argument('--amp', type=str, default='none', help='set amp mode: [float16, bfloat16]')
     ## for lr_scheduler
     train_parser.add_argument('--lr_scheduler', action='store_true', default=False, help='lr_scheduler')
-    train_parser.add_argument('--warmup', type=int, help='lr_scheduler epoch')
-    train_parser.add_argument('--warmup_lr', type=float, help='lr_scheduler learning_rate')
+    train_parser.add_argument('--warmup', type=int, help='warmup epoch')
+    train_parser.add_argument('--warmup_lr', type=float, help='warmup learning_rate')
     ## for early_stopping
-    train_parser.add_argument('-es', '--early_stopping', action='store_true', default=False, help='early_stopping')
+    train_parser.add_argument('--early_stopping', action='store_true', default=False, help='early_stopping')
     train_parser.add_argument('--patience', type=int, help='patience')
     ## common
     train_parser.add_argument('-b', '--batch_size', type=int, help='batch_size')
@@ -40,19 +44,19 @@ def parse_args():
     predict_parser.add_argument('-i', '--input', type=str, help='input')
     # Common
     parser.add_argument('--wandb', action='store_true', default=False, help='setup wandb')
-    parser.add_argument('--verbose', action='store_true', default=True, help='verbose')
-    parser.add_argument('--debug', action='store_true', default=False, help='debug')
-    parser.add_argument('-c', '--config', type=str, help='Configuration of Train or Test or Predict')
+    parser.add_argument('--verbose', action='store_true', default=True, help='setup verbose mode')
+    parser.add_argument('--debug', action='store_true', default=False, help='setup debug mode')
+    parser.add_argument('-c', '--config', type=str, help='configuration of Train or Test or Predict')
     # parser.add_argument('--dump', default=False)
-    parser.add_argument('--seed', type=int, help='Seed of Train or Test or Predict')
-    parser.add_argument('--device', type=str, help='Devices for Training or Testing or Predicting')
-    parser.add_argument('--train', action='store_true', default=False, help='Train')
-    parser.add_argument('--test', action='store_true', default=False, help='Test')
-    parser.add_argument('--predict', action='store_true', default=False, help='Predict')
-    parser.add_argument('--check', action='store_true', default=False, help='Check')
-    parser.add_argument('--output_dir', type=str, help='Output Directory')
-    parser.add_argument('--continue_checkpoint', type=str, help='Load Model Checkpoint')
-    parser.add_argument('--task', type=str, help='Task name')
+    parser.add_argument('--seed', type=int, help='seed of Train or Test or Predict')
+    parser.add_argument('--device', type=str, help='devices for Training or Testing or Predicting')
+    parser.add_argument('--train', action='store_true', default=False, help='Train mode')
+    parser.add_argument('--test', action='store_true', default=False, help='Test mode')
+    parser.add_argument('--predict', action='store_true', default=False, help='Predict mode')
+    parser.add_argument('--check', action='store_true', default=False, help='Check mode')
+    parser.add_argument('--output_dir', type=str, help='output directory')
+    parser.add_argument('--continue_checkpoint', type=str, help='load model checkpoint')
+    parser.add_argument('--task', type=str, help='task name')
 
     args = parser.parse_args()
     config_file = Path(args.config)
@@ -67,9 +71,9 @@ def parse_args():
     if args.task:
         CONFIG['task'] = args.task
     if args.verbose:
-        CONFIG['private']['verbose'] = args.verbose
+        CONFIG['private']['log']['verbose'] = args.verbose
     if args.debug:
-        CONFIG['private']['debug'] = args.debug
+        CONFIG['private']['log']['debug'] = args.debug
 
     if args.data:
         CONFIG['dataset']['name'] = args.data
@@ -143,7 +147,6 @@ def parse_args():
 
     if args.wandb:
         try:
-            import wandb
             CONFIG['private']['wandb'] = True
             project = CONFIG['task']
             entity = CONFIG['entity']
@@ -152,5 +155,7 @@ def parse_args():
             CONFIG['private']['wandb'] = False
             print("wandb isn't installed, disable to launch wandb")
 
-    pp(CONFIG)
+    console = Console()
+    json_data = JSON(json.dumps(CONFIG, indent=2))
+    console.print(json_data)
     set_config(CONFIG)

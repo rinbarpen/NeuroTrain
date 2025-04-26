@@ -19,24 +19,24 @@ from utils.typed import FilePath, ImageInstance
 from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset
 
 def prepare_logger():
-    c = get_config()
+    c = get_config()['private']['log']
 
     os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', time.strftime(c['private']['log_file_format'], time.localtime()) + '.log')
+    filename = os.path.join('logs', time.strftime(c['log_file_format'], time.localtime()) + '.log')
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
-    file_handler.setFormatter(logging.Formatter(c['private']['log_format']))
+    file_handler.setFormatter(logging.Formatter(c['log_format']))
 
     def get_log_level():
-        if c['private']['debug']:
+        if c['debug']:
             return logging.DEBUG
-        elif c['private']['verbose']:
+        elif c['verbose']:
             return logging.INFO
         else:
             return logging.WARNING
 
     logging.basicConfig(filename=filename, 
                         level=get_log_level(), 
-                        format=c['private']['log_format'], 
+                        format=c['log_format'], 
                         handlers=[file_handler])
 
 def set_seed(seed: int):

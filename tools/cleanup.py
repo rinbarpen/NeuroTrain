@@ -1,5 +1,4 @@
-import os
-import os.path
+import shutil
 from argparse import ArgumentParser
 
 if __name__ == '__main__':
@@ -9,6 +8,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     if args.log:
-        os.removedirs('logs')
+        shutil.rmtree('./logs', ignore_errors=True)
     if args.output:
-        os.removedirs('output')
+        shutil.rmtree('./output', ignore_errors=True)
