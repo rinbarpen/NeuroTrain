@@ -19,25 +19,6 @@ class CombineCriterion(nn.Module):
             all_loss.append(loss)
         return all_loss
 
-class MultiLabelCombineCriterion(nn.Module):
-    def __init__(self, loss_fns: nn.Module|list[nn.Module]):
-        super(MultiLabelCombineCriterion, self).__init__()
-        if isinstance(loss_fns, list):
-            self.criterions = loss_fns
-        else:
-            self.criterions = [loss_fns]
-
-    def forward(self, 
-                targets: tuple[torch.Tensor, ...], 
-                preds: tuple[torch.Tensor, ...]):
-        all_loss = []
-        for criterion in self.criterions:
-            loss = []
-            for target, pred in zip(targets, preds):
-                loss.append(criterion(target, pred))
-            all_loss.append(torch.concat(loss).mean())
-        return all_loss
-
 class Loss(nn.Module):
     def __init__(self, loss_fn: nn.Module|None=None):
         super(Loss, self).__init__()

@@ -1,9 +1,7 @@
 import logging
-import colorlog
 import os.path
 import os
 import time
-from time import strftime
 import math
 import random
 import cv2
@@ -17,37 +15,16 @@ from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
 from config import get_config
-from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset, to_numpy
 from utils.typed import FilePath, ImageInstance
+from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset
 
-def prepare_logger(name: str|None = None):
-    log_colors = {
-        'DEBUG': 'cyan',
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'FATAL': 'bold_red',
-    }
+def prepare_logger():
     c = get_config()
-    formatter = colorlog.ColoredFormatter(
-        '%(log_color)s' + c['private']['log_format'],
-        log_colors=log_colors
-    )
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
 
     os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', strftime(c['private']['log_file_format']+'.log', time.localtime()))
+    filename = os.path.join('logs', time.strftime(c['private']['log_file_format'], time.localtime()) + '.log')
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
-    file_handler.setFormatter(logging.Formatter(
-        c['private']['log_format']
-    ))
-    def set_logger(name: str, level: int):
-        logger = logging.getLogger(name)
-        logger.setLevel(level)
-        logger.addHandler(console_handler)
-        logger.addHandler(file_handler)
+    file_handler.setFormatter(logging.Formatter(c['private']['log_format']))
 
     def get_log_level():
         if c['private']['debug']:
@@ -57,24 +34,10 @@ def prepare_logger(name: str|None = None):
         else:
             return logging.WARNING
 
-    log_level = get_log_level()
-    if not name:
-        root_logger = logging.getLogger()
-        root_logger.setLevel(log_level)
-        root_logger.addHandler(console_handler)
-        root_logger.addHandler(file_handler)
-
-        set_logger('train', log_level)
-        set_logger('test', log_level)
-        set_logger('predict', log_level)
-    else:
-        set_logger(name, log_level)
-
-def get_logger(name: str|None = None):
-    logger = logging.getLogger(name)
-    if not logger.hasHandlers():
-        prepare_logger(name)
-    return logger
+    logging.basicConfig(filename=filename, 
+                        level=get_log_level(), 
+                        format=c['private']['log_format'], 
+                        handlers=[file_handler])
 
 def set_seed(seed: int):
     torch.manual_seed(seed)
@@ -88,6 +51,9 @@ def set_seed(seed: int):
 def get_train_tools(model: nn.Module):
     c = get_config()
     match c['train']['optimizer']['type'].lower():
+        case 'sgd':
+            optimizer = torch.optim.SGD(
+                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'])
         case 'adam':
             optimizer = torch.optim.Adam(
                 model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'], eps=c['train']['optimizer']['eps'])
@@ -103,47 +69,51 @@ def get_train_tools(model: nn.Module):
 
 def get_train_valid_test_dataloader(use_valid=False):
     c = get_config()
+    dataset_name = c["dataset"]["name"]
+    base_dir = Path(c["dataset"]["path"])
+    num_workers = c["dataset"]["num_workers"]
+
     train_dataset = get_train_dataset(
-        dataset_name=c["dataset"]["name"],
-        base_dir=Path(c["dataset"]["path"]),
+        dataset_name=dataset_name,
+        base_dir=base_dir,
     )
     train_loader = DataLoader(
         train_dataset,
         batch_size=c["train"]["batch_size"],
         pin_memory=True,
-        num_workers=c["dataset"]["num_workers"],
+        num_workers=num_workers,
         shuffle=True,
     )
-    test_dataset = get_train_dataset(
-        dataset_name=c["dataset"]["name"],
-        base_dir=Path(c["dataset"]["path"]),
+    test_dataset = get_test_dataset(
+        dataset_name=dataset_name,
+        base_dir=base_dir,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=c["test"]["batch_size"],
         pin_memory=True,
-        num_workers=c["dataset"]["num_workers"],
+        num_workers=num_workers,
         shuffle=True,
     )
     if use_valid:
         valid_dataset = get_valid_dataset(
-            dataset_name=c["dataset"]["name"],
-            base_dir=Path(c["dataset"]["path"]),
+            dataset_name=dataset_name,
+            base_dir=base_dir,
         )
         valid_loader = DataLoader(
             valid_dataset,
             batch_size=c["valid"]["batch_size"],
             pin_memory=True,
-            num_workers=c["dataset"]["num_workers"],
+            num_workers=num_workers,
             shuffle=True,
         )
 
         return train_loader, valid_loader, test_loader
     
     return train_loader, None, test_loader
-
-def save_model(path: FilePath, model: nn.Module, *, 
-               ext_path: FilePath|None=None,
+    
+def save_model(path: Path, model: nn.Module, *, 
+               ext_path: Path|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
     model_cp = model.state_dict()
 
@@ -151,7 +121,7 @@ def save_model(path: FilePath, model: nn.Module, *,
         torch.save(model_cp, path)
     except FileExistsError as e:
         path = path.parent / (path.stem +
-                              strftime("%Y%m%d_%H%M%S", time.localtime()))
+                              time.strftime("%Y%m%d_%H%M%S", time.localtime()))
         torch.save(model_cp, path)
 
     if ext_path:
@@ -168,7 +138,7 @@ def save_model(path: FilePath, model: nn.Module, *,
             torch.save(ext_cp, ext_path)
         except FileExistsError as e:
             ext_path = ext_path.parent / (ext_path.stem +
-                                strftime("%Y%m%d_%H%M%S", time.localtime()))
+                                time.strftime("%Y%m%d_%H%M%S", time.localtime()))
             torch.save(ext_cp, ext_path)
 def load_model(path: FilePath, map_location: str = 'cuda'):
     return torch.load(path, 
@@ -177,9 +147,6 @@ def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
     return torch.load(ext_path, 
                       map_location=torch.device(map_location))
 
-def save_model_to_onnx(path: FilePath, model: nn.Module, input_size: tuple):
-    dummy_input = torch.randn(input_size)
-    torch.onnx.export(model, dummy_input, path)
 def summary_model_info(model_src: FilePath | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
     if isinstance(model_src, FilePath):
         checkpoint = load_model(model_src, device)

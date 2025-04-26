@@ -8,11 +8,12 @@ from torch import nn
 from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
 from torch.utils.data import DataLoader
+import logging
 
-from config import get_config, ALL_METRIC_LABELS
+from config import get_config
 from utils.early_stopping import EarlyStopping
 from utils.data_saver import DataSaver
-from utils.util import get_logger, save_model
+from utils.util import save_model
 from utils.timer import Timer
 from utils.scores import ScoreCalculator
 from utils.painter import Plot
@@ -33,7 +34,7 @@ class Trainer:
         self.model = model
 
         self.save_model_dir.mkdir(exist_ok=True, parents=True)
-        self.logger = get_logger('train')
+        self.logger = logging.getLogger('train')
         self.data_saver = DataSaver(output_dir)
         
         c = get_config()
@@ -128,8 +129,8 @@ class Trainer:
 
                 targets, outputs = self.postprocess(targets, outputs)
                 self.train_calculator.add_one_batch(
-                    targets.detach().cpu().float().numpy(), 
-                    outputs.detach().cpu().float().numpy())
+                    targets.detach().cpu().numpy(), 
+                    outputs.detach().cpu().numpy())
 
             if lr_scheduler:
                 lr_scheduler.step()
@@ -278,7 +279,7 @@ class Tester:
         self.model = model
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = get_logger('test')
+        self.logger = logging.getLogger('test')
         self.data_saver = DataSaver(output_dir)
         
         c = get_config()
@@ -292,8 +293,8 @@ class Tester:
 
         c = get_config()
         device = torch.device(c['device'])
-
         self.model = self.model.to(device)
+
         for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
             inputs, targets = inputs.to(device), targets.to(device)
             # (B, N, H, W) => N is n_classes
@@ -313,50 +314,13 @@ class Tester:
         outputs[outputs < 0.5] = 0
         return targets, outputs
 
-class Vaildator:
-    def __init__(self, output_dir: Path, model: nn.Module):
-        super().__init__()
-        self.output_dir = output_dir
-        self.model = model
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = get_logger('valid')
-        self.data_saver = DataSaver(output_dir) 
-        
-        c = get_config()
-        class_labels = c['classes']
-        metric_labels = c['metrics']
-        self.calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-
-    @torch.no_grad()
-    def valid(self, valid_dataloader: DataLoader):
-        self.calculator.clear()
-        for inputs, targets in valid_dataloader:
-            outputs = self.model(inputs)
-
-            self.postprocess(targets, outputs)
-            self.calculator.add_one_batch(
-                targets.cpu().detach().numpy(), outputs.cpu().detach().numpy()
-            )
-
-        self.calculator.record_batches(self.output_dir)
-
-    @classmethod
-    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
-        targets[targets >= 0.5] = 1
-        targets[targets < 0.5] = 0
-        outputs[outputs >= 0.5] = 1
-        outputs[outputs < 0.5] = 0
-        return targets, outputs
-
-# TODO: Easy to inherit to be used
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
         self.output_dir = output_dir
         self.model = model
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = get_logger('predict')
+        self.logger = logging.getLogger('predict')
         self.timer = Timer()
 
     @torch.inference_mode()

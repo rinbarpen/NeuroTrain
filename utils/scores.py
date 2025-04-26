@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from sklearn import metrics
 from pathlib import Path
@@ -6,7 +7,6 @@ import wandb
 from config import get_config, ALL_METRIC_LABELS
 from utils.typed import *
 from utils.painter import Plot
-from utils.util import get_logger
 from utils.data_saver import DataSaver
 
 # y_true, y_pred: (B, C, X)
@@ -114,6 +114,10 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList,
         result_after['argmax'][metric] = labels[values.argmax()]
         result_after['argmin'][metric] = labels[values.argmin()]
 
+    from pprint import pp
+    pp(result)
+    pp(result_after)
+
     return result, result_after
 
 # result template:
@@ -173,8 +177,8 @@ def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float
     return np.mean(kl_div)
 
 class ScoreCalculator:
-    def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList=ALL_METRIC_LABELS, *, logger=None, saver: DataSaver):
-        self.logger = logger if logger is not None else get_logger()
+    def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver):
+        self.logger = logger or logging.getLogger()
         self.saver = saver
         self.class_labels = class_labels
         self.metric_labels = metric_labels
@@ -290,8 +294,6 @@ class ScoreCalculator:
         n = len(self.metric_labels)
         nrows, ncols = ((n + 2) // 3, 3) if n > 3 else (1, n)
         plot = Plot(nrows, ncols)
-        from pprint import pp
-        pp(self.epoch_metric_label_scores)
         for metric in self.metric_labels:
             plot.subplot().many_epoch_metrics(n_epochs, self.epoch_metric_label_scores[metric], self.class_labels, title=metric).complete()
         plot.save(epoch_metrics_image)
@@ -334,20 +336,5 @@ class ScoreCalculator:
             class_dir.mkdir(parents=True, exist_ok=True)
         self.is_prepared = True
 
-
-if __name__ == '__main__':
-    n_batches = 2
-    n_classes = 3
-    labels = [str(i) for i in range(n_classes)]
-    y_true = np.random.rand(n_batches, n_classes, 512, 512)
-    y_pred = np.random.rand(n_batches, n_classes, 512, 512)
-    y_true[y_true >= 0.5] = 1
-    y_true[y_true < 0.5] = 0
-    y_pred[y_pred >= 0.5] = 1
-    y_pred[y_pred < 0.5] = 0
-
-    result = scores(y_true, y_pred, labels)
-    from pprint import pp
-    pp(result)
-
-# TODO: 添加 kl loss 和 soft loss and hard loss
+        from pprint import pp
+        pp(self.metric_record)
