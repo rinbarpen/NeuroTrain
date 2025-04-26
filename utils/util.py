@@ -12,12 +12,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from pathlib import Path
-from PIL.Image import Image 
+from PIL import Image 
 from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
 from config import get_config
 from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset, to_numpy
+from utils.typed import FilePath, ImageInstance
 
 def prepare_logger(name: str|None = None):
     log_colors = {
@@ -141,8 +142,8 @@ def get_train_valid_test_dataloader(use_valid=False):
     
     return train_loader, None, test_loader
 
-def save_model(path: Path, model: nn.Module, *, 
-               ext_path: Path|None=None,
+def save_model(path: FilePath, model: nn.Module, *, 
+               ext_path: FilePath|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
     model_cp = model.state_dict()
 
@@ -169,18 +170,18 @@ def save_model(path: Path, model: nn.Module, *,
             ext_path = ext_path.parent / (ext_path.stem +
                                 strftime("%Y%m%d_%H%M%S", time.localtime()))
             torch.save(ext_cp, ext_path)
-def load_model(path: str|Path, map_location: str = 'cuda'):
+def load_model(path: FilePath, map_location: str = 'cuda'):
     return torch.load(path, 
                       map_location=torch.device(map_location))
-def load_model_ext(ext_path: str|Path, map_location: str = 'cuda'):
+def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
     return torch.load(ext_path, 
                       map_location=torch.device(map_location))
 
-def save_model_to_onnx(path: Path, model: nn.Module, input_size: tuple):
+def save_model_to_onnx(path: FilePath, model: nn.Module, input_size: tuple):
     dummy_input = torch.randn(input_size)
     torch.onnx.export(model, dummy_input, path)
-def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
-    if isinstance(model_src, Path):
+def summary_model_info(model_src: FilePath | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
+    if isinstance(model_src, FilePath):
         checkpoint = load_model(model_src, device)
         summary(checkpoint, input_size=input_size, device=device)
     elif isinstance(model_src, torch.nn.Module):
@@ -193,16 +194,18 @@ def summary_model_info(model_src: Path | torch.nn.Module, input_size: torch.Tens
 #     setattr(torch.nn.Linear, "reset_parameters", lambda self: None)
 #     setattr(torch.nn.LayerNorm, "reset_parameters", lambda self: None)
 
-def save_numpy_data(path: Path, data: np.ndarray | torch.Tensor):
+def save_numpy_data(path: FilePath, data: np.ndarray | torch.Tensor):
     if isinstance(data, torch.Tensor):
         data = data.cpu().detach().numpy()
+    if isinstance(path, str):
+        path = Path(path)
 
     try:
         np.save(path, data)
     except FileNotFoundError as e:
         path.parent.mkdir(parents=True)
         np.save(path, data)
-def load_numpy_data(path: Path):
+def load_numpy_data(path: FilePath):
     try:
         data = np.load(path)
         return data
@@ -215,11 +218,11 @@ def tuple2list(t: tuple):
 def list2tuple(l: list):
     return tuple(l)
 
-def image_to_numpy(img: Image|cv2.Mat) -> np.ndarray:
-    if isinstance(img, Image):
+def image_to_numpy(img: ImageInstance) -> np.ndarray:
+    if isinstance(img, Image.Image):
         img_np = np.array(img) # (H, W, C)
         if img_np.ndim == 3:
-            img_np = img_np.transpose(2, 0, 1) # (C, H, W)
+            img_np = img_np.transpose(2, 0, 1)  # (C, H, W)
     elif isinstance(img, cv2.Mat):
         img_np = np.array(img)
     
@@ -234,13 +237,13 @@ def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> f
 
 
 def split_image(
-    image: Image, num_patches: int, *, output_dir: Path | None = None
-) -> list[Image]:
+    image: Image.Image, num_patches: int, *, output_dir: Path | None = None
+) -> list[Image.Image]:
     """
     将图像分割成小块并保存到指定目录。
 
     Args:
-        image (Image): 图像文件实例。
+        image (Image.Image): 图像文件实例。
         num_patches (int): 小块的数量。
         output_dir (Path): 保存小块图像的目录。
     """

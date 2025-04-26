@@ -6,7 +6,9 @@ from pathlib import Path
 from torchvision import transforms
 from config import get_config
 
-def to_rgb(filename: Path|str, use_opencv=False):
+from utils.typed import FilePath
+
+def to_rgb(filename: FilePath, use_opencv=False):
     if use_opencv:
         x = cv2.imread(filename)
         x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
@@ -14,7 +16,7 @@ def to_rgb(filename: Path|str, use_opencv=False):
         x = Image.open(filename).convert('RGB')
     return x
 
-def to_gray(filename: Path|str, use_opencv=False):
+def to_gray(filename: FilePath, use_opencv=False):
     if use_opencv:
         x = cv2.imread(filename)
         x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
@@ -43,8 +45,8 @@ class VisionTransformersBuilder:
     def random_vertical_flip(self, p: float):
         self._transforms.append(transforms.RandomVerticalFlip(p=p))
         return self
-    def random_invert(self, p):
-        self._transforms.append(transforms.RandomInvert(p))
+    def random_invert(self, p: float):
+        self._transforms.append(transforms.RandomInvert(p=p))
         return self
 
     def PIL_to_tensor(self):

@@ -14,7 +14,7 @@ ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 
-CONFIG = {}
+CONFIG: dict = {}
 
 # CONFIG = {
 #     "output_dir": "./output",
@@ -106,14 +106,14 @@ def is_test_after_training():
 def wandb_is_available():
     return CONFIG['private']['wandb']
 
-def set_config(config):
+def set_config(config: dict):
     global CONFIG
     CONFIG = config
 
-def get_config():
+def get_config() -> dict:
     return CONFIG
 
-def load_config(filename: Path):
+def load_config(filename: Path) -> dict:
     match filename.suffix:
         case '.json':
             with filename.open(mode='r', encoding='utf-8') as f:
@@ -129,14 +129,14 @@ def load_config(filename: Path):
     return config
 
 def dump_config(filename: Path):
-    c = get_config()
+    c = CONFIG
     match filename.suffix:
         case '.json':
             with filename.open(mode='w', encoding='utf-8') as f:
                 json.dump(c, f)
         case '.yaml'|'.yml':
             with filename.open(mode='w', encoding='utf-8') as f:
-                yaml.safe_dump(c, f)
+                yaml.safe_dump(c, f, sort_keys=False)
         case '.toml':
             with filename.open(mode='w', encoding='utf-8') as f:
                 toml.dump(c, f)

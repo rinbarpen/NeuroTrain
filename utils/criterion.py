@@ -17,7 +17,7 @@ class CombineCriterion(nn.Module):
         for criterion in self.criterions:
             loss = criterion(targets, preds)
             all_loss.append(loss)
-        return torch.stack(all_loss).sum()
+        return all_loss
 
 class MultiLabelCombineCriterion(nn.Module):
     def __init__(self, loss_fns: nn.Module|list[nn.Module]):
@@ -35,29 +35,32 @@ class MultiLabelCombineCriterion(nn.Module):
             loss = []
             for target, pred in zip(targets, preds):
                 loss.append(criterion(target, pred))
-            all_loss.append(torch.stack(loss).mean())
-        return torch.stack(all_loss).sum()
+            all_loss.append(torch.concat(loss).mean())
+        return all_loss
 
-class MultiSizeCriterion(nn.Module):
-    def __init__(self, loss_fn: nn.Module):
-        super(MultiSizeCriterion, self).__init__()
-
+class Loss(nn.Module):
+    def __init__(self, loss_fn: nn.Module|None=None):
+        super(Loss, self).__init__()
         self.loss_fn = loss_fn
-        self.scale_ratio = 2
+    
+    def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
+        return self.loss_fn(targets, preds)
+
+class MultiSizeLoss(Loss):
+    def __init__(self, loss_fn: nn.Module):
+        super(MultiSizeLoss, self).__init__(loss_fn)
 
     def forward(self, 
                 targets: torch.Tensor, 
-                preds: tuple[torch.Tensor, ...]):
-        ts = [targets]
-        for i in range(len(preds)-1):
-            t = torch.max_pool2d(targets, self.scale_ratio)
-            ts.append(t)
+                preds: tuple[torch.Tensor, ...]) -> torch.Tensor:
+        all_loss = []
+        for pred in preds:
+            loss = self.loss_fn(targets, pred)
+            all_loss.append(loss)
+            targets = F.max_pool2d(targets, 2)
+        return torch.concat(all_loss).mean()
 
-        loss = [self.loss_fn(t, pred) for t, pred in zip(ts, preds)]
-        loss = torch.tensor(np.mean(loss))
-        return loss
-
-class DiceLoss(nn.Module):
+class DiceLoss(Loss):
     def __init__(self):
         super(DiceLoss, self).__init__()
 
@@ -66,7 +69,7 @@ class DiceLoss(nn.Module):
         x = torch.from_numpy(loss)
         x.requires_grad = True
         return x
-class KLLoss(nn.Module):
+class KLLoss(Loss):
     def __init__(self):
         super(KLLoss, self).__init__()
 

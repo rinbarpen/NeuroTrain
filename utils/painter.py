@@ -1,13 +1,13 @@
 import logging
-import matplotlib.pyplot as plt
 import os
-import seaborn as sns
-from pathlib import Path
-import numpy as np
-from sklearn import metrics
-from typing import Literal
-from PIL import Image
 import cv2
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from typing import Literal
+from pathlib import Path
+from sklearn import metrics
+from PIL import Image
 
 from utils.annotation import buildup
 from utils.typed import ClassMetricOneScoreDict
@@ -22,8 +22,6 @@ class Font:
     _family = 'Times New Roman'
     _weight = 'normal'
     _size = 16
-    def __init__(self):
-        pass
 
     def family(self, x: str):
         self._family = x
@@ -52,11 +50,11 @@ class Subplot:
     def plot(self, x, y, *args, **kwargs):
         self._ax.plot(x, y, *args, **kwargs)
         return self
-    def bar(self, x, height, *args, **kwargs):
-        self._ax.bar(x, height, *args, **kwargs)
+    def bar(self, x, height, width=0.35, *args, **kwargs):
+        self._ax.bar(x, height, width, *args, **kwargs)
         return self
-    def barh(self, y, width, *args, **kwargs):
-        self._ax.barh(y, width, *args, **kwargs)
+    def barh(self, y, width, height=0.35, *args, **kwargs):
+        self._ax.barh(y, width, height, *args, **kwargs)
         return self
     def scatter(self, x, y, *args, **kwargs):
         self._ax.scatter(x, y, *args, **kwargs)
@@ -226,15 +224,23 @@ class Subplot:
 
     # scores_map: {'metric_label': {'label'： label_score, ...}, ...}
     @buildup(desc="many metrics")
-    def many_metrics(self, label_metric_score: ClassMetricOneScoreDict, title: str|None=None, *, width=0.35):
+    def many_metrics(self, label_metric_score: ClassMetricOneScoreDict, title: str|None=None, *, height=0.35, width=0.35, tick_threshold=0.2, use_barh=True):
         colors = sns.color_palette("husl", len(label_metric_score))
         for color, (class_label, metric_score) in zip(colors, label_metric_score.items()):
             metric_labels, scores = metric_score.keys(), metric_score.values()
-            self._ax.barh(metric_labels, scores, width, color=color, label=class_label)
+            if use_barh:
+                self._ax.barh(metric_labels, scores, height, color=color, label=class_label)
+                self._ax.set_xlim(0, 1)
+                self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
+                # self._ax.set_yticklabels(metric_labels)
+            else:
+                self._ax.bar(metric_labels, scores, width, color=color, label=class_label)
+                self._ax.set_ylim(0, 1)
+                self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
+                # self._ax.set_xticklabels(metric_labels)
 
-        self._ax.set_title(title)
-        self._ax.set_ylim(0, 1)
-        self._ax.set_xticklabels(metric_labels)
+        if title:
+            self._ax.set_title(title)
         self._ax.legend()
         return self
 
@@ -269,10 +275,10 @@ class Subplot:
         self._ax.legend(loc='lower right')
         return self
 
-    def image(self, image: Path|Image|cv2.Mat):
+    def image(self, image: Path|Image.Image|cv2.Mat):
         if isinstance(image, Path):
             img = self._ax.imread(image)
-        if isinstance(image, Image) or isinstance(image, cv2.Mat):
+        if isinstance(image, Image.Image) or isinstance(image, cv2.Mat):
             img = image
         self._ax.axis('off')
         self._ax.imshow(img)
@@ -317,7 +323,7 @@ class Plot:
         self._title = title
 
     @buildup(desc="image pack")
-    def images(self, images: list[Path|Image|cv2.Mat]):
+    def images(self, images: list[Path|Image.Image|cv2.Mat]):
         n = self._nrows * self._ncols
         if n < len(images):
             logging.warning(f"{len(images) - n} is still empty")

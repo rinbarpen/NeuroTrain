@@ -33,18 +33,15 @@ class SegmentPredictor(Predictor):
         for input in tqdm(inputs, desc="Predicting..."):
             input_filename = input.name
 
-            self.timer.start(input_filename + '.preprocess')
-            input = self.preprocess(input)
-            self.timer.stop(input_filename + '.preprocess')
+            with self.timer.timeit(input_filename + '.preprocess'):
+                input = self.preprocess(input)
 
-            self.timer.start(input_filename + '.inference')
-            input = input.to(device)
-            pred = self.model(input)
-            self.timer.stop(input_filename + '.inference')
+            with self.timer.timeit(input_filename + '.inference'):
+                input = input.to(device)
+                pred = self.model(input)
 
-            self.timer.start(input_filename + '.postprocess')
-            image = self.postprocess(pred)
-            self.timer.stop(input_filename + '.postprocess')
+            with self.timer.timeit(input_filename + '.postprocess'):
+                image = self.postprocess(pred)
 
             output_filename = self.output_dir / input_filename
             image.save(output_filename)

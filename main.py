@@ -18,7 +18,7 @@ from model_operation import Trainer, Tester, Predictor
 from models.models import get_model
 from utils.util import (get_logger, get_train_tools, get_train_valid_test_dataloader, load_model, prepare_logger, set_seed)
 from utils.transform import get_transforms
-from utils.criterion import CombineCriterion
+from utils.criterion import CombineCriterion, MultiSizeLoss
 # from utils.see_cam import ImageHeatMapGenerator, ClassifierOutputTarget, SemanticSegmentationTarget
 
 # class UNetPredictor(Predictor):
@@ -103,7 +103,8 @@ if __name__ == "__main__":
         optimizer = tools['optimizer']
         lr_scheduler = tools['lr_scheduler']
         scaler = tools['scaler']
-        criterion = CombineCriterion(nn.BCEWithLogitsLoss())
+        # criterion = CombineCriterion(nn.BCEWithLogitsLoss())
+        criterion = CombineCriterion(MultiSizeLoss(nn.BCEWithLogitsLoss()))
 
         if c['model']['continue_ext_checkpoint'] != "":
             model_ext_path = Path(c['model']['continue_ext_checkpoint'])

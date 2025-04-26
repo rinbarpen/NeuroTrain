@@ -3,13 +3,14 @@ import pandas as pd
 import os
 from argparse import ArgumentParser
 
-def to_parquet(filename):
+def to_parquet(filename: str):
     in_type = os.path.splitext(filename)[-1].lower()
     output = os.path.join('output', os.path.basename(filename) + '.parquet')
     os.makedirs('output', exist_ok=True)
     match in_type:
         case '.csv': df = pd.read_csv(filename)
         case '.xls'|'.xlsx': df = pd.read_excel(filename)
+        case _: raise ValueError(f"Unsupported file type: {in_type}")
 
     try:
         import fastparquet

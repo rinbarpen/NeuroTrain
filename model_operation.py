@@ -372,21 +372,18 @@ class Predictor:
         for input in tqdm(inputs, desc="Predicting..."):
             input_filename = input.name
 
-            self.timer.start(input_filename + '.preprocess')
-            input_tensor, original_size = self.preprocess(input)
-            self.timer.stop(input_filename + '.preprocess')
+            with self.timer.timeit(task=input_filename + '.preprocess'):
+                input_tensor, original_size = self.preprocess(input)
 
-            self.timer.start(input_filename + '.inference')
-            input_tensor = input_tensor.to(device)
-            pred_tensor = self.model(input_tensor)
-            self.timer.stop(input_filename + '.inference')
+            with self.timer.timeit(task=input_filename + '.inference'):
+                input_tensor = input_tensor.to(device)
+                pred_tensor = self.model(input_tensor)
 
-            self.timer.start(input_filename + '.postprocess')
-            pred_np = self.postprocess(pred_tensor)
-            self.timer.stop(input_filename + '.postprocess')
+            with self.timer.timeit(task=input_filename + '.postprocess'):
+                pred_np = self.postprocess(pred_tensor)
 
             self.record(input, pred_np, filename=input_filename, original_size=original_size)
-            
+
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
 
@@ -398,6 +395,7 @@ class Predictor:
         pred_image = pred_image.resize(original_size)
 
         pred_image.save(output_filename)
+
     def preprocess(self, input: Path) -> (torch.Tensor, tuple[int, int]):
         input = Image.open(input).convert('L')
         size = input.size # (H, W)

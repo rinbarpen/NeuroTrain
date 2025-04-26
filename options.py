@@ -40,7 +40,7 @@ def parse_args():
     predict_parser.add_argument('-i', '--input', type=str, help='input')
     # Common
     parser.add_argument('--wandb', action='store_true', default=False, help='setup wandb')
-    parser.add_argument('--verbose', action='store_true', default=False, help='verbose')
+    parser.add_argument('--verbose', action='store_true', default=True, help='verbose')
     parser.add_argument('--debug', action='store_true', default=False, help='debug')
     parser.add_argument('-c', '--config', type=str, help='Configuration of Train or Test or Predict')
     # parser.add_argument('--dump', default=False)
