@@ -74,12 +74,11 @@ class Trainer:
         valid_losses = []
         best_loss = float('inf')
 
-        pbar_total = tqdm(total=num_epochs-last_epoch, desc='Training(Epoch)...')
+        pbar = tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...')
         for epoch in range(last_epoch+1, num_epochs+1):
             self.model.train()
             train_loss = 0.0
 
-            pbar = tqdm(total=len(train_dataloader), desc='Training(Batch)...')
             for i, (inputs, targets) in enumerate(train_dataloader, 1):
                 inputs, targets = inputs.to(device), targets.to(device)
 
@@ -137,8 +136,8 @@ class Trainer:
 
             train_loss /= len(train_dataloader)
             train_losses.append(train_loss)
-            pbar_total.update()
-            pbar_total.set_postfix({'epoch_loss': train_loss})
+            pbar.update(0)
+            pbar.set_postfix({'epoch_loss': train_loss})
 
             self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
             self.train_calculator.finish_one_epoch()
@@ -149,7 +148,6 @@ class Trainer:
                 self.model.eval()
 
                 with torch.no_grad():
-                    pbar = tqdm(total=len(valid_dataloader), desc='Validating(Batch)...')
                     for inputs, targets in valid_dataloader:
                         inputs, targets = inputs.to(device), targets.to(device)
 
@@ -158,8 +156,8 @@ class Trainer:
 
                         batch_loss = loss.item()
                         valid_loss += batch_loss
-                        pbar.update()
-                        pbar.set_postfix({'batch_loss': batch_loss})
+                        pbar.update(1)
+                        pbar.set_postfix({'valid_batch_loss': batch_loss})
 
                         targets, outputs = self.postprocess(targets, outputs)
                         self.valid_calculator.add_one_batch(
@@ -169,7 +167,7 @@ class Trainer:
                 valid_loss /= len(valid_dataloader)
                 valid_losses.append(valid_loss)
 
-                pbar_total.set_postfix({'valid_epoch_loss': valid_loss})
+                pbar.set_postfix({'valid_epoch_loss': valid_loss})
 
                 self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
                 self.valid_calculator.finish_one_epoch()
