@@ -4,7 +4,7 @@ from sklearn import metrics
 from pathlib import Path
 import wandb
 
-from config import get_config, ALL_METRIC_LABELS
+from config import get_config
 from utils.typed import *
 from utils.painter import Plot
 from utils.data_saver import DataSaver
@@ -92,8 +92,8 @@ def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *
 
     return result
 
-def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, 
-           metric_labels: MetricLabelsList=ALL_METRIC_LABELS, 
+def scores(y_true: np.ndarray, y_pred: np.ndarray, 
+           labels: ClassLabelsList, metric_labels: MetricLabelsList, 
            *, class_axis: int=1, average: str='binary'):
     result: MetricClassOneScoreDict = create_MetricClassOneScoreDict(metric_labels, labels)
     result_after: MetricAfterDict = create_MetricAfterDict(labels)
@@ -113,10 +113,6 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList,
         result_after['mean'][metric] = values.mean()
         result_after['argmax'][metric] = labels[values.argmax()]
         result_after['argmin'][metric] = labels[values.argmin()]
-
-    from pprint import pp
-    pp(result)
-    pp(result_after)
 
     return result, result_after
 
@@ -335,6 +331,3 @@ class ScoreCalculator:
             class_dir = output_dir / class_label
             class_dir.mkdir(parents=True, exist_ok=True)
         self.is_prepared = True
-
-        from pprint import pp
-        pp(self.metric_record)
