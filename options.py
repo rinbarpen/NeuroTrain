@@ -1,10 +1,11 @@
-from argparse import ArgumentParser
 import os
-from pathlib import Path
+import sys
 import time
+import json
+from pathlib import Path
 from rich.json import JSON
 from rich.console import Console
-import json
+from argparse import ArgumentParser
 
 import wandb
 
@@ -58,7 +59,14 @@ def parse_args():
     parser.add_argument('--continue_checkpoint', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
 
+    parser.add_argument('--data_cacher', action='store_true', default=False, help='tool: data cacher')
+    
     args = parser.parse_args()
+    if args.data_cacher:
+        from tools.data_cacher import data_cacher
+        data_cacher(args.config)
+        sys.exit(0)
+
     config_file = Path(args.config)
     CONFIG = load_config(config_file)
 

@@ -1,27 +1,17 @@
 import numpy as np
 import torch
 from PIL import Image
-import cv2
-from pathlib import Path
 from torchvision import transforms
 from config import get_config
 
 from utils.typed import FilePath
 
-def to_rgb(filename: FilePath, use_opencv=False):
-    if use_opencv:
-        x = cv2.imread(filename)
-        x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-    else:
-        x = Image.open(filename).convert('RGB')
+def to_rgb(filename: FilePath):
+    x = Image.open(filename).convert('RGB')
     return x
 
-def to_gray(filename: FilePath, use_opencv=False):
-    if use_opencv:
-        x = cv2.imread(filename)
-        x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
-    else:
-        x = Image.open(filename).convert('L')
+def to_gray(filename: FilePath):
+    x = Image.open(filename).convert('L')
     return x
 
 # VisionTransformersBuilder may be flawed

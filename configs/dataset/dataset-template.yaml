@@ -25,11 +25,11 @@ chasedb1:
   classes: ["Retina"]
   train:
     base_dir: "training"
-    source: "images/*.png"
+    source: "images/*.jpg"
     target: "1st_label/*.png"
   test:
     base_dir: "test"
-    source: "images/*.png"
+    source: "images/*.jpg"
     target: "1st_label/*.png"
 isic2017:
   root_dir: "data/ISIC2017"

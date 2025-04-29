@@ -51,25 +51,30 @@ class DriveDataset(CustomDataset):
     def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
         save_dir = save_dir / DriveDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
-        train_dir = base_dir / "training"
-        test_dir = base_dir / "test"
 
-        train_dataset = DriveDataset.get_train_dataset(train_dir, between=betweens['train'])
-        test_dataset = DriveDataset.get_test_dataset(test_dir, between=betweens['test'])
+        train_dataset = DriveDataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
+        test_dataset = DriveDataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (save_dir, save_dir), ('train', 'test')):
-            for i, (image, mask) in enumerate(dataset):
+        from torch.utils.data import DataLoader
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
+        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+
+        for dataloader, data_dir, dataset_type in zip((train_dataloader, test_dataloader), (save_dir, save_dir), ('train', 'test')):
+            image_dir = (data_dir / DriveDataset.mapping[dataset_type][0]).parent
+            mask_dir = (data_dir / DriveDataset.mapping[dataset_type][1]).parent
+            image_dir.mkdir(parents=True, exist_ok=True)
+            mask_dir.mkdir(parents=True, exist_ok=True)
+
+            for i, (image, mask) in enumerate(dataloader):
                 image_path = data_dir / DriveDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
                 mask_path = data_dir / DriveDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
-                image_path.parent.mkdir(parents=True, exist_ok=True)
-                mask_path.parent.mkdir(parents=True, exist_ok=True)
 
-                np.save(image_path, image)
-                np.save(mask_path, mask)
+                np.save(image_path, image.numpy())
+                np.save(mask_path, mask.numpy())
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({"betweens": betweens, **kwargs}, f)
+            yaml.dump({"betweens": betweens, **kwargs}, f, sort_keys=False)
 
     @staticmethod
     def name():

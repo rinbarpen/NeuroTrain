@@ -9,14 +9,16 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR, CosineAnnealingWarmRestarts
+from torch.amp.grad_scaler import GradScaler
 from pathlib import Path
 from PIL import Image 
 from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
-from config import get_config
+from config import get_config, get_config_value
 from utils.typed import FilePath, ImageInstance
-from utils.dataset.dataset import get_train_dataset, get_valid_dataset, get_test_dataset
+from utils.dataset.dataset import get_chained_datasets
 
 def prepare_logger():
     c = get_config()['private']['log']
@@ -50,7 +52,7 @@ def set_seed(seed: int):
 
 def get_train_tools(model: nn.Module):
     c = get_config()
-    match c['train']['optimizer']['type'].lower():
+    match c['train']['optimizer_type'].lower():
         case 'sgd':
             optimizer = torch.optim.SGD(
                 model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'])
@@ -63,49 +65,40 @@ def get_train_tools(model: nn.Module):
 
     return {
         'optimizer': optimizer,
-        'lr_scheduler': torch.optim.lr_scheduler.LRScheduler(optimizer) if c['train']['lr_scheduler']['enabled'] else None,
-        'scaler': torch.amp.GradScaler() if c['train']['scaler']['enabled'] else None,
+        'lr_scheduler': LRScheduler(optimizer) if 'lr_scheduler' in c['train'].keys() else None,
+        'scaler': GradScaler() if 'scaler' in c['train'].keys() else None,
     }
 
 def get_train_valid_test_dataloader(use_valid=False):
     c = get_config()
-    dataset_name = c["dataset"]["name"]
-    base_dir = Path(c["dataset"]["path"])
-    num_workers = c["dataset"]["num_workers"]
 
-    train_dataset = get_train_dataset(
-        dataset_name=dataset_name,
-        base_dir=base_dir,
-    )
+    train_dataset = get_chained_datasets('train')
+    test_dataset = get_chained_datasets('test')
+    num_workers = c["dataloader"]["num_workers"]
+    shuffle = c["dataloader"]["shuffle"]
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=c["train"]["batch_size"],
         pin_memory=True,
         num_workers=num_workers,
-        shuffle=True,
-    )
-    test_dataset = get_test_dataset(
-        dataset_name=dataset_name,
-        base_dir=base_dir,
+        shuffle=shuffle,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=c["test"]["batch_size"],
         pin_memory=True,
         num_workers=num_workers,
-        shuffle=True,
+        shuffle=shuffle,
     )
     if use_valid:
-        valid_dataset = get_valid_dataset(
-            dataset_name=dataset_name,
-            base_dir=base_dir,
-        )
+        valid_dataset = get_chained_datasets('valid')
         valid_loader = DataLoader(
             valid_dataset,
             batch_size=c["valid"]["batch_size"],
             pin_memory=True,
             num_workers=num_workers,
-            shuffle=True,
+            shuffle=shuffle,
         )
 
         return train_loader, valid_loader, test_loader

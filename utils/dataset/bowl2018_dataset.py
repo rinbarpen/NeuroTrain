@@ -71,18 +71,23 @@ class BOWL2018Dataset(CustomDataset):
         valid_dataset = BOWL2018Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
         test_dataset  = BOWL2018Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        for dataset, data_dir in zip((train_dataset, valid_dataset, test_dataset), (save_dir, save_dir, save_dir)):
-            for i, (image, masks) in enumerate(dataset):
+        from torch.utils.data import DataLoader
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
+        valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+
+        for dataloader, data_dir in zip((train_dataloader, valid_dataloader, test_dataloader), (save_dir, save_dir, save_dir)):
+            for i, (image, masks) in enumerate(dataloader):
                 image_dir, mask_dir = data_dir / f'{i}' / "images", data_dir / f'{i}' / "masks"
                 image_dir.mkdir(parents=True, exist_ok=True)
                 mask_dir.mkdir(parents=True, exist_ok=True)
                 image_path = image_dir / f'{i}.npy'
-                np.save(image_path, image)
+                np.save(image_path, image.numpy())
                 for j, mask in enumerate(masks):
                     mask_path = mask_dir / f'{i}_{j}.npy'
-                    np.save(mask_path, mask)
+                    np.save(mask_path, mask.numpy())
 
-        if kwargs.__contains__("n_instance"):
+        if "n_instance" in kwargs.keys():
             n_instance = kwargs["n_instance"]
         else:
             from config import get_config

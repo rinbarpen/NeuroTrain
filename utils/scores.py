@@ -238,18 +238,21 @@ class ScoreCalculator:
         self.metric_record: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
 
     def add_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
-        metrics, _ = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
+        metrics, metrics_after = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
 
         for metric_label in self.metric_labels:
             for class_label in self.class_labels:
                 score = metrics[metric_label][class_label]
                 self.all_metric_label_scores[metric_label][class_label].append(score)
 
+        return metrics, metrics_after
+
     def finish_one_epoch(self):
         for metric_label in self.metric_labels:
             for class_label in self.class_labels:
                 score = np.mean(self.all_metric_label_scores[metric_label][class_label])
                 self.epoch_metric_label_scores[metric_label][class_label].append(score)
+        return self.epoch_metric_label_scores
 
     def record_batches(self, output_dir: Path):
         self._prepare(output_dir)

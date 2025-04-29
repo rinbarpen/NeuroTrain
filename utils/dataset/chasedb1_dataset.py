@@ -9,8 +9,8 @@ from typing import Literal
 from utils.dataset.custom_dataset import CustomDataset, Betweens
 
 class ChaseDB1Dataset(CustomDataset):
-    mapping = {"train": ("training/images/*.png", "training/1st_label/*.png"),
-               "test":  ("test/images/*.png", "test/1st_label/*.png")}
+    mapping = {"train": ("training/images/*.jpg", "training/1st_label/*.png"),
+               "test":  ("test/images/*.jpg", "test/1st_label/*.png")}
     def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
         super(ChaseDB1Dataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
 
@@ -52,20 +52,22 @@ class ChaseDB1Dataset(CustomDataset):
         save_dir = save_dir / ChaseDB1Dataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        train_dir, test_dir = base_dir / "training", base_dir / "test"
+        train_dataset = ChaseDB1Dataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
+        test_dataset  = ChaseDB1Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        train_dataset = ChaseDB1Dataset.get_train_dataset(train_dir, between=betweens['train'], **kwargs)
-        test_dataset  = ChaseDB1Dataset.get_test_dataset(test_dir, between=betweens['test'], **kwargs)
+        from torch.utils.data import DataLoader
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
+        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
-        for dataset, data_dir, dataset_type in zip((train_dataset, test_dataset), (save_dir, save_dir), ('train', 'test')):
-            for i, (image, mask) in enumerate(dataset):
+        for dataloader, data_dir, dataset_type in zip((train_dataloader, test_dataloader), (save_dir, save_dir), ('train', 'test')):
+            for i, (image, mask) in enumerate(dataloader):
                 image_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
                 mask_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy') 
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 mask_path.parent.mkdir(parents=True, exist_ok=True)
 
-                np.save(image_path, image)
-                np.save(mask_path, mask)
+                np.save(image_path, image.numpy())
+                np.save(mask_path, mask.numpy())
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:

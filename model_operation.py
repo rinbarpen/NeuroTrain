@@ -38,13 +38,12 @@ class Trainer:
         self.save_model_dir.mkdir(exist_ok=True, parents=True)
         self.logger = logging.getLogger('train')
         self.data_saver = DataSaver(output_dir)
-        
+
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
         self.train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
         self.valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-        
 
     def train(self, num_epochs: int, 
               criterion: CombineCriterion, 
@@ -87,7 +86,7 @@ class Trainer:
 
                     if scaler:
                         device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
-                        compute_type = torch.float16 if c['train']['scaler']['compute_type'] != 'bfloat16' else torch.bfloat16
+                        compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
                         with autocast(device_type, dtype=compute_type):
                             outputs = self.model(inputs)
                         
@@ -155,17 +154,17 @@ class Trainer:
                             inputs, targets = inputs.to(device), targets.to(device)
 
                             outputs = self.model(inputs)
-                            loss = criterion(targets, outputs)
+                            losses = criterion(targets, outputs)
 
-                            batch_loss = loss.item()
+                            batch_loss = torch.concat(losses).sum().item()
                             valid_loss += batch_loss
                             pbar.update(1)
                             pbar.set_postfix({'valid_batch_loss': batch_loss})
 
                             targets, outputs = self.postprocess(targets, outputs)
                             self.valid_calculator.add_one_batch(
-                                targets.detach().cpu().float().numpy(), 
-                                outputs.detach().cpu().float().numpy())
+                                targets.detach().cpu().numpy(), 
+                                outputs.detach().cpu().numpy())
 
                     valid_loss /= len(valid_dataloader)
                     valid_losses.append(valid_loss)

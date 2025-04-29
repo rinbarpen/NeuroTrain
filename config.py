@@ -1,19 +1,17 @@
-# output/{task_name}/{timestamp}/{train|valid|test|predict}/{classification|detection|segmentation|weights|..}
+# output/{task_name}/{timestamp}/{train|test|predict}/{classification|detection|segmentation|weights|..}
 import json
 import yaml
 import toml
 from pathlib import Path
 import logging
 
+# GLOBAL CONSTANTS
 TRAIN_MODE = 1
 TEST_MODE  = 2
 PREDICT_MODE = 4
-TRAIN_TEST_MODE = TRAIN_MODE | TEST_MODE
-TEST_PREIDCT_MODE = TEST_MODE | PREDICT_MODE
 ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
-
 ALL_STYLES = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
 
 CONFIG: dict = {}
@@ -30,15 +28,37 @@ def is_predict():
 def is_test_after_training():
     return is_train() and is_test()
 
+def is_predict_after_training():
+    return is_train() and is_predict()
+
 def wandb_is_available():
     return CONFIG['private']['wandb']
 
 def set_config(config: dict):
     global CONFIG
-    CONFIG = config
+
+    def convert_to_native_types(obj):
+        if isinstance(obj, dict):
+            return {k: convert_to_native_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_to_native_types(item) for item in obj]
+        else:  # numbers or strings, for exapmle.
+            return obj  # No conversion needed
+
+    CONFIG = convert_to_native_types(config)
 
 def get_config() -> dict:
     return CONFIG
+
+def get_config_value(key_field: str, split: str='.'):
+    keys = key_field.split(split)
+    value = CONFIG
+    try:
+        for key in keys:
+            value = value[key]
+    except KeyError:
+        raise ValueError(f'{key_field} is not in config.')
+    return value
 
 def load_config(filename: Path) -> dict:
     match filename.suffix:
@@ -56,16 +76,17 @@ def load_config(filename: Path) -> dict:
     return config
 
 def dump_config(filename: Path):
-    c = CONFIG
+    save_config(filename, CONFIG)
+
+def save_config(filename: Path, config: dict):
     match filename.suffix:
         case '.json':
             with filename.open(mode='w', encoding='utf-8') as f:
-                json.dump(c, f)
+                json.dump(config, f, indent=4, sort_keys=False)
         case '.yaml'|'.yml':
             with filename.open(mode='w', encoding='utf-8') as f:
-                yaml.safe_dump(c, f, sort_keys=False)
+                yaml.safe_dump(config, f, sort_keys=False)
         case '.toml':
             with filename.open(mode='w', encoding='utf-8') as f:
-                toml.dump(c, f)
-
-# GLOBAL CONSTANTS
+                toml.dump(config, f)
+    logging.info(f'Loading config from {filename}')

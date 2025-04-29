@@ -65,7 +65,7 @@ if __name__ == "__main__":
             train_dataloader=train_loader,
             valid_dataloader=valid_loader,
             lr_scheduler=lr_scheduler,
-            early_stop=c["train"]["early_stopping"]["enabled"],
+            early_stop="early_stopping" in c["train"],
             last_epoch=finished_epoch,
         )
         dump_config(train_dir / "config.json")
@@ -103,6 +103,9 @@ if __name__ == "__main__":
         input_path = Path(c["predict"]["input"])
         if input_path.is_dir():
             inputs = [filename for filename in input_path.iterdir()]
+            handle.predict(inputs, **c["predict"]["config"])
+        else:
+            inputs = [input_path]
             handle.predict(inputs, **c["predict"]["config"])
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")

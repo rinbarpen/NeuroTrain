@@ -58,15 +58,20 @@ class ISIC2017Dataset(CustomDataset):
         valid_dataset = ISIC2017Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
         test_dataset  = ISIC2017Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
 
-        for dataset, dataset_type in zip((train_dataset, valid_dataset, test_dataset), ('train', 'valid', 'test')):
-            for i, (image, mask) in enumerate(dataset):
-                image_path = base_dir / ISIC2017Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
-                mask_path = base_dir / ISIC2017Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
+        from torch.utils.data import DataLoader
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
+        valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+        test_dataloader  = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+
+        for dataloader, data_dir, dataset_type in zip((train_dataloader, valid_dataloader, test_dataloader), (save_dir, save_dir, save_dir), ('train', 'valid', 'test')):
+            for i, (image, mask) in enumerate(dataloader):
+                image_path = data_dir / ISIC2017Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
+                mask_path = data_dir / ISIC2017Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 mask_path.parent.mkdir(parents=True, exist_ok=True)
 
-                np.save(image_path, image)
-                np.save(mask_path, mask)
+                np.save(image_path, image.numpy())
+                np.save(mask_path, mask.numpy())
                 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:

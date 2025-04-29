@@ -1,6 +1,9 @@
 import logging
 from pathlib import Path
+from torch.utils.data import Dataset
+from typing import Literal
 
+from config import get_config_value
 from utils.dataset.custom_dataset import Betweens
 from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
 from utils.transform import get_transforms
@@ -86,3 +89,42 @@ def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: Betwee
             return chasedb1_dataset.ChaseDB1Dataset.to_numpy(save_dir, base_dir, betweens, transforms=transforms, **kwargs)
         case _:
             logging.warning(f'No target dataset: {dataset_name}')
+
+class ChainedDatasets(Dataset):
+    def __init__(self, datasets: list[Dataset]|Dataset):
+        super(ChainedDatasets, self).__init__()
+
+        if isinstance(datasets, Dataset):
+            self.datasets = [datasets]
+        else:
+            self.datasets = datasets
+
+        self.lens = [len(dataset) for dataset in self.datasets]
+
+    def __getitem__(self, index):
+        dataset_index = 0
+        while index >= self.lens[dataset_index]:
+            index -= self.lens[dataset_index]
+            dataset_index += 1
+        return self.datasets[dataset_index][index]
+
+    def __len__(self):
+        s = 0
+        for i in self.lens:
+            s += i
+        return s
+
+def get_chained_datasets(mode: Literal['train', 'test', 'valid']):
+    c_datasets = get_config_value('datasets')
+
+    def get_dataset(mode, dataset):
+        config = dataset['config'] if 'config' in dataset else {}
+        match mode:
+            case 'train':
+                return get_train_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['train'], **config)
+            case 'test':
+                return get_test_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['test'], **config)
+            case 'valid':
+                return get_valid_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['valid'], **config)
+
+    return ChainedDatasets([get_dataset(mode, dataset) for dataset in c_datasets])
