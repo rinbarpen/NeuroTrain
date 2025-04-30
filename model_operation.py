@@ -61,7 +61,7 @@ class Trainer:
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
         enable_valid_when_training = valid_dataloader is not None
         accumulation_steps = c["train"]["grad_accumulation_steps"]
-        enable_accumulation_step = accumulation_steps <= 0
+        enable_accumulation_step = accumulation_steps > 0
 
         self.model = self.model.to(device)
 
