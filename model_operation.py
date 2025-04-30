@@ -61,6 +61,7 @@ class Trainer:
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
         enable_valid_when_training = valid_dataloader is not None
         accumulation_steps = c["train"]["grad_accumulation_steps"]
+        enable_accumulation_step = accumulation_steps <= 0
 
         self.model = self.model.to(device)
 
@@ -75,55 +76,63 @@ class Trainer:
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
- 
+
+
         with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
                 self.model.train()
                 train_loss = 0.0
 
+                if enable_accumulation_step:
+                    optimizer.zero_grad()
+
                 for i, (inputs, targets) in enumerate(train_dataloader, 1):
                     inputs, targets = inputs.to(device), targets.to(device)
 
+                    sum_loss = 0.0
                     if scaler:
                         device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
                         compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
                         with autocast(device_type, dtype=compute_type):
                             outputs = self.model(inputs)
                         
-                            if accumulation_steps <= 0:
+                            if enable_accumulation_step:
                                 losses = criterion(targets, outputs)
                                 for loss in losses:
                                     scaler.scale(loss).backward()
+                                    sum_loss += loss.item()
                                 scaler.step(optimizer)
                                 scaler.update()
-                                optimizer.zero_grad()
-                            elif accumulation_steps > 0:
+                            else:
                                 losses = criterion(targets, outputs)
                                 for loss in losses:
                                     loss /= accumulation_steps
                                     scaler.scale(loss).backward()
+                                    sum_loss += loss.item()
+                                loss = torch.concat(losses).sum()
                                 if i % accumulation_steps == 0:
                                     scaler.step(optimizer)
                                     scaler.update()
                                     optimizer.zero_grad()
                     else:
                         outputs = self.model(inputs)
-                        if accumulation_steps <= 0:
+                        if enable_accumulation_step:
                             losses = criterion(targets, outputs)
                             for loss in losses:
                                 loss.backward()
+                                sum_loss += loss.item()
                             optimizer.step()
-                            optimizer.zero_grad()
-                        elif accumulation_steps > 0:
+                        else:
                             losses = criterion(targets, outputs)
                             for loss in losses:
                                 loss /= accumulation_steps
                                 loss.backward()
+                                sum_loss += loss.item()
                             if i % accumulation_steps == 0:
                                 optimizer.step()
                                 optimizer.zero_grad()
 
-                    batch_loss = loss.item()
+                    batch_loss = sum_loss
                     train_loss += batch_loss
                     pbar.update()
                     pbar.set_postfix({'batch_loss': batch_loss})
@@ -155,8 +164,11 @@ class Trainer:
 
                             outputs = self.model(inputs)
                             losses = criterion(targets, outputs)
+                            valid_sum_loss = 0.0
+                            for loss in losses:
+                                valid_sum_loss += loss.item()
 
-                            batch_loss = torch.concat(losses).sum().item()
+                            batch_loss = valid_sum_loss
                             valid_loss += batch_loss
                             pbar.update(1)
                             pbar.set_postfix({'valid_batch_loss': batch_loss})
@@ -204,6 +216,16 @@ class Trainer:
                         optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
                         epoch=num_epochs, version=c['run_id'])
                 self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
+
+            if enable_accumulation_step:
+                if i % accumulation_steps != 0:
+                    if scaler:
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
+                    else:
+                        optimizer.step()
+                        optimizer.zero_grad()
 
         self.train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
         if enable_valid_when_training:

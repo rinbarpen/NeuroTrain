@@ -8,7 +8,7 @@ classes = ["Retina"]
 metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 
 [model]
-name = "simple-net"
+name = "unet"
 continue_checkpoint = ""
 continue_ext_checkpoint = ""
 
@@ -56,10 +56,10 @@ shuffle = true
 
 [train]
 batch_size = 1
-epoch = 3
-save_every_n_epoch = 1
+epoch = 40
+save_every_n_epoch = 40
 grad_accumulation_steps = 0 # <= 0 for disabled
-optimizer_type = 'adamw' # sgd, adam, adamw
+optimizer_type = 'adam' # sgd, adam, adamw
 
 [train.optimizer]
 learning_rate = 3e-6

@@ -5,7 +5,7 @@ import os
 
 PYTHON_EXE_PATH = r'D:\Program\Anaconda\envs\py312\python.exe'
 
-config_file = st.text_input('config_file', 'configs/train-template.json')
+config_file = st.text_input('config_file', 'configs/single/train-template.toml')
 ext_args = st.text_input('ext_args', '--help') # arg1;arg2;arg3;...
 
 stdout_container = st.empty()

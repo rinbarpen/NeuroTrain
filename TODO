@@ -2,14 +2,9 @@
 - [ ] Email Alert
 
 Trainer:
- - [ ] Support config for Dataset.to_numpy()
+ - [ ] Support Transforms config for every Dataset
  - [ ] Support Wandb for full-recording and full-alerting
- - [x] Support gradient accumulation steps
-
 
 Analyzer:
  - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
  - [ ] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
-
-Timer:
- - [x] Time cost between two time points
