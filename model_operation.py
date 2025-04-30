@@ -135,7 +135,7 @@ class Trainer:
                     batch_loss = sum_loss
                     train_loss += batch_loss
                     pbar.update()
-                    pbar.set_postfix({'batch_loss': batch_loss})
+                    pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
 
                     targets, outputs = self.postprocess(targets, outputs)
                     self.train_calculator.add_one_batch(
@@ -148,7 +148,7 @@ class Trainer:
                 train_loss /= len(train_dataloader)
                 train_losses.append(train_loss)
                 pbar.update(0)
-                pbar.set_postfix({'epoch_loss': train_loss})
+                pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
 
                 self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
                 self.train_calculator.finish_one_epoch()
@@ -171,7 +171,7 @@ class Trainer:
                             batch_loss = valid_sum_loss
                             valid_loss += batch_loss
                             pbar.update(1)
-                            pbar.set_postfix({'valid_batch_loss': batch_loss})
+                            pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
 
                             targets, outputs = self.postprocess(targets, outputs)
                             self.valid_calculator.add_one_batch(
@@ -181,7 +181,8 @@ class Trainer:
                     valid_loss /= len(valid_dataloader)
                     valid_losses.append(valid_loss)
 
-                    pbar.set_postfix({'valid_epoch_loss': valid_loss})
+                    pbar.update(0)
+                    pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
 
                     self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
                     self.valid_calculator.finish_one_epoch()
