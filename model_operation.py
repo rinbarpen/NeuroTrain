@@ -83,7 +83,7 @@ class Trainer:
                 self.model.train()
                 train_loss = 0.0
 
-                if enable_accumulation_step:
+                if not enable_accumulation_step:
                     optimizer.zero_grad()
 
                 for i, (inputs, targets) in enumerate(train_dataloader, 1):
@@ -96,7 +96,7 @@ class Trainer:
                         with autocast(device_type, dtype=compute_type):
                             outputs = self.model(inputs)
                         
-                            if enable_accumulation_step:
+                            if not enable_accumulation_step:
                                 losses = criterion(targets, outputs)
                                 for loss in losses:
                                     scaler.scale(loss).backward()
@@ -116,7 +116,7 @@ class Trainer:
                                     optimizer.zero_grad()
                     else:
                         outputs = self.model(inputs)
-                        if enable_accumulation_step:
+                        if not enable_accumulation_step:
                             losses = criterion(targets, outputs)
                             for loss in losses:
                                 loss.backward()
