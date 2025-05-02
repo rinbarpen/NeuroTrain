@@ -9,12 +9,12 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR, CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.amp.grad_scaler import GradScaler
 from pathlib import Path
 from PIL import Image 
 from torchsummary import summary
-from fvcore.nn import FlopCountAnalysis
+# from fvcore.nn import FlopCountAnalysis
 
 from config import get_config, get_config_value
 from utils.typed import FilePath, ImageInstance
@@ -52,21 +52,37 @@ def set_seed(seed: int):
 
 def get_train_tools(model: nn.Module):
     c = get_config()
-    match c['train']['optimizer_type'].lower():
+    optimizer_c = c['train']['optimizer']
+    match optimizer_c['type'].lower():
         case 'sgd':
             optimizer = torch.optim.SGD(
-                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'])
+                model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
         case 'adam':
             optimizer = torch.optim.Adam(
-                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'], eps=c['train']['optimizer']['eps'])
+                model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
         case 'adamw':
             optimizer = torch.optim.AdamW(
-                model.parameters(), lr=c['train']['optimizer']['learning_rate'], weight_decay=c['train']['optimizer']['weight_decay'], eps=c['train']['optimizer']['eps'])
+                model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
+
+    if not 'lr_scheduler' in c['train']:
+        scheduler = None
+    else:
+        scheduler_c = c['train']['lr_scheduler']
+        match scheduler_c['type'].lower():
+            case 'step':
+                step_size = scheduler_c['warmup']
+                gamma = scheduler_c.get('gamma', 0.1)
+                scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+            case 'mstep':
+                milestones = scheduler_c['warmup']
+                gamma = scheduler_c.get('gamma', 0.1)
+                scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
 
     return {
         'optimizer': optimizer,
-        'lr_scheduler': LRScheduler(optimizer) if 'lr_scheduler' in c['train'].keys() else None,
-        'scaler': GradScaler() if 'scaler' in c['train'].keys() else None,
+        'lr_scheduler': scheduler,
+        'scaler': GradScaler() if 'scaler' in c['train'] else None,
     }
 
 def get_train_valid_test_dataloader(use_valid=False):
@@ -189,11 +205,11 @@ def image_to_numpy(img: ImageInstance) -> np.ndarray:
     # output shape: (C, H, W) for RGB or (H, W) for gray
     return img_np
 
-def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
-    dummy_input = torch.randn(input_size).to(device)
-    flops = FlopCountAnalysis(model, dummy_input)
-    total_flops = flops.total()
-    return total_flops / 1e9  # Convert to GFLOPs
+# def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
+#     dummy_input = torch.randn(input_size).to(device)
+#     flops = FlopCountAnalysis(model, dummy_input)
+#     total_flops = flops.total()
+#     return total_flops / 1e9  # Convert to GFLOPs
 
 
 def split_image(
@@ -239,3 +255,21 @@ def split_image(
             tile_image.save(output_filename, "PNG")
 
     return tile_images
+
+# freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
+# optimizer_filters = [lambda n: "encoder" not in n, lambda n: "encoder" in n and "clip" not in n]
+# c = {"lr": [None, 0.01]}
+
+# freeze_layers(model, freeze_filter, optimizer_filters, **c)
+# layer_filter: 
+#  layer_name: str [input]
+#  result: bool [output]
+# def freeze_layers(model: nn.Module, freeze_filter, optimizer_filters, **kwargs):
+#     named_params = model.named_parameters()
+#     for n, p in named_params:
+#         if freeze_filter(n) and p.requires_grad:
+#             p.requires_grad = False
+
+#     param_dicts = [{'params': [p for n, p in named_params if optimizer_filter(n) and p.requires_grad], 'lr': kwargs['lr'][i]} for i, optimizer_filter in enumerate(optimizer_filters)]
+#     return param_dicts
+
