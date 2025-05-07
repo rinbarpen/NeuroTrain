@@ -48,9 +48,10 @@ class FPN(nn.Module):
 
         return p2, p3, p4, p5
 
-# 测试模型
-x = torch.randn(1, 3, 224, 224)
-model = FPN()
-outputs = model(x)
-for out in outputs:
-    print(out.shape)  # 输出各个金字塔特征层的尺寸
+if __name__ == '__main__':
+    # 测试模型
+    x = torch.randn(1, 3, 224, 224)
+    model = FPN()
+    outputs = model(x)
+    for out in outputs:
+        print(out.shape)  # 输出各个金字塔特征层的尺寸

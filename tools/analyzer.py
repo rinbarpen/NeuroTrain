@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from utils.util import load_model, load_model_ext, model_gflops, Timer
 from utils.typed import ClassLabelManyScoreDict
+from utils.painter import Plot
+
 
 MODEL_FILE = str|Path
 class AnalyzeParams(BaseModel):
@@ -32,7 +34,7 @@ task:
         test:
             {class}:
                 mean_metrics[.csv|.parquet]
-            mean_metric.png
+            mean_metrics.png
             mean_metrics[.csv|.parquet]
             config[.json|.toml|.yaml]
         train:
@@ -59,8 +61,8 @@ task:
 """
 
 class Analyzer:
-    def __init__(self):
-        pass
+    def __init__(self, result_dir: Path):
+        self.result_dir = result_dir
 
     def __del__(self):
         pass
@@ -94,5 +96,61 @@ class Analyzer:
             elif valid_loss:
                 valid_losses.append(valid_loss)
 
+    def analyze_images(self):
+        train_dir, test_dir = self.result_dir / "train", self.result_dir / "test"
 
+        n = 0
 
+        def file_is_exist(filename: Path):
+            if filename.is_file():
+                n += 1
+                return filename
+            return None
+
+        # train_loss_image = train_dir / "train_epoch_loss.png"
+        # train_epoch_metrics_image = train_dir / "epoch_metrics.png"
+        # train_mean_metrics_image = train_dir / "mean_metrics.png"
+        # valid_loss_image = train_dir / "valid_epoch_loss.png"
+        # test_mean_metrics_image = test_dir / "mean_metrics.png"
+        
+        train_loss_image = file_is_exist(train_dir / "train_epoch_loss.png")
+        train_epoch_metrics_image = file_is_exist(train_dir / "epoch_metrics.png")
+        train_mean_metrics_image = file_is_exist(train_dir / "mean_metrics.png")
+        valid_loss_image = file_is_exist(train_dir / "valid_epoch_loss.png")
+        test_mean_metrics_image = file_is_exist(test_dir / "mean_metrics.png")
+
+        images = []
+        if train_loss_image: 
+            images.append(train_loss_image)
+        if valid_loss_image: 
+            images.append(valid_loss_image)
+        if train_epoch_metrics_image: 
+            images.append(train_epoch_metrics_image)
+        if train_mean_metrics_image: 
+            images.append(train_mean_metrics_image)
+        if test_mean_metrics_image: 
+            images.append(test_mean_metrics_image)
+
+        nrows, ncols = 1, n
+        plot = Plot(nrows, ncols)
+        plot.images(images)
+        plot.save('images_preview.png')
+
+    def _comparative_score_table(self):
+        scores_map = {
+            'model1': {
+                'task1': {
+                    'metric1': {
+                        'score': 'mean_score',
+                        'up': True, # whether the greater score is better or not
+                    },
+                    'metric2': 'mean_score',
+                }, 
+                'task2': {
+                    'metric1': 'mean_score',
+                    'metric2': 'mean_score',
+                }, 
+            },
+        }
+        # if metric is only one, combine the task and metric to "{task}\n{metric}"
+        # the rows are model score, the cols are task with metrics

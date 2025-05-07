@@ -16,24 +16,22 @@ def parse_args():
     # model_parser
     model_parser = parser.add_argument_group(title='Model Options', description='Model options')
     model_parser.add_argument('-m', '--model', type=str, help='Model name')
-    model_parser.add_argument('-mc', '--model_config', type=str, help='Model config')
     # Train
     train_parser = parser.add_argument_group(title='Train', description='Train options')
     train_parser.add_argument('-e', '--epoch', type=int, help='epoch')
     train_parser.add_argument('-lr', '--learning_rate', type=float, help='learning_rate')
-    train_parser.add_argument('--eps', type=float, help='eps')
     train_parser.add_argument('--weight_decay', type=float, help='weight_decay')
-    train_parser.add_argument('--save_every_n_epoch', type=int, required=False, help='save_every_n_epoch')
+    train_parser.add_argument('--save_every_n_epoch', type=int, help='save_every_n_epoch')
     train_parser.add_argument('--grad_accumulation_steps', type=int, help='grad_accumulation_steps')
     ## amp mode: bf16 int8 ..
     # bfloat16, float16, 
     train_parser.add_argument('--amp', type=str, default='none', help='set amp mode: [float16, bfloat16]')
     ## for lr_scheduler
-    train_parser.add_argument('--lr_scheduler', action='store_true', default=False, help='lr_scheduler')
+    train_parser.add_argument('--lr_scheduler', action='store_true', help='lr_scheduler')
     train_parser.add_argument('--warmup', type=int, help='warmup epoch')
     train_parser.add_argument('--warmup_lr', type=float, help='warmup learning_rate')
     ## for early_stopping
-    train_parser.add_argument('--early_stopping', action='store_true', default=False, help='early_stopping')
+    train_parser.add_argument('--early_stopping', action='store_true', help='early_stopping')
     train_parser.add_argument('--patience', type=int, help='patience')
     ## common
     train_parser.add_argument('-b', '--batch_size', type=int, help='batch_size')
@@ -44,9 +42,9 @@ def parse_args():
     predict_parser = parser.add_argument_group(title='Predict Options', description='Predict options')
     predict_parser.add_argument('-i', '--input', type=str, help='input')
     # Common
-    parser.add_argument('--wandb', action='store_true', default=False, help='setup wandb')
-    parser.add_argument('--verbose', action='store_true', default=True, help='setup verbose mode')
-    parser.add_argument('--debug', action='store_true', default=False, help='setup debug mode')
+    parser.add_argument('--wandb', action='store_true', help='setup wandb')
+    parser.add_argument('--verbose', action='store_true', help='setup verbose mode')
+    parser.add_argument('--debug', action='store_true', help='setup debug mode')
     parser.add_argument('-c', '--config', type=str, help='configuration of Train or Test or Predict')
     # parser.add_argument('--dump', default=False)
     parser.add_argument('--seed', type=int, help='seed of Train or Test or Predict')
@@ -59,7 +57,7 @@ def parse_args():
     parser.add_argument('--continue_checkpoint', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
 
-    parser.add_argument('--data_cacher', action='store_true', default=False, help='tool: data cacher')
+    parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     
     args = parser.parse_args()
     if args.data_cacher:
@@ -84,12 +82,9 @@ def parse_args():
         CONFIG['private']['log']['debug'] = args.debug
 
     if args.data:
-        CONFIG['dataset']['name'] = args.data
-    if args.data_dir:
-        CONFIG['dataset']['path'] = args.data_dir
+        CONFIG['dataset'] = [{"name": args.data, "base_dir": args.data_dir}]
     if args.num_workers:
-        CONFIG['dataset']['num_workers'] = args.num_workers
-
+        CONFIG['dataloader']['num_workers'] = args.num_workers
     if args.continue_checkpoint:
         checkpoint_filename = args.continue_checkpoint
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
@@ -97,12 +92,6 @@ def parse_args():
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
     if args.model:
         CONFIG['model']['name'] = args.model
-        if args.model_config: # n_channels=1; n_classes=1
-            model_config = {}
-            for arg in args.model_config.split(';'):
-                k, v = arg.split('=', 1)
-                model_config = {k.strip(): v.strip()}
-            CONFIG['model']['config'] = model_config
     if args.train:
         if args.batch_size:
             CONFIG['train']['batch_size'] = args.batch_size
@@ -110,24 +99,25 @@ def parse_args():
             CONFIG['train']['epoch'] = args.epoch
         if args.grad_accumulation_steps:
             CONFIG['train']['grad_accumulation_steps'] = args.grad_accumulation_steps
-        if args.eps:
-            CONFIG['train']['optimizer']['eps'] = args.eps
         if args.learning_rate:
             CONFIG['train']['optimizer']['learning_rate'] = args.learning_rate
+        if args.weight_decay:
+            CONFIG['train']['optimizer']['weight_decay'] = args.weight_decay
         if args.save_every_n_epoch:
             CONFIG['train']['save_every_n_epoch'] = args.save_every_n_epoch
         if args.weight_decay:
             CONFIG['train']['optimizer']['weight_decay'] = args.weight_decay
         if args.amp != 'none':
-            CONFIG['train']['scaler']['enabled'] = True
+            CONFIG['train']['scaler'] = {}
             CONFIG['train']['scaler']['compute_type'] = args.amp
             print('set up amp mode: {}'.format(args.amp))
         if args.early_stopping:
-            CONFIG['train']['early_stopping']['enabled'] = True
-            CONFIG['train']['early_stopping']['patience'] = args.patience
-            print('set up early_stopping with patience={}'.format(args.patience))
+            CONFIG['train']['early_stopping'] = {}
+            if args.patience:
+                CONFIG['train']['early_stopping']['patience'] = args.patience
+                print('set up early_stopping with patience={}'.format(args.patience))
         if args.lr_scheduler:
-            CONFIG['train']['lr_scheduler']['enabled'] = True
+            CONFIG['train']['lr_scheduler'] = {}
             if args.warmup:
                 CONFIG['train']['lr_scheduler']['warmup'] = args.warmup
             if args.warmup_lr:

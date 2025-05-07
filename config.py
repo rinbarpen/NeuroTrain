@@ -14,6 +14,8 @@ ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 ALL_STYLES = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
 
+PRETRAINED_MODEL_DIR = 'data/cache/pretrained'
+
 CONFIG: dict = {}
 
 def is_verbose():

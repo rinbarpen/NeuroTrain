@@ -8,10 +8,9 @@ from torch import nn
 import torch.nn.functional as F
 import torch.nn.init as init
 
-class ACModule(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, padding_mode='zeros', deploy=False,
-                 use_affine=True, reduce_gamma=False, gamma_init=None):
-        super(ACModule, self).__init__()
+class ACConv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, padding_mode='zeros', deploy=True, use_affine=True, reduce_gamma=True, gamma_init=None):
+        super(ACConv, self).__init__()
         self.deploy = deploy
         if deploy:
             self.fused_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=(kernel_size,kernel_size), stride=stride,

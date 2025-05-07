@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ..conv.PSPModule import PSPModule
-from ..conv.ACModule import ACModule
+from ..conv.ACConv import ACConv
 from ..conv.DWConv import get_dwconv, get_dwconv_layer2d
 from ..embedding import PatchEmbeddingWithPE
 
@@ -36,7 +36,7 @@ class LightDoubleConv(nn.Module):
             get_dwconv_layer2d(in_channels, out_channels, kernel_size=3),
             nn.ReLU(inplace=True),
         ) if use_dwconv else nn.Sequential(
-            ACModule(in_channels, out_channels, kernel_size=3, padding=1),
+            ACConv(in_channels, out_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
         )
         self.conv2 = nn.Sequential(
