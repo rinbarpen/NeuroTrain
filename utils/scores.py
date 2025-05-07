@@ -8,6 +8,7 @@ from config import get_config
 from utils.typed import *
 from utils.painter import Plot
 from utils.data_saver import DataSaver
+from utils.typed import convert_to_ClassLabelManyScoreDict
 
 # y_true, y_pred: (B, C, X)
 def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
@@ -282,7 +283,7 @@ class ScoreCalculator:
     def record_epochs(self, output_dir: Path, n_epochs: int):
         self._prepare(output_dir)
 
-        self.saver.save_all_metric_by_class(self.epoch_metric_label_scores)
+        self.saver.save_all_metric_by_class(convert_to_ClassLabelManyScoreDict(self.epoch_metric_label_scores))
         self.saver.save_mean_metric_by_class(self.mean_record)
         self.saver.save_mean_metric(self.metric_record)
 
@@ -291,7 +292,13 @@ class ScoreCalculator:
 
         # paint metrics curve for all classes in one figure
         n = len(self.metric_labels)
-        nrows, ncols = ((n + 2) // 3, 3) if n > 3 else (1, n)
+        if n > 4:
+            nrows, ncols = (n + 2) // 3, 3
+        elif n == 4:
+            nrows, ncols = 2, 2
+        else:
+            nrows, ncols = 1, n
+
         plot = Plot(nrows, ncols)
         for metric in self.metric_labels:
             plot.subplot().many_epoch_metrics(n_epochs, self.epoch_metric_label_scores[metric], self.class_labels, title=metric).complete()

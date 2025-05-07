@@ -59,13 +59,11 @@ batch_size = 1
 epoch = 3
 save_every_n_epoch = 1
 grad_accumulation_steps = 0 # <= 0 for disabled
-optimizer_type = 'adamw' # sgd, adam, adamw
 
 [train.optimizer]
 type = 'adam' # sgd, adam, adamw
 learning_rate = 3e-6
 weight_decay = 1e-8
-eps = 1e-8
 
 # [train.lr_scheduler]
 # type = 'step'

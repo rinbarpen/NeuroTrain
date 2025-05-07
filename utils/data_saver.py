@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from pathlib import Path
 
-from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict, MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict)
+from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict, MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict, ClassMetricManyScoreDict)
 
 # sync mode
 class _DataSaver:
@@ -41,7 +41,7 @@ class _DataSaver:
             df = pd.DataFrame({k: [v] for k, v in metric_mean.items()})
             self._save_dataframe(df, csv_filename, parquet_filename)
 
-    def save_all_metric_by_class(self, class_metric_all_score: ClassLabelManyScoreDict):
+    def save_all_metric_by_class(self, class_metric_all_score: ClassMetricManyScoreDict):
         for class_label, metric_all in class_metric_all_score.items():
             csv_filename, parquet_filename = self._get_filenames(
                 f"{class_label}/all_metric"
@@ -116,7 +116,7 @@ class DataSaver:
         else:
             self.saver.save_mean_metric_by_class(class_metric_mean_score)
 
-    def save_all_metric_by_class(self, class_metric_all_score: ClassLabelManyScoreDict):
+    def save_all_metric_by_class(self, class_metric_all_score: ClassMetricManyScoreDict):
         if self.async_mode:
             self.executor.submit(
                 self.saver.save_all_metric_by_class, class_metric_all_score

@@ -1,8 +1,14 @@
-- [ ] Fixup to dump Yaml configuration
 - [ ] Email Alert
+- [ ] UV support
 
 Trainer:
+ - [ ] Record and Show the inference time in one batch and one turn and GLOPS, Parameters after training
+ - [ ] Support custom Metrics to record and draw and infinite color styles 
+ - [ ] Support Painter (nrows, ncols) to be assigned automatically
  - [ ] Support Transforms config for every Dataset
+ - [ ] Save all info while training 
+ - [ ] Optimize the train of Trainer
+ - [ ] Support recovery(full) from any last task 
  - [ ] Support Wandb for full-recording and full-alerting
 
 Analyzer:
