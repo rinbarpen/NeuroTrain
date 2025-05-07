@@ -266,19 +266,11 @@ def split_image(
 # layer_filter: 
 #  layer_name: str [input]
 #  result: bool [output]
-<<<<<<< HEAD
 def freeze_layers(model: nn.Module, freeze_filter, optimizer_filters, **kwargs):
     named_params = model.named_parameters()
     for n, p in named_params:
         if freeze_filter(n) and p.requires_grad:
             p.requires_grad = False
-=======
-# def freeze_layers(model: nn.Module, freeze_filter, optimizer_filters, **kwargs):
-#     named_params = model.named_parameters()
-#     for n, p in named_params:
-#         if freeze_filter(n) and p.requires_grad:
-#             p.requires_grad = False
->>>>>>> feature/multigpu
 
 #     param_dicts = [{'params': [p for n, p in named_params if optimizer_filter(n) and p.requires_grad], 'lr': kwargs['lr'][i]} for i, optimizer_filter in enumerate(optimizer_filters)]
 #     return param_dicts
