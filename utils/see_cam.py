@@ -1,13 +1,18 @@
 from pathlib import Path
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget, SemanticSegmentationTarget
+from pytorch_grad_cam import GradCAM, GradCAMPlusPlus
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget, SemanticSegmentationTarget, SoftmaxOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from torchvision.models import resnet50
+from torchvision.models import resnet50, vgg19
+from timm import get_pretrained_cfg, create_model
+import torch
 from torch import nn
 import numpy as np
-import torch
 import cv2
 from PIL import Image
+from torchvision import transforms
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import Literal
 
 from utils.transform import build_image_transforms
 from models.sample.unet import UNet
@@ -93,17 +98,21 @@ class ImageHeatMapGenerator():
         self.target_layers = target_layers
         self.targets = targets
     
-    def check(self, image: Image, transform_fn):
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def check(self, image: Image.Image, transform_fn: transforms.Compose, is_rgb=True):
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        H, W, C = image.shape
+        if is_rgb:
+            image = image.convert('RGB')
+        else:
+            image = image.convert('L')
+        H, W = image.size
+
         input_tensor = transform_fn(image).unsqueeze(0)
-        image_np = np.array(image) / 255.0
+        image_np = np.array(image).astype(np.float32)
 
         self.model = self.model.to(device)
         input_tensor = input_tensor.to(device)
 
-        is_rgb = (C == 3)
         with GradCAM(self.model, target_layers=self.target_layers) as cam: 
             grayscale_cam = cam(input_tensor, targets=self.targets, eigen_smooth=False)[0, :]
             grayscale_cam = cv2.resize(grayscale_cam, (W, H))
@@ -112,5 +121,37 @@ class ImageHeatMapGenerator():
             heatmap_image = Image.fromarray(cam_image, mode='RGB' if is_rgb else 'L')
         return heatmap_image
 
-    def check_batch(self, images: list[Image], transform_fn):
-        return [self.check(image, transform_fn) for image in images]
+    def check_batch(self, images: list[Image.Image], transform_fn: transforms.Compose, is_rgb=True):
+        return [self.check(image, transform_fn, is_rgb=is_rgb) for image in images]
+
+    # image = Image.open(img_path).convert('L' or 'RGB')
+    def check_transformer_block_attention_heatmap(self, image: Image.Image, attn_scores: torch.Tensor, patch_size: tuple[int, int]|int, alpha: float = 0.5, head_type: Literal['mean', 'max']='mean'):
+        original_image_size = image.size # (H, W)
+        # attention
+        # attn_scores is (B, H, N, N)
+        if head_type == 'mean':
+            attn_scores = attn_scores.mean(dim=(0, 1))
+        elif head_type == 'max':
+            attn_scores = attn_scores.max(dim=(0, 1))
+
+        if isinstance(patch_size, int):
+            patch_size = (patch_size, patch_size) # (h, w)
+
+        attn_map = attn_scores.reshape(patch_size)
+        attn_map = (attn_map - attn_map.min()) / (attn_map.max() - attn_map.min())
+        attn_map = cv2.resize(attn_map, original_image_size, interpolation=cv2.INTER_LINEAR)
+
+        # heatmap
+        colormap = plt.get_cmap("viridis")
+        heatmap = colormap(attn_map)
+        heatmap = (heatmap[:, :, :3] * 255).astype(np.uint8)
+        image = np.array(image, dtype=np.uint8)
+        fused_image = cv2.addWeighted(heatmap, alpha, image, 1.0 - alpha, 0, dtype=np.uint8)
+        # plt.figure(figsize=(6, 6))
+        # plt.imshow(image)
+        # plt.imshow(attn_map, cmap="viridis", alpha=alpha)
+        # plt.axis("off")
+        # plt.title("Attention Map Overlay")
+        # plt.show()
+
+        return fused_image, heatmap # (fused, attn_heatmap) all with uint8

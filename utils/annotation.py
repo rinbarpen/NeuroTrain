@@ -7,7 +7,7 @@ def doc(desc: str):
         return f
     return decorator
 
-def buildup(desc: str):
+def buildin(desc: str):
     def decorator(f):
         f.__doc__ = desc
         return f

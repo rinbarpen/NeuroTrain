@@ -17,7 +17,7 @@ class InceptionAttnConv(nn.Module):
         super(InceptionAttnConv, self).__init__()
 
         self.branch1 = nn.Sequential(
-            get_dwconv_layer2d(n_channels, n_channels, 3, 1),
+            get_dwconv_layer2d(n_channels, n_channels, kernel_size=3, stride=1, bias=True),
             nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
         )
         self.branch2 = nn.Sequential(
@@ -25,9 +25,9 @@ class InceptionAttnConv(nn.Module):
             nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
         )
         self.branch3 = nn.Sequential(
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
             CBAM(n_channels, reduction=16),
-            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
-            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=1),
         )
         self.bn1 = nn.BatchNorm2d(4 * n_channels)
         self.back = nn.Sequential(
