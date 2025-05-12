@@ -225,19 +225,20 @@ class CrossVisionTransformerEncoder(nn.Module):
 #          None -> nn.Parameter(torch.randn(1))
 #   
 class RecoveryNet(nn.Module):
-    def __init__(self, mode: str=Literal['small', 'normal', 'large', 's', 'n', 'l'], image_size: int|tuple[int, int]=224, patch_size: int|tuple[int, int]=14):
+    def __init__(self, mode: str=Literal['small', 'normal', 'large', 's', 'n', 'l'], image_size: int|tuple[int, int]=224, patch_size: int|tuple[int, int]=14, *, gate_or_linear='gate'):
         super(RecoveryNet, self).__init__()
 
         image_size = pair(image_size)
         patch_size = pair(patch_size)
 
+        max_num_patch = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
         encoder_config = {
             'n_layers': 4,
             'n_channels': 3,
             'embed_dim': 568,
             'num_heads': 8,
             'patch_size': patch_size,
-            'max_num_patch': (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1]),
+            'max_num_patch': max_num_patch,
             'r': 4,
         }
         if mode.startswith('s'):
@@ -274,11 +275,28 @@ class RecoveryNet(nn.Module):
             decoder_config['n_layers'] = encoder_config['n_layers'] * 2
             decoder_config['max_num_patch'] = encoder_config['max_num_patch'] * 4
             self.decoder = CrossVisionTransformerEncoder(**decoder_config)
+        
+        if gate_or_linear == 'gate':
+            self.gate = nn.Parameter(torch.randn(1))
+        elif gate_or_linear == 'linear':
+            self.gate = nn.Linear(max_num_patch * 5, max_num_patch * 4)
+        
+        self.config = {}
+        self.config['gate_or_linear'] = gate_or_linear
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
-        y1, attn1 = self.encoder1(x)
-        y1 = self.up1(y1)
-        y2, attn2 = self.encoder2(y1)
-        y2 = self.up2(y2)
-        o, o_attn = self.decoder(y2)
+        x1, attn1 = self.encoder1(x)
+        o1 = self.up1(x1)
+        x2, attn2 = self.encoder2(o1)
+        o2 = self.up2(x2)
+
+        x3 = torch.concat([x1, x2], dim=1)
+        x3 = self._gate(x3)
+        o, o_attn = self.decoder(x3, o2)
         return o, (attn1, attn2, o_attn)
+
+    def _gate(self, x):
+        if self.config['gate_or_linear'] == 'gate':
+            return self.gate * x
+        elif self.config['gate_or_linear'] == 'linear':
+            return self.gate(x)
