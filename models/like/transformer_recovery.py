@@ -299,4 +299,7 @@ class RecoveryNet(nn.Module):
         if self.config['gate_or_linear'] == 'gate':
             return self.gate * x
         elif self.config['gate_or_linear'] == 'linear':
-            return self.gate(x)
+            x = x.transpose(1, 2)
+            x = self.gate(x)
+            x = x.transpose(1, 2)
+            return x

@@ -382,8 +382,10 @@ class Tester:
         metric_labels = c['metrics']
 
         test_mean_scores = self.calculator.metric_record
-        test_metric_class_scores = self.calculator.mean_record
-        
+        test_std_scores = self.calculator.metric_record_std
+        test_metric_class_mean_scores = self.calculator.mean_record
+        test_metric_class_std_scores = self.calculator.std_record
+
         styles = ALL_STYLES
         console = Console()
 
@@ -392,14 +394,14 @@ class Tester:
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
         for class_label in class_labels:
-            table.add_row("Test/" + class_label, *[str(test_metric_class_scores[class_label][metric]) for metric in metric_labels])
+            table.add_row("Test/" + class_label, *[str(test_metric_class_mean_scores[class_label][metric]) + '±' + test_metric_class_std_scores[class_label][metric] for metric in metric_labels])
         console.print(table)
 
         table = Table(title='Summary of Metric(Test)')
         table.add_column("Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        table.add_row("Test", *[str(score) for score in test_mean_scores.values()])
+        table.add_row("Test", *[str(mean) + '±' + str(std) for mean, std in zip(test_mean_scores.values(), test_std_scores.values())])
         console.print(table)
 
 

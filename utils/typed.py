@@ -1,6 +1,6 @@
-from typing import List, Literal, Union, Dict, TypedDict
+from typing import List, Literal, Union, Dict, TypedDict, Set
 import numpy as np
-# from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 
 from pathlib import Path
 from PIL import Image
@@ -30,69 +30,99 @@ MetricLabelArgminDict = Dict[MetricLabel, ClassLabel]
 
 class MetricAfterDict(TypedDict):
     mean: MetricLabelOneScoreDict
+    std: MetricLabelOneScoreDict
     argmax: MetricLabelArgmaxDict
     argmin: MetricLabelArgminDict
 
-class MetricClassUnit(TypedDict):
-    metric_label: str
-    class_label: str
-    scores: List[FLOAT]
+# class MetricClassUnit(BaseModel):
+#     metric_label: str = Field(default=None)
+#     class_label: str = Field(default=None)
+#     scores: List[FLOAT] = Field(default=[])
 
-    @staticmethod
-    def create(metric_label: str, class_label: str, scores: list[FLOAT]):
-        return MetricClassUnit(metric_label=metric_label, class_label=class_label, scores=scores)
+#     @staticmethod
+#     def create(metric_label: str, class_label: str, scores: list[FLOAT]):
+#         return MetricClassUnit(metric_label=metric_label, class_label=class_label, scores=scores)
 
-    def mean(self) -> FLOAT:
-        return np.mean(self.scores)
-    def argmax(self) -> tuple[FLOAT, int]:
-        index = np.argmax(self.scores)
-        return self.scores[index], index
-    def argmin(self) -> tuple[FLOAT, int]:
-        index = np.argmin(self.scores)
-        return self.scores[index], index
+#     def append(self, scores: FLOAT|list[FLOAT]):
+#         if isinstance(scores, FLOAT):
+#             scores = [scores]
+#         self.scores.extend(scores)
 
-class MetricClassMap(TypedDict):
-    units: list[MetricClassUnit]
+#     def mean(self) -> FLOAT:
+#         return np.mean(self.scores)
+#     def std(self) -> FLOAT:
+#         return np.std(self.scores)
+#     def argmax(self) -> tuple[FLOAT, int]:
+#         index = np.argmax(self.scores)
+#         return self.scores[index], index
+#     def argmin(self) -> tuple[FLOAT, int]:
+#         index = np.argmin(self.scores)
+#         return self.scores[index], index
 
-    def add(self, metric_label: str, class_label: str, scores: list[FLOAT]):
-        unit = MetricClassUnit(metric_label=metric_label, class_label=class_label, scores=scores)
-        self.units.append(unit)
+# class MetricClassMap(BaseModel):
+#     units: List[MetricClassUnit]
+#     metric_labels: Set[str] = set()
+#     class_labels: Set[str] = set()
 
-    def find(self, metric_label: str, class_label: str) -> list[FLOAT] | None:
-        for unit in self.units:
-            if unit.metric_label == metric_label and unit.class_label == class_label:
-                return unit.scores
-        return None
+#     def add(self, metric_label: str, class_label: str, scores: list[FLOAT]|FLOAT):
+#         for unit in self.units:
+#             if unit.metric_label == metric_label and unit.class_label == class_label:
+#                 unit.append(scores)
+#         else:
+#             unit = MetricClassUnit.create(metric_label=metric_label, class_label=class_label, scores=scores)
+#             self.units.append(unit)
 
-    def mean_by_metric(self, metric_label: str) -> FLOAT:
-        x = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
-        return np.mean(x)
-    def argmax_by_metric(self, metric_label: str) -> tuple[str, int]:
-        class_labels = [unit.class_label for unit in self.units if unit.metric_label == metric_label]
-        mean_scores = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
-        index = np.argmax(mean_scores)
-        return class_labels[index], index
-    def argmin_by_metric(self, metric_label: str) -> tuple[str, int]:
-        class_labels = [unit.class_label for unit in self.units if unit.metric_label == metric_label]
-        mean_scores = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
-        index = np.argmin(mean_scores)
-        return class_labels[index], index
-    def mean_all_by_metric(self) -> MetricLabelOneScoreDict:
-        metric_labels = set([unit.metric_label for unit in self.units])
-        return {metric_label: self.mean_by_metric(metric_label) for metric_label in metric_labels}
-    def argmax_all_by_metric(self) -> MetricLabelArgmaxDict:
-        metric_labels = set([unit.metric_label for unit in self.units])
-        return {metric_label: self.argmax_by_metric(metric_label)[0] for metric_label in metric_labels}
-    def argmin_all_by_metric(self) -> MetricLabelArgminDict:
-        metric_labels = set([unit.metric_label for unit in self.units])
-        return {metric_label: self.argmin_by_metric(metric_label)[0] for metric_label in metric_labels}
+#         self.metric_labels.add(metric_label)
+#         self.class_labels.add(class_label)
 
-    def metric_after_dict(self) -> MetricAfterDict:
-        return {
-            'mean': self.mean_all_by_metric(),
-            'argmax': self.argmax_all_by_metric(),
-            'argmin': self.argmin_all_by_metric(),
-        }
+#     def get(self, metric_label: str, class_label: str) -> list[FLOAT] | None:
+#         for unit in self.units:
+#             if unit.metric_label == metric_label and unit.class_label == class_label:
+#                 return unit
+#         return None
+
+#     def mean_by_metric(self, metric_label: str) -> FLOAT:
+#         x = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
+#         return np.mean(x)
+#     def std_by_metric(self, metric_label: str) -> FLOAT:
+#         x = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
+#         return np.std(x)
+#     def mean_std_by_metric(self, metric_label: str) -> FLOAT:
+#         x = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
+#         return np.mean(x), np.std(x)
+#     def argmax_by_metric(self, metric_label: str) -> tuple[str, int]:
+#         class_labels = [unit.class_label for unit in self.units if unit.metric_label == metric_label]
+#         mean_scores = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
+#         index = np.argmax(mean_scores)
+#         return class_labels[index], index
+#     def argmin_by_metric(self, metric_label: str) -> tuple[str, int]:
+#         class_labels = [unit.class_label for unit in self.units if unit.metric_label == metric_label]
+#         mean_scores = [unit.mean() for unit in self.units if unit.metric_label == metric_label]
+#         index = np.argmin(mean_scores)
+#         return class_labels[index], index
+#     def mean_all_by_metric(self) -> MetricLabelOneScoreDict:
+#         # metric_labels = set([unit.metric_label for unit in self.units])
+#         return {metric_label: self.mean_by_metric(metric_label) for metric_label in self.metric_labels}
+#     def std_all_by_metric(self) -> MetricLabelOneScoreDict:
+#         # metric_labels = set([unit.metric_label for unit in self.units])
+#         return {metric_label: self.std_by_metric(metric_label) for metric_label in self.metric_labels}
+#     def mean_std_all_by_metric(self) -> MetricLabelOneScoreDict:
+#         # metric_labels = set([unit.metric_label for unit in self.units])
+#         return {metric_label: self.mean_std_by_metric(metric_label) for metric_label in self.metric_labels}
+#     def argmax_all_by_metric(self) -> MetricLabelArgmaxDict:
+#         # metric_labels = set([unit.metric_label for unit in self.units])
+#         return {metric_label: self.argmax_by_metric(metric_label)[0] for metric_label in self.metric_labels}
+#     def argmin_all_by_metric(self) -> MetricLabelArgminDict:
+#         # metric_labels = set([unit.metric_label for unit in self.units])
+#         return {metric_label: self.argmin_by_metric(metric_label)[0] for metric_label in self.metric_labels}
+
+#     def metric_after_dict(self) -> MetricAfterDict:
+#         return {
+#             'mean': self.mean_all_by_metric(),
+#             'std': self.std_all_by_metric(),
+#             'argmax': self.argmax_all_by_metric(),
+#             'argmin': self.argmin_all_by_metric(),
+#         }
 
 def create_ClassLabelOneScoreDict(class_labels: ClassLabelsList, 
                                   default_score: FLOAT=0.0) -> ClassLabelOneScoreDict:
@@ -122,6 +152,7 @@ def create_ClassMetricManyScoreDict(metric_labels: MetricLabelsList,
 def create_MetricAfterDict(metric_labels: MetricLabelsList) -> MetricAfterDict:
     return {
         'mean': create_MetricLabelOneScoreDict(metric_labels),
+        'std': create_MetricLabelOneScoreDict(metric_labels),
         'argmax': {metric: '' for metric in metric_labels},
         'argmin': {metric: '' for metric in metric_labels},
     }
