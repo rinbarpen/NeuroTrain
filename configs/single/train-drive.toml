@@ -59,9 +59,9 @@ batch_size = 1
 epoch = 40
 save_every_n_epoch = 40
 grad_accumulation_steps = 0 # <= 0 for disabled
-optimizer_type = 'adam' # sgd, adam, adamw
 
 [train.optimizer]
+type = 'adam'
 learning_rate = 3e-6
 weight_decay = 1e-8
 eps = 1e-8

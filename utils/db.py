@@ -3,6 +3,8 @@ import os.path
 import numpy as np
 from sqlmodel import SQLModel, Session, select, Field, create_engine, delete
 from typing import Literal
+from utils.typed import FilePath
+from pathlib import Path
 
 ScoreLiteral = Literal['all', 'mean', 'std', 'mean|std']
 
@@ -15,11 +17,11 @@ class Score(SQLModel, table=True):
     score: float = Field()
 
 class ScoreDB:
-    def __init__(self, filepath: str):
-        self.sqlite_filepath = filepath
-        self.sqlite_url = f'sqlite:///{self.sqlite_filepath}'
+    def __init__(self, filepath: FilePath):
+        self.sqlite_filepath = Path(filepath)
+        self.sqlite_url = f'sqlite:///{self.sqlite_filepath.absolute()}'
         self.engine = create_engine(self.sqlite_url)
-        if not os.path.exists(filepath):
+        if not self.sqlite_filepath.exists():
             SQLModel.metadata.create_all(self.engine)
 
     def add(self, metric_label: str, class_label: str, scores: list[float]|float):

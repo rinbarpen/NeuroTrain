@@ -97,7 +97,7 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray,
            labels: ClassLabelsList, metric_labels: MetricLabelsList, 
            *, class_axis: int=1, average: str='binary'):
     result: MetricClassOneScoreDict = create_MetricClassOneScoreDict(metric_labels, labels)
-    result_after: MetricAfterDict = create_MetricAfterDict(labels)
+    result_after: MetricAfterDict = create_MetricAfterDict(metric_labels)
 
     MAP = {
         'iou': iou_score,
@@ -356,20 +356,16 @@ class ScoreCalculator:
         self.is_prepared = True
 
 from utils.db import ScoreDB
-import os.path
-from shutil import copyfile
-import uuid
-from copy import deepcopy
+from utils.typed import FilePath
 class _ScoreCalculator:
-    def __init__(self, db_filepath: str, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver, epoch_mode=False):
+    def __init__(self, db_filepath: FilePath, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver, epoch_mode=False):
         self.logger = logger or logging.getLogger()
         self.saver = saver
         self.class_labels = class_labels
         self.metric_labels = metric_labels
-        self.is_prepared = False
         self.epoch_mode = epoch_mode
 
-        self.temp_db = ScoreDB(f"TEMP/{uuid.uuid1()}.db")
+        self.temp_db = ScoreDB("TEMP/temp.db")
         self.db = ScoreDB(db_filepath)
 
     def finish_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
@@ -387,11 +383,12 @@ class _ScoreCalculator:
 
     def finish_one_epoch(self):
         scores = self.temp_db.metric_class_scores(self.metric_labels, self.class_labels)
-        self.temp_db.clear()
         for metric_label in self.metric_labels:
             for class_label in self.class_labels:
                 score = np.mean(scores[metric_label][class_label])
                 self.db.add(metric_label, class_label, score)
+        self.temp_db.clear()
+        return scores
 
     def record_batches(self, output_dir: Path):
         mean_metrics_image = output_dir / "mean_metrics.png"

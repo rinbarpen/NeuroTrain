@@ -648,13 +648,11 @@ class Plot:
 
     def save(self, path: Path):
         self._setup_params()
-        path.mkdir(parents=True, exist_ok=True)
         plt.savefig(path)
         plt.close()
 
     def save_and_show(self, path: Path):
         self._setup_params()
-        path.mkdir(parents=True, exist_ok=True)
         plt.savefig(path)
         plt.show()
 

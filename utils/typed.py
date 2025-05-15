@@ -158,42 +158,60 @@ def create_MetricAfterDict(metric_labels: MetricLabelsList) -> MetricAfterDict:
     }
 
 def convert_to_ClassLabelManyScoreDict(data: MetricClassManyScoreDict) -> ClassMetricManyScoreDict:
-    metric_labels = data.keys()
-    class_labels = data[metric_labels[0]].keys()
-    
-    r = {class_label: {metric_label: data[metric_label][class_label] for metric_label in metric_labels} for class_label in class_labels}
-    return r
+    rdata = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label] = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label][metric] = scores
+    return rdata
 def convert_to_MetricClassManyScoreDict(data: ClassMetricManyScoreDict) -> MetricClassManyScoreDict:
-    class_labels = data.keys()
-    metric_labels = data[class_labels[0]].keys()
-    
-    r = {metric_label: {class_label: data[metric_label][class_label] for class_label in class_labels} for metric_label in metric_labels}
-    return r
+    rdata = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label] = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label][metric] = scores
+    return rdata
 def convert_to_ClassLabelOneScoreDict(data: MetricClassOneScoreDict) -> ClassMetricOneScoreDict:
-    metric_labels = data.keys()
-    class_labels = data[metric_labels[0]].keys()
-    
-    r = {class_label: {metric_label: data[metric_label][class_label] for metric_label in metric_labels} for class_label in class_labels}
-    return r
+    rdata = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label] = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label][metric] = scores
+    return rdata
 def convert_to_MetricClassOneScoreDict(data: ClassMetricOneScoreDict) -> MetricClassOneScoreDict:
-    class_labels = data.keys()
-    metric_labels = data[class_labels[0]].keys()
-    
-    r = {metric_label: {class_label: data[metric_label][class_label] for class_label in class_labels} for metric_label in metric_labels}
-    return r
+    rdata = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label] = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label][metric] = scores
+    return rdata
 
 def mean_from_ClassLabelOneScoreDict(data: ClassMetricManyScoreDict) -> ClassMetricOneScoreDict:
-    metric_labels = data.keys()
-    class_labels = data[metric_labels[0]].keys()
-    
-    r = {class_label: {metric_label: np.mean(data[metric_label][class_label]) for metric_label in metric_labels} for class_label in class_labels}
-    return r
+    rdata = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label] = {}
+    for metric, class_scores in data.items():
+        for label, scores in class_scores.items():
+            rdata[label][metric] = np.mean(scores)
+    return rdata
 def mean_from_MetricClassOneScoreDict(data: MetricClassManyScoreDict) -> MetricClassOneScoreDict:
-    class_labels = data.keys()
-    metric_labels = data[class_labels[0]].keys()
-    
-    r = {metric_label: {class_label: np.mean(data[metric_label][class_label]) for class_label in class_labels} for metric_label in metric_labels}
-    return r
+    rdata = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label] = {}
+    for label, metric_scores in data.items():
+        for metric, scores in metric_scores.items():
+            rdata[label][metric] = np.mean(scores)
+    return rdata
 
 # def get_MetricAfterDict(data: MetricClassManyScoreDict) -> MetricAfterDict:
 #     r = {

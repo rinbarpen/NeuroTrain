@@ -265,19 +265,19 @@ class Trainer:
             table.add_column(metric, justify="center", style=style)
         
         for class_label in class_labels:
-            table.add_row("Train/" + class_label, *[str(train_metric_class_scores[class_label][metric]) for metric in metric_labels])
+            table.add_row("Train/" + class_label, *[f'{train_metric_class_scores[class_label][metric]:.3f}' for metric in metric_labels])
         if valid_metric_class_scores:
             for class_label in class_labels:
-                table.add_row("Valid/" + class_label, *[str(valid_metric_class_scores[class_label][metric]) for metric in metric_labels])
+                table.add_row("Valid/" + class_label, *[f'{valid_metric_class_scores[class_label][metric]:.3f}' for metric in metric_labels])
         console.print(table)
 
         table = Table(title='Summary of Metric(Train)')
         table.add_column("Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        table.add_row("Train", *[str(score) for score in train_mean_scores.values()])
+        table.add_row("Train", *[f'{score:.3f}' for score in train_mean_scores.values()])
         if valid_mean_scores:
-            table.add_row("Valid", *[str(score) for score in valid_mean_scores.values()])
+            table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
         console.print(table)
 
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
@@ -394,14 +394,14 @@ class Tester:
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
         for class_label in class_labels:
-            table.add_row("Test/" + class_label, *[str(test_metric_class_mean_scores[class_label][metric]) + '±' + test_metric_class_std_scores[class_label][metric] for metric in metric_labels])
+            table.add_row("Test/" + class_label, *[f'{test_metric_class_mean_scores[class_label][metric]:.3f}±{test_metric_class_std_scores[class_label][metric]:.3f}' for metric in metric_labels])
         console.print(table)
 
         table = Table(title='Summary of Metric(Test)')
         table.add_column("Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        table.add_row("Test", *[str(mean) + '±' + str(std) for mean, std in zip(test_mean_scores.values(), test_std_scores.values())])
+        table.add_row("Test", *[f'{mean:.3f}±{std:.3f}' for mean, std in zip(test_mean_scores.values(), test_std_scores.values())])
         console.print(table)
 
 
