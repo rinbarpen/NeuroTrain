@@ -42,8 +42,8 @@ class Trainer:
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-        self.valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.train_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver, epoch_mode=True)
+        self.valid_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver, epoch_mode=True)
 
     def train(self, num_epochs: int, 
               criterion: CombineCriterion, 
@@ -53,9 +53,6 @@ class Trainer:
               scaler: GradScaler | None = None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False, last_epoch: int=0):
-        self.train_calculator.clear()
-        self.valid_calculator.clear()
-
         c = get_config()
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
@@ -138,7 +135,7 @@ class Trainer:
                     pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
 
                     targets, outputs = self.postprocess(targets, outputs)
-                    self.train_calculator.add_one_batch(
+                    self.train_calculator.finish_one_batch(
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
@@ -174,7 +171,7 @@ class Trainer:
                             pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
 
                             targets, outputs = self.postprocess(targets, outputs)
-                            self.valid_calculator.add_one_batch(
+                            self.valid_calculator.finish_one_batch(
                                 targets.detach().cpu().numpy(), 
                                 outputs.detach().cpu().numpy())
 
@@ -228,9 +225,9 @@ class Trainer:
                         optimizer.step()
                         optimizer.zero_grad()
 
-        self.train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+        self.train_calculator.record_epochs(n_epochs=num_epochs)
         if enable_valid_when_training:
-            self.valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+            self.valid_calculator.record_epochs(n_epochs=num_epochs)
 
         self._print_table(enable_valid_when_training)
 
@@ -345,12 +342,10 @@ class Tester:
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
-        self.calculator.clear()
-
         c = get_config()
         device = torch.device(c['device'])
         self.model = self.model.to(device)
@@ -361,11 +356,11 @@ class Tester:
             outputs = self.model(inputs)
 
             targets, outputs = self.postprocess(targets, outputs)
-            self.calculator.add_one_batch(
+            self.calculator.finish_one_batch(
                 targets.detach().cpu().numpy(),
                 outputs.detach().cpu().numpy())
 
-        self.calculator.record_batches(self.output_dir)
+        self.calculator.record_batches()
 
         self._print_table()
     @classmethod

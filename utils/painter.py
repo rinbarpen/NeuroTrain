@@ -412,7 +412,7 @@ class Subplot:
         use_barh=True,
     ):
         colors = sns.color_palette("husl", len(metric_score))
-        metric_labels, scores = metric_score.keys(), metric_score.value()
+        metric_labels, scores = metric_score.keys(), metric_score.values()
         for color in colors:
             if use_barh:
                 bars = self._ax.barh(

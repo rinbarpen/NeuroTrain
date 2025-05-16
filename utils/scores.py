@@ -174,199 +174,200 @@ def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float
     kl_div = np.sum(y_true * np.log(y_true / y_pred), axis=1)
     return np.mean(kl_div)
 
-class ScoreCalculator:
-    def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver):
-        self.logger = logger or logging.getLogger()
-        self.saver = saver
-        self.class_labels = class_labels
-        self.metric_labels = metric_labels
-        self.is_prepared = False
+# class ScoreCalculator:
+#     def __init__(self, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver):
+#         self.logger = logger or logging.getLogger()
+#         self.saver = saver
+#         self.class_labels = class_labels
+#         self.metric_labels = metric_labels
+#         self.is_prepared = False
 
-        # {'recall': {
-        #   '0': [], '1': []},
-        #  'precision: {
-        #   '0': [], '1': []}}
-        self.all_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
-        # but epoch_metric_label_scores is saved by epoch
-        self.epoch_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
+#         # {'recall': {
+#         #   '0': [], '1': []},
+#         #  'precision: {
+#         #   '0': [], '1': []}}
+#         self.all_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
+#         # but epoch_metric_label_scores is saved by epoch
+#         self.epoch_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
 
-        # 
-        # {'label': {'f1': [], 
-        #         'recall': []}}
-        # 
-        self.all_record: ClassMetricManyScoreDict = create_ClassMetricManyScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'label': {'f1': mean score, 
-        #         'recall': mean score}}
-        # 
-        self.mean_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'f1': {'label': mean_score}}
-        # 
-        self.metric_label_record: MetricClassOneScoreDict = create_MetricClassOneScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'f1': mean_label_score}
-        # 
-        self.metric_record: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
+#         # 
+#         # {'label': {'f1': [], 
+#         #         'recall': []}}
+#         # 
+#         self.all_record: ClassMetricManyScoreDict = create_ClassMetricManyScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'label': {'f1': mean score, 
+#         #         'recall': mean score}}
+#         # 
+#         self.mean_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'f1': {'label': mean_score}}
+#         # 
+#         self.metric_label_record: MetricClassOneScoreDict = create_MetricClassOneScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'f1': mean_label_score}
+#         # 
+#         self.metric_record: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
 
-    def clear(self):
-        self.is_prepared = False
+#     def clear(self):
+#         self.is_prepared = False
 
-        # {'recall': {
-        #   '0': [], '1': []},
-        #  'precision: {
-        #   '0': [], '1': []}}
-        self.all_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
-        # but epoch_metric_label_scores is saved by epoch
-        self.epoch_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
+#         # {'recall': {
+#         #   '0': [], '1': []},
+#         #  'precision: {
+#         #   '0': [], '1': []}}
+#         self.all_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
+#         # but epoch_metric_label_scores is saved by epoch
+#         self.epoch_metric_label_scores: MetricClassManyScoreDict = create_MetricClassManyScoreDict(self.metric_labels, self.class_labels)
 
-        # 
-        # {'label': {'f1': [], 
-        #         'recall': []}}
-        # 
-        self.all_record: ClassMetricManyScoreDict = create_ClassMetricManyScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'label': {'f1': mean score, 
-        #         'recall': mean score}}
-        # 
-        self.mean_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'label': {'f1': std score, 
-        #         'recall': std score}}
-        # 
-        self.std_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'f1': {'label': mean_score}}
-        # 
-        self.metric_label_record: MetricClassOneScoreDict = create_MetricClassOneScoreDict(self.metric_labels, self.class_labels)
-        # 
-        # {'f1': mean_label_score}
-        # 
-        self.metric_record: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
-        # 
-        # {'f1': std_label_score}
-        # 
-        self.metric_record_std: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
+#         # 
+#         # {'label': {'f1': [], 
+#         #         'recall': []}}
+#         # 
+#         self.all_record: ClassMetricManyScoreDict = create_ClassMetricManyScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'label': {'f1': mean score, 
+#         #         'recall': mean score}}
+#         # 
+#         self.mean_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'label': {'f1': std score, 
+#         #         'recall': std score}}
+#         # 
+#         self.std_record: ClassMetricOneScoreDict = create_ClassMetricOneScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'f1': {'label': mean_score}}
+#         # 
+#         self.metric_label_record: MetricClassOneScoreDict = create_MetricClassOneScoreDict(self.metric_labels, self.class_labels)
+#         # 
+#         # {'f1': mean_label_score}
+#         # 
+#         self.metric_record: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
+#         # 
+#         # {'f1': std_label_score}
+#         # 
+#         self.metric_record_std: MetricLabelOneScoreDict = create_MetricLabelOneScoreDict(self.metric_labels)
 
-    def add_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
-        metrics, metrics_after = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
+#     def add_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
+#         metrics, metrics_after = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
 
-        for metric_label in self.metric_labels:
-            for class_label in self.class_labels:
-                score = metrics[metric_label][class_label]
-                self.all_metric_label_scores[metric_label][class_label].append(score)
+#         for metric_label in self.metric_labels:
+#             for class_label in self.class_labels:
+#                 score = metrics[metric_label][class_label]
+#                 self.all_metric_label_scores[metric_label][class_label].append(score)
 
-        return metrics, metrics_after
+#         return metrics, metrics_after
 
-    def finish_one_epoch(self):
-        for metric_label in self.metric_labels:
-            for class_label in self.class_labels:
-                score = np.mean(self.all_metric_label_scores[metric_label][class_label])
-                self.epoch_metric_label_scores[metric_label][class_label].append(score)
-        return self.epoch_metric_label_scores
+#     def finish_one_epoch(self):
+#         for metric_label in self.metric_labels:
+#             for class_label in self.class_labels:
+#                 score = np.mean(self.all_metric_label_scores[metric_label][class_label])
+#                 self.epoch_metric_label_scores[metric_label][class_label].append(score)
+#         return self.epoch_metric_label_scores
 
-    def record_batches(self, output_dir: Path):
-        self._prepare(output_dir)
-        mean_metrics_image = output_dir / "mean_metrics.png"
+#     def record_batches(self, output_dir: Path):
+#         self._prepare(output_dir)
+#         mean_metrics_image = output_dir / "mean_metrics.png"
 
-        self.saver.save_all_metric_by_class(self.all_metric_label_scores)
-        self.saver.save_mean_metric_by_class(self.mean_record)
-        self.saver.save_mean_metric(self.metric_record)
+#         self.saver.save_all_metric_by_class(self.all_metric_label_scores)
+#         self.saver.save_mean_metric_by_class(self.mean_record)
+#         self.saver.save_mean_metric(self.metric_record)
 
-        # paint mean metrics for all classes
-        Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(mean_metrics_image)
+#         # paint mean metrics for all classes
+#         Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(mean_metrics_image)
 
-        c = get_config()
-        if c['private']['wandb']:
-            wandb.log({
-                'metric': {
-                    'score': {
-                        'all': self.all_record,
-                        'mean': self.mean_record,
-                    },
-                    'image': {
-                        'mean': mean_metrics_image,
-                    },
-                },
-            })
+#         c = get_config()
+#         if c['private']['wandb']:
+#             wandb.log({
+#                 'metric': {
+#                     'score': {
+#                         'all': self.all_record,
+#                         'mean': self.mean_record,
+#                     },
+#                     'image': {
+#                         'mean': mean_metrics_image,
+#                     },
+#                 },
+#             })
 
-    def record_epochs(self, output_dir: Path, n_epochs: int):
-        self._prepare(output_dir)
+#     def record_epochs(self, output_dir: Path, n_epochs: int):
+#         self._prepare(output_dir)
 
-        self.saver.save_all_metric_by_class(convert_to_ClassLabelManyScoreDict(self.epoch_metric_label_scores))
-        self.saver.save_mean_metric_by_class(self.mean_record)
-        self.saver.save_mean_metric(self.metric_record)
+#         self.saver.save_all_metric_by_class(convert_to_ClassLabelManyScoreDict(self.epoch_metric_label_scores))
+#         self.saver.save_mean_metric_by_class(self.mean_record)
+#         self.saver.save_mean_metric(self.metric_record)
 
-        epoch_metrics_image = output_dir / "epoch_metrics.png"
-        mean_metrics_image = output_dir / "mean_metrics.png"
+#         epoch_metrics_image = output_dir / "epoch_metrics.png"
+#         mean_metrics_image = output_dir / "mean_metrics.png"
 
-        # paint metrics curve for all classes in one figure
-        n = len(self.metric_labels)
-        if n > 4:
-            nrows, ncols = (n + 2) // 3, 3
-        elif n == 4:
-            nrows, ncols = 2, 2
-        else:
-            nrows, ncols = 1, n
+#         # paint metrics curve for all classes in one figure
+#         n = len(self.metric_labels)
+#         if n > 4:
+#             nrows, ncols = (n + 2) // 3, 3
+#         elif n == 4:
+#             nrows, ncols = 2, 2
+#         else:
+#             nrows, ncols = 1, n
 
-        plot = Plot(nrows, ncols)
-        for metric in self.metric_labels:
-            plot.subplot().many_epoch_metrics(n_epochs, self.epoch_metric_label_scores[metric], self.class_labels, title=metric).complete()
-        plot.save(epoch_metrics_image)
+#         plot = Plot(nrows, ncols)
+#         for metric in self.metric_labels:
+#             plot.subplot().many_epoch_metrics(n_epochs, self.epoch_metric_label_scores[metric], self.class_labels, title=metric).complete()
+#         plot.save(epoch_metrics_image)
 
-        # paint mean metrics for all classes
-        Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(mean_metrics_image)
+#         # paint mean metrics for all classes
+#         Plot(1, 1).subplot().many_metrics(self.mean_record).complete().save(mean_metrics_image)
 
-        c = get_config()
-        if c['private']['wandb']:
-            wandb.log({
-                'metric': {
-                    'score': {
-                        'all': self.all_record,
-                        'mean': self.mean_record,
-                    },
-                    'image': {
-                        'epoch': epoch_metrics_image,
-                        'mean': mean_metrics_image,
-                    }
-                },
-            })
+#         c = get_config()
+#         if c['private']['wandb']:
+#             wandb.log({
+#                 'metric': {
+#                     'score': {
+#                         'all': self.all_record,
+#                         'mean': self.mean_record,
+#                     },
+#                     'image': {
+#                         'epoch': epoch_metrics_image,
+#                         'mean': mean_metrics_image,
+#                     }
+#                 },
+#             })
 
-    def _prepare(self, output_dir: Path):
-        if self.is_prepared:
-            return
+#     def _prepare(self, output_dir: Path):
+#         if self.is_prepared:
+#             return
 
-        for metric_label in self.metric_labels:
-            metric_mean_score = []
-            for class_label in self.class_labels:
-                scores = self.all_metric_label_scores[metric_label][class_label]
-                mean_score = np.mean(scores)
-                std_score = np.std(scores)
-                self.all_record[class_label][metric_label] = scores
-                self.mean_record[class_label][metric_label] = mean_score
-                self.std_record[class_label][metric_label] = std_score
-                self.metric_label_record[metric_label][class_label] = mean_score
-                metric_mean_score.append(mean_score)
-            self.metric_record[metric_label] = np.mean(metric_mean_score)
-            self.metric_record_std[metric_label] = np.std(metric_mean_score)
+#         for metric_label in self.metric_labels:
+#             metric_mean_score = []
+#             for class_label in self.class_labels:
+#                 scores = self.all_metric_label_scores[metric_label][class_label]
+#                 mean_score = np.mean(scores)
+#                 std_score = np.std(scores)
+#                 self.all_record[class_label][metric_label] = scores
+#                 self.mean_record[class_label][metric_label] = mean_score
+#                 self.std_record[class_label][metric_label] = std_score
+#                 self.metric_label_record[metric_label][class_label] = mean_score
+#                 metric_mean_score.append(mean_score)
+#             self.metric_record[metric_label] = np.mean(metric_mean_score)
+#             self.metric_record_std[metric_label] = np.std(metric_mean_score)
 
-        for class_label in self.class_labels:
-            class_dir = output_dir / class_label
-            class_dir.mkdir(parents=True, exist_ok=True)
-        self.is_prepared = True
+#         for class_label in self.class_labels:
+#             class_dir = output_dir / class_label
+#             class_dir.mkdir(parents=True, exist_ok=True)
+#         self.is_prepared = True
 
 from utils.db import ScoreDB
 from utils.typed import FilePath
-class _ScoreCalculator:
-    def __init__(self, db_filepath: FilePath, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver, epoch_mode=False):
+class ScoreCalculator:
+    def __init__(self, output_dir: FilePath, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver, epoch_mode=False):
         self.logger = logger or logging.getLogger()
         self.saver = saver
         self.class_labels = class_labels
         self.metric_labels = metric_labels
         self.epoch_mode = epoch_mode
 
+        self.output_dir = output_dir
         self.temp_db = ScoreDB("TEMP/temp.db")
-        self.db = ScoreDB(db_filepath)
+        self.db = ScoreDB(output_dir / 'scores.db')
 
     def finish_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
         metrics, metrics_after = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
@@ -375,9 +376,9 @@ class _ScoreCalculator:
             for class_label in self.class_labels:
                 score = metrics[metric_label][class_label]
                 if self.epoch_mode:
-                    self.db.add(metric_label, class_label, score)
-                else:
                     self.temp_db.add(metric_label, class_label, score)
+                else:
+                    self.db.add(metric_label, class_label, score)
 
         return metrics, metrics_after
 
@@ -390,8 +391,8 @@ class _ScoreCalculator:
         self.temp_db.clear()
         return scores
 
-    def record_batches(self, output_dir: Path):
-        mean_metrics_image = output_dir / "mean_metrics.png"
+    def record_batches(self):
+        mean_metrics_image = self.output_dir / "mean_metrics.png"
 
         all_scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='all')
         mean_scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='mean')
@@ -406,13 +407,13 @@ class _ScoreCalculator:
 
         # paint mean metrics for all classes
         scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='mean')
-        Plot(1, 1).subplot().metrics(scores).complete().save(mean_metrics_image)
-        for label, metric_scores in scores:
-            metric_image = output_dir / label / "metrics.png"
+        Plot(1, 1).subplot().many_metrics(scores).complete().save(mean_metrics_image)
+        for label, metric_scores in scores.items():
+            metric_image = self.output_dir / label / "metrics.png"
             metric_image.parent.mkdir(exist_ok=True)
             Plot(1, 1).subplot().metrics(metric_scores).complete().save(metric_image)
 
-    def record_epochs(self, output_dir: Path, n_epochs: int):
+    def record_epochs(self, n_epochs: int):
         all_scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='all')
         mean_scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='mean')
         std_scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='std')
@@ -424,8 +425,8 @@ class _ScoreCalculator:
         self.saver.save_mean_metric(mean_metrics)
         self.saver.save_std_metric(std_metrics)
 
-        mean_metrics_image = output_dir / "mean_metrics.png"
-        epoch_metrics_image = output_dir / "epoch_metrics.png"
+        mean_metrics_image = self.output_dir / "mean_metrics.png"
+        epoch_metrics_image = self.output_dir / "epoch_metrics.png"
 
         n = len(self.metric_labels)
         if n > 4:
@@ -443,9 +444,9 @@ class _ScoreCalculator:
 
         # paint mean metrics for all classes
         scores = self.db.class_metric_scores(self.metric_labels, self.class_labels, mode='mean')
-        Plot(1, 1).subplot().metrics(scores).complete().save(mean_metrics_image)
-        for label, metric_scores in scores:
-            metric_image = output_dir / label / "metrics.png"
+        Plot(1, 1).subplot().many_metrics(scores).complete().save(mean_metrics_image)
+        for label, metric_scores in scores.items():
+            metric_image = self.output_dir / label / "metrics.png"
             metric_image.parent.mkdir(exist_ok=True)
             Plot(1, 1).subplot().metrics(metric_scores).complete().save(metric_image)
 
