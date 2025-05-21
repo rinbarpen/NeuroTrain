@@ -138,7 +138,7 @@ class Trainer:
                     pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
 
                     targets, outputs = self.postprocess(targets, outputs)
-                    self.train_calculator.add_one_batch(
+                    self.train_calculator.finish_one_batch(
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
@@ -174,7 +174,7 @@ class Trainer:
                             pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
 
                             targets, outputs = self.postprocess(targets, outputs)
-                            self.valid_calculator.add_one_batch(
+                            self.valid_calculator.finish_one_batch(
                                 targets.detach().cpu().numpy(), 
                                 outputs.detach().cpu().numpy())
 

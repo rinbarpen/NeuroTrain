@@ -1,9 +1,17 @@
 import torch
 from torch import nn
-import torch.functional as F
+import torch.nn.functional as F
 
 from .position_encoding import PositionalEncoding, LearnablePositionalEncoding
 
+# class Embedding(nn.Module):
+#     def __init__(self, vocab_size: int, embed_dim: int):
+#         super(Embedding).__init__(self)
+#         self.embedding = nn.Embedding(vocab_size, embed_dim)
+
+#     def forward(self, x):
+#         x = self.embedding(x)
+#         return x
 
 class PatchEmbedding(nn.Module):
     def __init__(self, n_channels: int, embed_dim: int, patch_size: int|tuple[int, int]):

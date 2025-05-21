@@ -4,19 +4,23 @@ import torch.nn.functional as F
 from typing import Literal
 from einops import rearrange, einsum
 
+from ..position_encoding import Rotator
+
 AttentionType = Literal['mha', 'gqa', 'mqa']
 
 class _MultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, attn_dropout=0.2, *, share_kv=False):
+    def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, attn_dropout=0.2, *, share_kv=False, rope=False):
         super(_MultiHeadAttention, self).__init__()
 
         assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
+
+        self.rope = rope
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.scale = self.head_dim ** -0.5
-        
+
         if attn_type == 'mha':
             self.num_groups = num_heads
         elif attn_type == 'mqa':
@@ -35,6 +39,7 @@ class _MultiHeadAttention(nn.Module):
         self.attn_dropout = nn.Dropout(attn_dropout)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
+
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor|None=None):
         q = self.proj_q(q)
         k = self.proj_k(k)
@@ -43,7 +48,12 @@ class _MultiHeadAttention(nn.Module):
         q = rearrange(q, 'b n (h d) -> b h n d', h=self.num_heads)
         k = rearrange(k, 'b n (g d) -> b g n d', g=self.num_groups)
         v = rearrange(v, 'b n (g d) -> b g n d', g=self.num_groups)
-        
+
+        if self.rope:
+            B, N, D = q.size()
+            rotator = Rotator(D, N)
+            q, k = rotator.rotate(q), rotator.rotate(k)
+
         q = rearrange(q, 'b (g h_per_g) n d -> b g h_per_g n d', g=self.num_groups)
 
         attn_scores = einsum(q, k, 'b g h q d, b g n d -> b g h q n') * self.scale
@@ -58,20 +68,20 @@ class _MultiHeadAttention(nn.Module):
         return o, attn_weights.sum(dim=(1, 2))
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, attn_dropout=0.2, *, share_kv=False):
+    def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, attn_dropout=0.2, *, share_kv=False, rope=False):
         super(MultiHeadAttention, self).__init__()
 
-        self.attn = _MultiHeadAttention(embed_dim, num_heads, num_groups, attn_type=attn_type, qkv_bias=qkv_bias, attn_dropout=attn_dropout, share_kv=share_kv)
+        self.attn = _MultiHeadAttention(embed_dim, num_heads, num_groups, attn_type=attn_type, qkv_bias=qkv_bias, attn_dropout=attn_dropout, share_kv=share_kv, rope=rope)
     
     def forward(self, x: torch.Tensor, mask: torch.Tensor|None=None):
         return self.attn(x, x, x, mask=mask)
 
 class MultiHeadCrossAttention(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha',
-     qkv_bias=True, attn_dropout=0.2):
+     qkv_bias=True, attn_dropout=0.2, *, rope=False):
         super(MultiHeadCrossAttention, self).__init__()
 
-        self.attn = _MultiHeadAttention(embed_dim, num_heads, num_groups, attn_type=attn_type, qkv_bias=qkv_bias, attn_dropout=attn_dropout, share_kv=False)
+        self.attn = _MultiHeadAttention(embed_dim, num_heads, num_groups, attn_type=attn_type, qkv_bias=qkv_bias, attn_dropout=attn_dropout, share_kv=False, rope=rope)
     
     def forward(self, qk: torch.Tensor, v: torch.Tensor, mask: torch.Tensor|None=None):
         return self.attn(qk, qk, v, mask=mask)

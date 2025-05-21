@@ -1,3 +1,4 @@
+# REF
 from pathlib import Path
 from pytorch_grad_cam import GradCAM, GradCAMPlusPlus
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget, SemanticSegmentationTarget, SoftmaxOutputTarget
@@ -97,7 +98,7 @@ class ImageHeatMapGenerator():
         self.model.eval()
         self.target_layers = target_layers
         self.targets = targets
-    
+
     def check(self, image: Image.Image, transform_fn: transforms.Compose, is_rgb=True):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -113,7 +114,7 @@ class ImageHeatMapGenerator():
         self.model = self.model.to(device)
         input_tensor = input_tensor.to(device)
 
-        with GradCAM(self.model, target_layers=self.target_layers) as cam: 
+        with GradCAMPlusPlus(self.model, target_layers=self.target_layers) as cam: 
             grayscale_cam = cam(input_tensor, targets=self.targets, eigen_smooth=False)[0, :]
             grayscale_cam = cv2.resize(grayscale_cam, (W, H))
 

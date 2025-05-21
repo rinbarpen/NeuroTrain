@@ -28,6 +28,11 @@ class _DataSaver:
 
         df = pd.DataFrame({k: [v] for k, v in metric_mean_score.items()})
         self._save_dataframe(df, csv_filename, parquet_filename)
+    def save_std_metric(self, metric_std_score: MetricLabelOneScoreDict):
+        csv_filename, parquet_filename = self._get_filenames("std_metric")
+
+        df = pd.DataFrame({k: [v] for k, v in metric_std_score.items()})
+        self._save_dataframe(df, csv_filename, parquet_filename)
 
     # for every class
     def save_mean_metric_by_class(
@@ -39,6 +44,16 @@ class _DataSaver:
             )
 
             df = pd.DataFrame({k: [v] for k, v in metric_mean.items()})
+            self._save_dataframe(df, csv_filename, parquet_filename)
+    def save_std_metric_by_class(
+        self, class_metric_std_score: ClassMetricOneScoreDict
+    ):
+        for class_label, metric_std in class_metric_std_score.items():
+            csv_filename, parquet_filename = self._get_filenames(
+                f"{class_label}/std_metric"
+            )
+
+            df = pd.DataFrame({k: [v] for k, v in metric_std.items()})
             self._save_dataframe(df, csv_filename, parquet_filename)
 
     def save_all_metric_by_class(self, class_metric_all_score: ClassMetricManyScoreDict):
@@ -104,6 +119,11 @@ class DataSaver:
             self.executor.submit(self.saver.save_mean_metric, metric_mean_score)
         else:
             self.saver.save_mean_metric(metric_mean_score)
+    def save_std_metric(self, metric_std_score: MetricLabelOneScoreDict):
+        if self.async_mode:
+            self.executor.submit(self.saver.save_std_metric, metric_std_score)
+        else:
+            self.saver.save_std_metric(metric_std_score)
 
     # for every class
     def save_mean_metric_by_class(
@@ -115,6 +135,15 @@ class DataSaver:
             )
         else:
             self.saver.save_mean_metric_by_class(class_metric_mean_score)
+    def save_std_metric_by_class(
+        self, class_metric_std_score: ClassMetricOneScoreDict
+    ):
+        if self.async_mode:
+            self.executor.submit(
+                self.saver.save_std_metric_by_class, class_metric_std_score
+            )
+        else:
+            self.saver.save_std_metric_by_class(class_metric_std_score)
 
     def save_all_metric_by_class(self, class_metric_all_score: ClassMetricManyScoreDict):
         if self.async_mode:

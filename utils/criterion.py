@@ -27,19 +27,6 @@ class Loss(nn.Module):
     def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
         return self.loss_fn(targets, preds)
 
-class MultiSizeLoss(Loss):
-    def __init__(self, loss_fn: nn.Module):
-        super(MultiSizeLoss, self).__init__(loss_fn)
-
-    def forward(self, 
-                targets: torch.Tensor, 
-                preds: tuple[torch.Tensor, ...]) -> torch.Tensor:
-        all_loss = []
-        for pred in preds:
-            loss = self.loss_fn(targets, pred)
-            all_loss.append(loss)
-            targets = F.max_pool2d(targets, 2)
-        return torch.concat(all_loss).mean()
 
 class DiceLoss(Loss):
     def __init__(self):
@@ -50,6 +37,7 @@ class DiceLoss(Loss):
         x = torch.from_numpy(loss)
         x.requires_grad = True
         return x
+
 class KLLoss(Loss):
     def __init__(self):
         super(KLLoss, self).__init__()

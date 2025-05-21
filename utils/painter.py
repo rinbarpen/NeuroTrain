@@ -10,7 +10,7 @@ from sklearn import metrics
 from PIL import Image
 
 from utils.annotation import buildin
-from utils.typed import ClassMetricOneScoreDict
+from utils.typed import ClassMetricOneScoreDict, MetricLabelOneScoreDict
 
 # x, y, shape-like ['-o', '-D'] | font, color, label
 # labelsize for tick_params
@@ -398,7 +398,66 @@ class Subplot:
         self._ax.legend()
         return self
 
-    # scores_map: {'metric_label': {'label'： label_score, ...}, ...}
+    @buildin(desc="metrics")
+    def metrics(
+        self,
+        metric_score: MetricLabelOneScoreDict,
+        class_label: str,
+        title: str | None = None,
+        patterns=["/", "\\", "|", "-"],
+        text=False,
+        *,
+        height=0.35,
+        width=0.35,
+        tick_threshold=0.2,
+        use_barh=True,
+    ):
+        colors = sns.color_palette("husl", len(metric_score))
+        for color in colors:
+            metric_labels, scores = metric_score.keys(), metric_score.values()
+            if use_barh:
+                bars = self._ax.barh(
+                    metric_labels, scores, height, color=color, label=class_label
+                )
+                self._ax.set_xlim(0, 1)
+                self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
+                # self._ax.set_yticklabels(metric_labels)
+                # for bar, pattern in zip(bars, patterns):
+                #     bar.set_hatch(pattern)
+                if text:
+                    for bar, score in zip(bars, scores):
+                        width = bar.get_width()
+                        self._ax.text(
+                            width + 1,
+                            bar.get_y() + bar.get_height() / 2,
+                            f"{score:.3f}",
+                            ha="left",
+                            va="center",
+                        )
+            else:
+                bars = self._ax.bar(
+                    metric_labels, scores, width, color=color, label=class_label
+                )
+                self._ax.set_ylim(0, 1)
+                self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
+                # self._ax.set_xticklabels(metric_labels)
+                # for bar, pattern in zip(bars, patterns):
+                #     bar.set_vbatch(pattern)
+                if text:
+                    for bar, score in zip(bars, scores):
+                        height = bar.get_height()
+                        self._ax.text(
+                            bar.get_x() + bar.get_width() / 2,
+                            height + 1,
+                            f"{score:.3f}",
+                            ha="center",
+                            va="center",
+                        )
+
+        if title:
+            self._ax.set_title(title)
+        self._ax.legend()
+        return self
     @buildin(desc="many metrics")
     def many_metrics(
         self,
@@ -518,13 +577,9 @@ class Subplot:
         return self
 
     @buildin(desc="image show")
-    def image(self, image: Path | Image.Image | cv2.Mat):
-        if isinstance(image, Path):
-            img = self._ax.imread(image)
-        if isinstance(image, Image.Image) or isinstance(image, cv2.Mat):
-            img = image
+    def image(self, image: Image.Image | cv2.Mat, cmap=None):
         self._ax.axis("off")
-        self._ax.imshow(img)
+        self._ax.imshow(image, cmap=cmap)
         return self
 
     def instance(self):
@@ -572,7 +627,7 @@ class Plot:
         return self
 
     @buildin(desc="image pack")
-    def images(self, images: list[Path | Image.Image | cv2.Mat]):
+    def images(self, images: list[Image.Image | cv2.Mat]):
         n = self._nrows * self._ncols
         if n < len(images):
             logging.warning(f"{len(images) - n} is still empty")
@@ -589,15 +644,23 @@ class Plot:
 
     def save(self, path: Path):
         self._setup_params()
-        path.mkdir(parents=True, exist_ok=True)
-        plt.savefig(path)
-        plt.close()
+        try:
+            plt.savefig(path)
+            plt.close()
+        except:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(path)
+            plt.close()
 
     def save_and_show(self, path: Path):
         self._setup_params()
-        path.mkdir(parents=True, exist_ok=True)
-        plt.savefig(path)
-        plt.show()
+        try:
+            plt.savefig(path)
+            plt.show()
+        except:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(path)
+            plt.show()
 
     def _setup_params(self):
         if self._theme:

@@ -15,7 +15,7 @@ from torch.amp.grad_scaler import GradScaler
 from pathlib import Path
 from PIL import Image 
 from torchsummary import summary
-# from fvcore.nn import FlopCountAnalysis
+from fvcore.nn import FlopCountAnalysis
 
 from config import get_config, get_config_value
 from utils.typed import FilePath, ImageInstance
@@ -58,11 +58,14 @@ def get_train_tools(model: nn.Module):
         case 'sgd':
             optimizer = torch.optim.SGD(
                 model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
+        case 'adamw':
+            optimizer = torch.optim.AdamW(
+                model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
         case 'adam':
             optimizer = torch.optim.Adam(
                 model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
-        case 'adamw':
-            optimizer = torch.optim.AdamW(
+        case _:
+            optimizer = torch.optim.Adam(
                 model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
 
     if not 'lr_scheduler' in c['train']:
@@ -123,10 +126,11 @@ def get_train_valid_test_dataloader(use_valid=False):
     
     return train_loader, None, test_loader
     
-def save_model(path: Path, model: nn.Module, *, 
-               ext_path: Path|None=None,
+def save_model(path: FilePath, model: nn.Module, *, 
+               ext_path: FilePath|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
     model_cp = model.state_dict()
+    path = Path(path)
 
     try:
         torch.save(model_cp, path)
@@ -136,6 +140,7 @@ def save_model(path: Path, model: nn.Module, *,
         torch.save(model_cp, path)
 
     if ext_path:
+        ext_path = Path(ext_path)
         ext_cp = dict()
         if optimizer:
             ext_cp["optimizer"] = optimizer.state_dict()
@@ -152,18 +157,17 @@ def save_model(path: Path, model: nn.Module, *,
                                 time.strftime("%Y%m%d_%H%M%S", time.localtime()))
             torch.save(ext_cp, ext_path)
 def load_model(path: FilePath, map_location: str = 'cuda'):
-    return torch.load(path, 
-                      map_location=torch.device(map_location))
+    return torch.load(path, map_location)
 def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
-    return torch.load(ext_path, 
-                      map_location=torch.device(map_location))
+    return torch.load(ext_path, map_location)
 
-def summary_model_info(model_src: FilePath | torch.nn.Module, input_size: torch.Tensor, device: str="cpu"):
+def summary_model_info(model_src: FilePath | torch.nn.Module, input_size: tuple[int, ...], device: str="cpu"):
     if isinstance(model_src, FilePath):
         checkpoint = load_model(model_src, device)
         summary(checkpoint, input_size=input_size, device=device)
     elif isinstance(model_src, torch.nn.Module):
-        summary(model_src, input_size=input_size, device=device)
+        checkpoint = model_src
+        summary(checkpoint, input_size=input_size, device=device)
 
 # def disable_torch_init():
 #     """
@@ -207,27 +211,27 @@ def image_to_numpy(img: ImageInstance) -> np.ndarray:
     # output shape: (C, H, W) for RGB or (H, W) for gray
     return img_np
 
-# def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
-#     dummy_input = torch.randn(input_size).to(device)
-#     flops = FlopCountAnalysis(model, dummy_input)
-#     total_flops = flops.total()
-#     return total_flops / 1e9  # Convert to GFLOPs
+def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
+    dummy_input = torch.randn(input_size).to(device)
+    flops = FlopCountAnalysis(model, dummy_input)
+    total_flops = flops.total()
+    return total_flops / 1e9  # Convert to GFLOPs
 
 
 def split_image(
-    image: Image.Image, num_patches: int, *, output_dir: Path | None = None
+    image: Image.Image, n_rows: int=1, n_cols: int=1, *, output_dir: Path | None = None
 ) -> list[Image.Image]:
     """
     将图像分割成小块并保存到指定目录。
 
     Args:
         image (Image.Image): 图像文件实例。
-        num_patches (int): 小块的数量。
+        n_rows (int): 一行图像块的数量。
+        n_cols (int): 一列图像块的数量。
         output_dir (Path): 保存小块图像的目录。
     """
 
     width, height = image.size
-    n_rows, n_cols = (int(math.sqrt(num_patches)), int(math.sqrt(num_patches)))
     tile_width, tile_height = width // n_cols, height // n_rows
 
     tile_images = []
@@ -246,7 +250,7 @@ def split_image(
             try:
                 tile_image = image.crop(box)
             except Exception as e:
-                logging.error(f"切除图像失败。 边界：{box},错误：{e}")
+                logging.error(f"切除图像失败。边界：{box}，错误：{e}")
                 raise e
 
             tile_images.append(tile_image)
