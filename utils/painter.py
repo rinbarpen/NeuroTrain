@@ -10,7 +10,7 @@ from sklearn import metrics
 from PIL import Image
 
 from utils.annotation import buildin
-from utils.typed import ClassMetricOneScoreDict, MetricLabelOneScoreDict
+from utils.typed import ClassMetricOneScoreDict, MetricLabelManyScoreDict, MetricLabelOneScoreDict, ClassLabelManyScoreDict
 
 # x, y, shape-like ['-o', '-D'] | font, color, label
 # labelsize for tick_params
@@ -298,13 +298,10 @@ class Subplot:
     def epoch_loss(
         self,
         num_epoch: int,
-        losses: list[np.ndarray],
+        losses: np.ndarray,
         label: str = "Loss",
         title="Epoch-Loss",
     ):
-        if isinstance(losses, list) or isinstance(losses, tuple):
-            losses = np.array(losses, dtype=np.float64)
-
         epoches = np.arange(1, num_epoch + 1, dtype=np.int32)
         self._ax.plot(epoches, losses, label=label)
 
@@ -319,13 +316,10 @@ class Subplot:
     def epoch_metrics(
         self,
         num_epoch: int,
-        metrics: list[np.ndarray],
+        metrics: np.ndarray,
         class_label: str,
         title: str = "Epoch-Label-Metric",
     ):
-        if isinstance(metrics, list) or isinstance(metrics, tuple):
-            metrics = np.array(metrics, dtype=np.float64)
-
         epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
         self._ax.plot(epochs, metrics, label=class_label)
 
@@ -337,10 +331,10 @@ class Subplot:
         return self
 
     @buildin(desc="metrics by epoch with many classes")
-    def many_epoch_metrics(
+    def many_epoch_metrics_by_class(
         self,
         num_epoch: int,
-        class_metrics: dict[str, list[np.ndarray]],
+        class_metrics: ClassLabelManyScoreDict,
         class_labels: list[str],
         title: str = "Epoch-Label-Metric",
     ):
@@ -351,6 +345,27 @@ class Subplot:
 
             epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
             self._ax.plot(epochs, metrics, label=label)
+
+        self._ax.set_title(title)
+        self._ax.set_xlim(1, num_epoch)
+        self._ax.legend()
+        return self
+
+    @buildin(desc="metrics by epoch with many classes")
+    def many_epoch_metrics(
+        self,
+        num_epoch: int,
+        metrics_scores: MetricLabelManyScoreDict,
+        metric_labels: list[str],
+        title: str = "Epoch-Metrics",
+    ):
+        for metric in metric_labels:
+            metrics = metrics_scores[metric]
+            if isinstance(metrics, list) or isinstance(metrics, tuple):
+                metrics = np.array(metrics, dtype=np.float64)
+
+            epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
+            self._ax.plot(epochs, metrics, label=metric)
 
         self._ax.set_title(title)
         self._ax.set_xlim(1, num_epoch)
@@ -402,7 +417,6 @@ class Subplot:
     def metrics(
         self,
         metric_score: MetricLabelOneScoreDict,
-        class_label: str,
         title: str | None = None,
         patterns=["/", "\\", "|", "-"],
         text=False,
@@ -412,47 +426,45 @@ class Subplot:
         tick_threshold=0.2,
         use_barh=True,
     ):
-        colors = sns.color_palette("husl", len(metric_score))
-        for color in colors:
-            metric_labels, scores = metric_score.keys(), metric_score.values()
-            if use_barh:
-                bars = self._ax.barh(
-                    metric_labels, scores, height, color=color, label=class_label
-                )
-                self._ax.set_xlim(0, 1)
-                self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
-                # self._ax.set_yticklabels(metric_labels)
-                # for bar, pattern in zip(bars, patterns):
-                #     bar.set_hatch(pattern)
-                if text:
-                    for bar, score in zip(bars, scores):
-                        width = bar.get_width()
-                        self._ax.text(
-                            width + 1,
-                            bar.get_y() + bar.get_height() / 2,
-                            f"{score:.3f}",
-                            ha="left",
-                            va="center",
-                        )
-            else:
-                bars = self._ax.bar(
-                    metric_labels, scores, width, color=color, label=class_label
-                )
-                self._ax.set_ylim(0, 1)
-                self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
-                # self._ax.set_xticklabels(metric_labels)
-                # for bar, pattern in zip(bars, patterns):
-                #     bar.set_vbatch(pattern)
-                if text:
-                    for bar, score in zip(bars, scores):
-                        height = bar.get_height()
-                        self._ax.text(
-                            bar.get_x() + bar.get_width() / 2,
-                            height + 1,
-                            f"{score:.3f}",
-                            ha="center",
-                            va="center",
-                        )
+        metric_labels, scores = metric_score.keys(), metric_score.values()
+        if use_barh:
+            bars = self._ax.barh(
+                metric_labels, scores, height
+            )
+            self._ax.set_xlim(0, 1)
+            self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
+            # self._ax.set_yticklabels(metric_labels)
+            # for bar, pattern in zip(bars, patterns):
+            #     bar.set_hatch(pattern)
+            if text:
+                for bar, score in zip(bars, scores):
+                    width = bar.get_width()
+                    self._ax.text(
+                        width + 1,
+                        bar.get_y() + bar.get_height() / 2,
+                        f"{score:.3f}",
+                        ha="left",
+                        va="center",
+                    )
+        else:
+            bars = self._ax.bar(
+                metric_labels, scores, width
+            )
+            self._ax.set_ylim(0, 1)
+            self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
+            # self._ax.set_xticklabels(metric_labels)
+            # for bar, pattern in zip(bars, patterns):
+            #     bar.set_vbatch(pattern)
+            if text:
+                for bar, score in zip(bars, scores):
+                    height = bar.get_height()
+                    self._ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        height + 1,
+                        f"{score:.3f}",
+                        ha="center",
+                        va="center",
+                    )
 
         if title:
             self._ax.set_title(title)

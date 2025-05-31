@@ -8,9 +8,10 @@ classes = ["Retina"]
 metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 
 [model]
-name = "simple-net"
-continue_checkpoint = ""
-continue_ext_checkpoint = ""
+name = "unet"
+continue_checkpoint = "" # use this if encountering crash while training
+continue_ext_checkpoint = "" # use this if encountering crash while training
+pretained = ""
 
 [model.config]
 n_channels = 1

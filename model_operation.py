@@ -15,6 +15,7 @@ from rich.console import Console
 from config import get_config, ALL_STYLES
 from utils.early_stopping import EarlyStopping
 from utils.data_saver import DataSaver
+from utils.typed import ScoreAggregator
 from utils.util import save_model
 from utils.timer import Timer
 from utils.scores import ScoreCalculator
@@ -35,15 +36,15 @@ class Trainer:
 
         self.model = model
 
-        self.save_model_dir.mkdir(exist_ok=True, parents=True)
+        self.save_model_dir.mkdir()
         self.logger = logging.getLogger('train')
         self.data_saver = DataSaver(output_dir)
 
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.train_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-        self.valid_calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.train_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.valid_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
     def train(self, num_epochs: int, 
               criterion: CombineCriterion, 
@@ -53,9 +54,6 @@ class Trainer:
               scaler: GradScaler | None = None, 
               lr_scheduler: LRScheduler | None = None,
               *, early_stop: bool = False, last_epoch: int=0):
-        self.train_calculator.clear()
-        self.valid_calculator.clear()
-
         c = get_config()
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
@@ -142,6 +140,7 @@ class Trainer:
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
+
                 if lr_scheduler:
                     lr_scheduler.step()
 
@@ -193,7 +192,7 @@ class Trainer:
                             self.logger.info("Early stopping")
                             break
 
-                # save
+                # save every n epoch
                 if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
                     save_model_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.pt'
                     save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
@@ -203,21 +202,30 @@ class Trainer:
                             epoch=epoch, version=c['run_id'])
                     self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
 
-                target_loss = valid_loss if enable_valid_when_training else train_loss
-                if target_loss < best_loss:
-                    best_loss = target_loss
+                # save best model
+                if enable_valid_when_training:
+                    target_loss = valid_loss
+                    if target_loss < best_loss:
+                        best_loss = target_loss
+                        save_model(self.best_model_file_path, self.model, 
+                                    ext_path=self.best_model_ext_file_path,
+                                    optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
+                                    epoch=epoch, version=c['run_id'])
+                        self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                else:
+                    loss = train_loss
                     save_model(self.best_model_file_path, self.model, 
                                 ext_path=self.best_model_ext_file_path,
                                 optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
                                 epoch=epoch, version=c['run_id'])
-                    self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                    self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {loss=}')
 
                 save_model(self.last_model_file_path, self.model,
                         ext_path=self.last_model_ext_file_path,
                         optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
                         epoch=num_epochs, version=c['run_id'])
-                self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
+            # accumulation_step
             if enable_accumulation_step:
                 if i % accumulation_steps != 0:
                     if scaler:
@@ -228,9 +236,16 @@ class Trainer:
                         optimizer.step()
                         optimizer.zero_grad()
 
-        self.train_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+            save_model(self.last_model_file_path, self.model,
+                    ext_path=self.last_model_ext_file_path,
+                    optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
+                    epoch=num_epochs, version=c['run_id'])
+            self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
+
+
+        self.train_calculator.record_epochs(n_epochs=num_epochs)
         if enable_valid_when_training:
-            self.valid_calculator.record_epochs(self.output_dir, n_epochs=num_epochs)
+            self.valid_calculator.record_epochs(n_epochs=num_epochs)
 
         self._print_table(enable_valid_when_training)
 
@@ -251,11 +266,13 @@ class Trainer:
         class_labels  = c['classes']
         metric_labels = c['metrics']
 
-        train_mean_scores = self.train_calculator.metric_record
-        valid_mean_scores = self.valid_calculator.metric_record if enable_valid_when_training else None
-        train_metric_class_scores = self.train_calculator.mean_record
-        valid_metric_class_scores = self.valid_calculator.mean_record if enable_valid_when_training else None
-        
+        train_scores = ScoreAggregator(self.train_calculator.epoch_metric_label_scores)
+        train_mean_scores = train_scores.ml1_mean
+        train_metric_class_scores = (train_scores.mc1_mean, train_scores.mc1_std)
+        valid_scores = ScoreAggregator(self.valid_calculator.epoch_metric_label_scores) if enable_valid_when_training else None
+        valid_mean_scores = valid_scores.ml1_mean if valid_scores else None
+        valid_metric_class_scores = (valid_scores.mc1_mean, valid_scores.mc1_std) if valid_scores else None
+
         styles = ALL_STYLES
         console = Console()
 
@@ -265,52 +282,60 @@ class Trainer:
             table.add_column(metric, justify="center", style=style)
         
         for class_label in class_labels:
-            table.add_row("Train/" + class_label, *[str(train_metric_class_scores[class_label][metric]) for metric in metric_labels])
+            mean_scores = train_metric_class_scores[0]
+            std_scores = train_metric_class_scores[1]
+            table.add_row("Train/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
         if valid_metric_class_scores:
             for class_label in class_labels:
-                table.add_row("Valid/" + class_label, *[str(valid_metric_class_scores[class_label][metric]) for metric in metric_labels])
+                mean_scores = valid_metric_class_scores[0]
+                std_scores = valid_metric_class_scores[1]
+                table.add_row("Valid/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
         console.print(table)
 
         table = Table(title='Summary of Metric(Train)')
         table.add_column("Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        table.add_row("Train", *[str(score) for score in train_mean_scores.values()])
+        table.add_row("Train", *[f'{score:.3f}' for score in train_mean_scores.values()])
         if valid_mean_scores:
-            table.add_row("Valid", *[str(score) for score in valid_mean_scores.values()])
+            table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
         console.print(table)
 
     def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
+        """
+        Save train and valid losses, and log to wandb if enabled.
+        Args:
+            num_epochs (int): Number of epochs.
+            train_losses (np.ndarray): Array of training losses. Dim=1
+            valid_losses (np.ndarray|None): Array of validation losses, if available. Dim=1
+            optimizer (torch.optim.Optimizer|None): Optimizer state to save.
+            scaler (GradScaler|None): GradScaler state to save.
+            lr_scheduler (LRScheduler|None): Learning rate scheduler state to save.
+        """
         c = get_config()
-        labels = c['classes']
 
         self.data_saver.save_train_loss(train_losses)
-        self.logger.info(f'Save train loss info under the {self.output_dir}')
 
         plot = Plot(1, 1)
-        plot.subplot().epoch_loss(num_epochs, train_losses, labels, title='Train/Epoch-Loss').complete()
+        plot = plot.subplot().epoch_loss(num_epochs, train_losses, 'train', title='Train/Epoch-Loss')
+        if valid_losses:
+            self.data_saver.save_valid_loss(valid_losses)
+            plot = plot.epoch_loss(num_epochs, valid_losses, 'valid', title='Train&Valid/Epoch-Loss').complete()
+            self.logger.info(f'Save train & valid loss info under the {self.output_dir}')
+        else:
+            plot = plot.complete()
+            self.logger.info(f'Save train loss info under the {self.output_dir}')
         plot.save(self.train_loss_image_path)
 
         self.logger.info(f'Save train/epoch_loss graph to {self.train_loss_image_path}')
-        if valid_losses:
-            self.data_saver.save_valid_loss(valid_losses)
-            self.logger.info(f'Save valid/loss info under the {self.output_dir}')
-            
-            plot = Plot(1, 1)
-            plot.subplot().epoch_loss(num_epochs, valid_losses, labels, title='Valid/Epoch-Loss').complete()
-            plot.save(self.valid_loss_image_path)
-            self.logger.info(f'Save valid/epoch_loss graph to {self.valid_loss_image_path}')
 
         if c['private']['wandb']:
             train_c = c['train']
             wandb.log({
                 "train": {
-                    "losses": train_losses,
+                    "train_losses": train_losses,
+                    "valid_losses": valid_losses,
                     "loss_image": self.train_loss_image_path,
-                },
-                "valid": {
-                    "losses": valid_losses,
-                    "loss_image": self.valid_loss_image_path,
                 },
                 "config": {
                     "batch_size": train_c['batch_size'],
@@ -318,8 +343,8 @@ class Trainer:
                     "dataset": c['dataset'],
                     "save_every_n_epoch": train_c['save_every_n_epoch'],
                     "early_stopping": {
-                        "patience": train_c['early_stopping']['patience'],
-                    } if train_c['early_stopping']['enabled'] else None,
+                        **{k: v for k, v in train_c['early_stopping'].items()},
+                    } if train_c.get('early_stopping') else None,
                 },
                 "model_data": {
                     "model": self.model.state_dict(),
@@ -327,8 +352,7 @@ class Trainer:
                     "scaler": scaler.state_dict() if scaler else None,
                     "lr_scheduler": {
                         'weights': lr_scheduler.state_dict(),
-                        "warmup": train_c['lr_scheduler']['warmup'],
-                        "warmup_lr": train_c['lr_scheduler']['warmup_lr'],
+                        **{k: v for k, v in train_c['lr_scheduler'].items()},
                     } if lr_scheduler else None,
                 },
             })
@@ -341,16 +365,14 @@ class Tester:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('test')
         self.data_saver = DataSaver(output_dir)
-        
+
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.calculator = ScoreCalculator(class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
-        self.calculator.clear()
-
         c = get_config()
         device = torch.device(c['device'])
         self.model = self.model.to(device)
@@ -361,13 +383,14 @@ class Tester:
             outputs = self.model(inputs)
 
             targets, outputs = self.postprocess(targets, outputs)
-            self.calculator.add_one_batch(
+            self.calculator.finish_one_batch(
                 targets.detach().cpu().numpy(),
                 outputs.detach().cpu().numpy())
 
-        self.calculator.record_batches(self.output_dir)
+        self.calculator.record_batches()
 
         self._print_table()
+
     @classmethod
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
         targets[targets >= 0.5] = 1
@@ -378,11 +401,13 @@ class Tester:
 
     def _print_table(self):
         c = get_config()
+
         class_labels  = c['classes']
         metric_labels = c['metrics']
+        scores = ScoreAggregator(self.calculator.all_metric_label_scores)
 
-        test_mean_scores = self.calculator.metric_record
-        test_metric_class_scores = self.calculator.mean_record
+        test_mean_scores = scores.ml1_mean
+        test_metric_class_scores = (scores.mc1_mean, scores.mc1_std)
         
         styles = ALL_STYLES
         console = Console()
@@ -392,14 +417,16 @@ class Tester:
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
         for class_label in class_labels:
-            table.add_row("Test/" + class_label, *[str(test_metric_class_scores[class_label][metric]) for metric in metric_labels])
+            mean_scores = test_metric_class_scores[0]
+            std_scores = test_metric_class_scores[1]
+            table.add_row("Test/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
         console.print(table)
 
         table = Table(title='Summary of Metric(Test)')
         table.add_column("Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        table.add_row("Test", *[str(score) for score in test_mean_scores.values()])
+        table.add_row("Test", *[f'{score:.3f}' for score in test_mean_scores.values()])
         console.print(table)
 
 
@@ -447,12 +474,14 @@ class Predictor:
 
         pred_image.save(output_filename)
 
-    def preprocess(self, input: Path) -> (torch.Tensor, tuple[int, int]):
-        input = Image.open(input).convert('L')
-        size = input.size # (H, W)
+    @classmethod
+    def preprocess(self, input: Path) -> tuple[torch.Tensor, tuple[int, int]]:
+        image = Image.open(input).convert('L')
+        size = image.size # (H, W)
         transforms = get_transforms()
-        input = transforms(input).unsqueeze(0)
+        input = transforms(image).unsqueeze(0)
         return input, size
+    @classmethod
     def postprocess(self, pred: torch.Tensor) -> np.ndarray:
         pred[pred >= 0.5] = 255
         pred[pred < 0.5] = 0

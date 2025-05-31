@@ -13,13 +13,13 @@ class _DataSaver:
         base_dir.mkdir(parents=True, exist_ok=True)
         self.base_dir = base_dir
 
-    def save_loss(self, losses: list[np.ndarray], label: Literal["train", "valid"]):
+    def save_loss(self, losses: np.ndarray, label: Literal["train", "valid"]):
         csv_filename, parquet_filename = self._get_filenames(f"{label}_loss")
 
-        df_prev = self._prev_df(csv_filename, parquet_filename)
+        # df_prev = self._prev_df(csv_filename, parquet_filename)
 
         df = pd.DataFrame({"loss": losses})
-        df = pd.concat([df_prev, df], ignore_index=True)
+        # df = pd.concat([df_prev, df], ignore_index=True)
 
         self._save_dataframe(df, csv_filename, parquet_filename)
 
@@ -62,10 +62,10 @@ class _DataSaver:
                 f"{class_label}/all_metric"
             )
 
-            df_prev = self._prev_df(csv_filename, parquet_filename)
+            # df_prev = self._prev_df(csv_filename, parquet_filename)
 
             df = pd.DataFrame(metric_all)
-            df = pd.concat([df_prev, df], ignore_index=True)
+            # df = pd.concat([df_prev, df], ignore_index=True)
 
             self._save_dataframe(df, csv_filename, parquet_filename)
     def save_argmaxmin(self, metric_after_dict: MetricAfterDict):
@@ -91,10 +91,10 @@ class _DataSaver:
         df.to_csv(csv_filename)
         fastparquet.write(parquet_filename, df)
 
-    def _get_filenames(self, back: str):
+    def _get_filenames(self, back: str) -> tuple[str, str]:
         csv_filename = self.base_dir / (back + ".csv")
         parquet_filename = self.base_dir / (back + ".parquet")
-        return csv_filename, parquet_filename
+        return csv_filename.as_posix(), parquet_filename.as_posix()
 
 # async mode
 class DataSaver:
@@ -103,12 +103,12 @@ class DataSaver:
         self.saver = _DataSaver(base_dir)
         self.async_mode = async_mode
 
-    def save_train_loss(self, losses: list[np.ndarray]):
+    def save_train_loss(self, losses: np.ndarray):
         if self.async_mode:
             self.executor.submit(self.saver.save_loss, losses, 'train')
         else:
             self.saver.save_loss(losses, 'train')
-    def save_valid_loss(self, losses: list[np.ndarray]):
+    def save_valid_loss(self, losses: np.ndarray):
         if self.async_mode:
             self.executor.submit(self.saver.save_loss, losses, 'valid')
         else:

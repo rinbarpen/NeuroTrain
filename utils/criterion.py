@@ -34,7 +34,7 @@ class DiceLoss(Loss):
 
     def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
         loss = dice_loss(targets.detach().cpu().numpy(), preds.detach().cpu().numpy())
-        x = torch.from_numpy(loss)
+        x = torch.tensor(loss)
         x.requires_grad = True
         return x
 

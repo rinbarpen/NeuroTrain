@@ -10,8 +10,8 @@ from config import get_config, dump_config, is_predict, is_train, is_test
 from options import parse_args
 from model_operation import Trainer, Tester, Predictor
 from models.models import get_model
-from utils.util import (get_train_tools, get_train_valid_test_dataloader, load_model, load_model_ext, prepare_logger, set_seed)
-from utils.criterion import CombineCriterion
+from utils.util import (get_train_tools, get_train_valid_test_dataloader, load_model, load_model_ext, prepare_logger, set_seed, summary_model_info)
+from utils.criterion import CombineCriterion, DiceLoss
 
 if __name__ == "__main__":
     parse_args()
@@ -26,19 +26,27 @@ if __name__ == "__main__":
     train_dir = output_dir / "train"
     test_dir = output_dir / "test"
     predict_dir = output_dir / "predict"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    is_continue_mode = False
+    is_continue_mode = False # use this mode if encountering crash while training
 
     model = get_model(c["model"]["name"], c["model"]["config"])
+    if c['model']['pretained'] != "":
+        model_path = Path(c['model']['pretained'])
+        model_params = load_model(model_path, device)
+        logging.info(f'Load model: {model_path}')
+        model.load_state_dict(model_params)
+
     if c['model']['continue_checkpoint'] != "":
         model_path = Path(c['model']['continue_checkpoint'])
         model_params = load_model(model_path, device)
-        logging.info(f'Load model: {model_path}')
+        logging.info(f'Load model: {model_path}, Now is in continue mode')
         model.load_state_dict(model_params)
         is_continue_mode = True
 
     train_loader, valid_loader, test_loader = get_train_valid_test_dataloader()
     if is_train():
+        train_dir.mkdir()
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")
         dump_config(train_dir / "config.yaml")
@@ -50,7 +58,7 @@ if __name__ == "__main__":
         optimizer = tools['optimizer']
         lr_scheduler = tools['lr_scheduler']
         scaler = tools['scaler']
-        criterion = CombineCriterion(nn.BCEWithLogitsLoss()) # Loss
+        criterion = CombineCriterion([nn.BCEWithLogitsLoss(), DiceLoss()]) # Loss
 
         if is_continue_mode and c['model']['continue_ext_checkpoint'] != "":
             model_ext_path = Path(c['model']['continue_ext_checkpoint'])
@@ -81,6 +89,7 @@ if __name__ == "__main__":
 
 
     if is_test():
+        test_dir.mkdir()
         dump_config(test_dir / "config.json")
         dump_config(test_dir / "config.yaml")
         dump_config(test_dir / "config.toml")
@@ -98,6 +107,7 @@ if __name__ == "__main__":
 
 
     if is_predict():
+        predict_dir.mkdir()
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")
         dump_config(predict_dir / "config.yaml")
@@ -119,4 +129,6 @@ if __name__ == "__main__":
             inputs = [input_path]
             handle.predict(inputs, **c["predict"]["config"])
 
+    model.train()
+    summary_model_info(model, input_size=(1, 512, 512))
 

@@ -54,8 +54,10 @@ def parse_args():
     parser.add_argument('--predict', action='store_true', default=False, help='Predict mode')
     parser.add_argument('--check', action='store_true', default=False, help='Check mode')
     parser.add_argument('--output_dir', type=str, help='output directory')
-    parser.add_argument('--continue_checkpoint', type=str, help='load model checkpoint')
+    parser.add_argument('--continue_checkpoint', type=str, help='continue model checkpoint')
+    parser.add_argument('--pretrained', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
+    parser.add_argument('--run_id', type=str, help='run id')
 
     parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     
@@ -90,6 +92,8 @@ def parse_args():
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
         ext_checkpoint_filename = f"{os.path.splitext(checkpoint_filename)[0]}-ext.pt"
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
+    if args.pretrained:
+        CONFIG['model']['pretrained'] = args.pretrained
     if args.model:
         CONFIG['model']['name'] = args.model
     if args.train:
@@ -134,8 +138,10 @@ def parse_args():
     if args.predict:
         CONFIG['private']['mode'] |= PREDICT_MODE
 
-    run_id = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    CONFIG['run_id'] = run_id
+    if args.run_id:
+        CONFIG['run_id'] = args.run_id
+    elif CONFIG['run_id'] is None or CONFIG['run_id'] == '':
+        CONFIG['run_id'] = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
     if args.check:
         CONFIG['private']['mode'] |= (TRAIN_MODE | TEST_MODE | PREDICT_MODE)

@@ -7,67 +7,127 @@ from utils.painter import Plot
 from utils.data_saver import DataSaver
 from utils.typed import ScoreAggregator
 
+
 # y_true, y_pred: (B, C, X)
-def f1_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
+def f1_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
     n_labels = len(labels)
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         score = metrics.f1_score(y_true, y_pred, average=average)
         result[label] = np.float64(score)
 
     return result
 
-def recall_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
+
+def recall_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
     n_labels = len(labels)
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         score = metrics.recall_score(y_true, y_pred, average=average)
         result[label] = np.float64(score)
 
     return result
 
-def precision_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
+
+def precision_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
     n_labels = len(labels)
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         score = metrics.precision_score(y_true, y_pred, average=average)
         result[label] = np.float64(score)
 
     return result
 
-def accuracy_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
+
+def accuracy_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
     n_labels = len(labels)
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         score = metrics.accuracy_score(y_true, y_pred)
         result[label] = np.float64(score)
 
     return result
 
-def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
-    n_labels = len(labels) 
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+def dice_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
+    n_labels = len(labels)
+
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         intersection = np.logical_and(y_true, y_pred).sum()
         union = np.logical_or(y_true, y_pred).sum()
         score = 2 * intersection / (union + 2 * intersection)
@@ -75,14 +135,26 @@ def dice_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, 
 
     return result
 
-def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *, class_axis: int=1, average: str='binary'):
+
+def iou_score(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
     n_labels = len(labels)
 
-    y_true_flatten = [yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)]
-    y_pred_flatten = [yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)]
+    y_true_flatten = [
+        yt.flatten() for yt in np.split(y_true, n_labels, axis=class_axis)
+    ]
+    y_pred_flatten = [
+        yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
+    ]
 
     result = dict()
-    for (label, y_true, y_pred) in zip(labels, y_true_flatten, y_pred_flatten):
+    for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         intersection = np.logical_and(y_true, y_pred).sum()
         union = np.logical_or(y_true, y_pred).sum()
         score = intersection / union if union > 0 else 0.0
@@ -90,29 +162,41 @@ def iou_score(y_true: np.ndarray, y_pred: np.ndarray, labels: ClassLabelsList, *
 
     return result
 
-def scores(y_true: np.ndarray, y_pred: np.ndarray, 
-           labels: ClassLabelsList, metric_labels: MetricLabelsList, 
-           *, class_axis: int=1, average: str='binary'):
-    result: MetricClassOneScoreDict = create_MetricClassOneScoreDict(metric_labels, labels)
+
+def scores(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    labels: ClassLabelsList,
+    metric_labels: MetricLabelsList,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+):
+    result: MetricClassOneScoreDict = create_MetricClassOneScoreDict(
+        metric_labels, labels
+    )
     result_after: MetricAfterDict = create_MetricAfterDict(labels)
 
     MAP = {
-        'iou': iou_score,
-        'accuracy': accuracy_score,
-        'precision': precision_score,
-        'recall': recall_score,
-        'f1': f1_score,
-        'dice': dice_score,
+        "iou": iou_score,
+        "accuracy": accuracy_score,
+        "precision": precision_score,
+        "recall": recall_score,
+        "f1": f1_score,
+        "dice": dice_score,
     }
 
     for metric in metric_labels:
-        result[metric] = MAP[metric](y_true, y_pred, labels, class_axis=class_axis, average=average)
+        result[metric] = MAP[metric](
+            y_true, y_pred, labels, class_axis=class_axis, average=average
+        )
         values = np.array(list(result[metric].values()))
-        result_after['mean'][metric] = values.mean()
-        result_after['argmax'][metric] = labels[values.argmax()]
-        result_after['argmin'][metric] = labels[values.argmin()]
+        result_after["mean"][metric] = values.mean()
+        result_after["argmax"][metric] = labels[values.argmax()]
+        result_after["argmin"][metric] = labels[values.argmin()]
 
     return result, result_after
+
 
 # result template:
 # labels = ['0', '1', '2']
@@ -155,23 +239,42 @@ def scores(y_true: np.ndarray, y_pred: np.ndarray,
 #            'f1': '2',
 #            'dice': '2'}}
 
-def dice_loss(y_true: np.ndarray, y_pred: np.ndarray, *, class_axis: int=1, average: str='binary'):
+
+def dice_loss(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    *,
+    class_axis: int = 1,
+    average: str = "binary",
+) -> np.float64:
     labels = [str(i) for i in range(y_true.shape[class_axis])]
     result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-    score = np.array(result.values(), dtype=np.float64).mean()
+    score = np.fromiter(result.values(), dtype=np.float64).mean()
     return -score
 
-def kl_divergence_loss(y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float=1e-7):
+
+def kl_divergence_loss(
+    y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float = 1e-7
+):
     # 确保输入为概率分布
     y_true = np.clip(y_true, epsilon, 1.0 - epsilon)
     y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
-    
+
     # 计算 KL 散度: sum(p * log(p/q))
     kl_div = np.sum(y_true * np.log(y_true / y_pred), axis=1)
     return np.mean(kl_div)
 
+
 class ScoreCalculator:
-    def __init__(self, output_dir: FilePath, class_labels: ClassLabelsList, metric_labels: MetricLabelsList, *, logger=None, saver: DataSaver):
+    def __init__(
+        self,
+        output_dir: FilePath,
+        class_labels: ClassLabelsList,
+        metric_labels: MetricLabelsList,
+        *,
+        logger=None,
+        saver: DataSaver,
+    ):
         self.logger = logger or logging.getLogger()
         self.saver = saver
         self.output_dir = Path(output_dir)
@@ -182,16 +285,22 @@ class ScoreCalculator:
         #   '0': [], '1': []},
         #  'precision: {
         #   '0': [], '1': []}}
-        self.all_metric_label_scores: MetricClassManyScoreDict = {metric: {label: [] for label in class_labels} for metric in metric_labels} 
+        self.all_metric_label_scores: MetricClassManyScoreDict = {
+            metric: {label: [] for label in class_labels} for metric in metric_labels
+        }
         # but epoch_metric_label_scores is saved by epoch
-        self.epoch_metric_label_scores: MetricClassManyScoreDict = {metric: {label: [] for label in class_labels} for metric in metric_labels} 
+        self.epoch_metric_label_scores: MetricClassManyScoreDict = {
+            metric: {label: [] for label in class_labels} for metric in metric_labels
+        }
 
         for class_label in class_labels:
             class_dir = self.output_dir / class_label
             class_dir.mkdir(parents=True, exist_ok=True)
 
     def finish_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
-        metrics, metrics_after = scores(targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels)
+        metrics, metrics_after = scores(
+            targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels
+        )
 
         for metric_label in self.metric_labels:
             for class_label in self.class_labels:
@@ -209,38 +318,12 @@ class ScoreCalculator:
         return self.epoch_metric_label_scores
 
     def record_batches(self):
-        scores = ScoreAggregator(self.all_metric_label_scores)
-
-        self.saver.save_all_metric_by_class(scores.cmm)
-        self.saver.save_mean_metric_by_class(scores.cm1_mean)
-        self.saver.save_std_metric_by_class(scores.cm1_std)
-        self.saver.save_mean_metric(scores.ml1_mean)
-        self.saver.save_std_metric(scores.ml1_std)
-
-        mean_metrics_image = self.output_dir / "mean_metrics.png"
-        # paint mean metrics for all classes
-        Plot(1, 1).subplot().many_metrics(scores.cm1_mean).complete().save(mean_metrics_image)
-        for label in self.class_labels:
-            mean_image = self.output_dir / label / "mean_metric.png"
-            Plot(1, 1).subplot().metrics(scores.cm1_mean[label], label).complete().save(mean_image)
+        self._record(self.all_metric_label_scores)
 
     def record_epochs(self, n_epochs: int):
-        scores = ScoreAggregator(self.all_metric_label_scores)
+        self._record(self.epoch_metric_label_scores)
 
-        self.saver.save_all_metric_by_class(scores.cmm)
-        self.saver.save_mean_metric_by_class(scores.cm1_mean)
-        self.saver.save_std_metric_by_class(scores.cm1_std)
-        self.saver.save_mean_metric(scores.ml1_mean)
-        self.saver.save_std_metric(scores.ml1_std)
-
-        mean_metrics_image = self.output_dir / "mean_metrics.png"
-        # paint mean metrics for all classes
-        Plot(1, 1).subplot().many_metrics(scores.cm1_mean).complete().save(mean_metrics_image)
-        for label in self.class_labels:
-            mean_image = self.output_dir / label / "mean_metric.png"
-            Plot(1, 1).subplot().metrics(scores.cm1_mean[label], label).complete().save(mean_image)
-
-        epoch_metrics_image = self.output_dir / "epoch_metrics.png"
+        epoch_metrics_image = self.output_dir / "epoch_metrics_curve_per_classes.png"
         # paint metrics curve for all classes in one figure
         n = len(self.metric_labels)
         if n > 4:
@@ -251,7 +334,67 @@ class ScoreCalculator:
             nrows, ncols = 1, n
 
         scores = ScoreAggregator(self.epoch_metric_label_scores)
+        # for global, plot all classes in one figure with all metrics
         plot = Plot(nrows, ncols)
         for metric in self.metric_labels:
-            plot.subplot().many_epoch_metrics(n_epochs, scores.cmm[metric], self.class_labels, title=metric).complete()
+            plot.subplot().many_epoch_metrics_by_class(
+                n_epochs,
+                self.epoch_metric_label_scores[metric],
+                self.class_labels,
+                title=metric,
+            ).complete()
         plot.save(epoch_metrics_image)
+        # for global, plot all metrics in one figure
+        epoch_metrics_image = self.output_dir / "epoch_metrics_curve.png"
+        plot = Plot(1, 1)
+        plot.subplot().many_epoch_metrics(
+            n_epochs, scores.m2_mean, metric_labels=self.metric_labels, title="All Metrics"
+        ).complete()
+        plot.save(epoch_metrics_image)
+        # for every classes
+        for label in self.class_labels:
+            epoch_metric_image = self.output_dir / label / "metrics.png"
+            plot = Plot(1, 1)
+            plot.subplot().many_epoch_metrics(n_epochs, scores.cmm[label], metric_labels=self.metric_labels, title=label).complete()
+            plot.save(epoch_metric_image)
+        # for every classes with sole metric
+        for metric in self.metric_labels:
+            for label in self.class_labels:
+                m_scores = np.array(
+                    self.epoch_metric_label_scores[metric][label], dtype=np.float64
+                )
+                epoch_metric_image = self.output_dir / label / f"{metric}.png"
+                plot = Plot(1, 1)
+                plot = (
+                    plot.subplot()
+                    .epoch_metrics(
+                        n_epochs, m_scores, label, title=f"Epoch-{label}-{metric}"
+                    )
+                    .complete()
+                )
+                plot.save(epoch_metric_image)
+
+    def _record(self, mc_scores: MetricClassManyScoreDict):
+        scores = ScoreAggregator(mc_scores)
+
+        self.saver.save_all_metric_by_class(scores.cmm)
+        self.saver.save_mean_metric_by_class(scores.cm1_mean)
+        self.saver.save_std_metric_by_class(scores.cm1_std)
+        self.saver.save_mean_metric(scores.ml1_mean)
+        self.saver.save_std_metric(scores.ml1_std)
+
+        mean_metrics_image = self.output_dir / "mean_metrics_per_classes.png"
+        # paint mean metrics for all classes
+        Plot(1, 1).subplot().many_metrics(scores.cm1_mean).complete().save(
+            mean_metrics_image
+        )
+        for label in self.class_labels:
+            mean_image = self.output_dir / label / "mean_metric.png"
+            Plot(1, 1).subplot().metrics(scores.cm1_mean[label], label).complete().save(
+                mean_image
+            )
+        mean_metrics_image = self.output_dir / "mean_metrics.png"
+        # metric mean
+        Plot(1, 1).subplot().metrics(scores.ml1_mean).complete().save(
+            mean_metrics_image
+        )

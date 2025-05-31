@@ -161,13 +161,8 @@ def load_model(path: FilePath, map_location: str = 'cuda'):
 def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
     return torch.load(ext_path, map_location)
 
-def summary_model_info(model_src: FilePath | torch.nn.Module, input_size: tuple[int, ...], device: str="cpu"):
-    if isinstance(model_src, FilePath):
-        checkpoint = load_model(model_src, device)
-        summary(checkpoint, input_size=input_size, device=device)
-    elif isinstance(model_src, torch.nn.Module):
-        checkpoint = model_src
-        summary(checkpoint, input_size=input_size, device=device)
+def summary_model_info(model: torch.nn.Module, input_size: tuple[int, ...], device: str="cuda"):
+    summary(model, input_size=input_size, device=device)
 
 # def disable_torch_init():
 #     """

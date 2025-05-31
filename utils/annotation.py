@@ -1,24 +1,31 @@
 import logging
 import time
+from functools import wraps
 
-def doc(desc: str):
-    def decorator(f):
-        f.__doc__ = desc
-        return f
-    return decorator
+def deprecated(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        print(f"Function {f.__name__} is deprecated")
+        return f(*args, **kwargs)
+    return wrapper
 
-def buildin(desc: str):
+
+def buildin(desc: str=""):
     def decorator(f):
-        f.__doc__ = desc
-        return f
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            print(f"Using buildin function {f.__name__}")
+            return f(*args, **kwargs)
+        return wrapper
     return decorator
 
 def time_cost(f):
+    @wraps(f)
     def wrapper(*args, **kwargs):
         begin = time.time()
         result = f(*args, **kwargs)
         end = time.time()
-        logging.debug(f"Function {f.__name__} took {end - begin} ns")
+        print(f"Function {f.__name__} took {end - begin} ns")
         return result
     return wrapper
 

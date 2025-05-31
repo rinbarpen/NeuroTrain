@@ -56,6 +56,8 @@ class ScoreAggregator:
         self._ml1_mean: MetricLabelOneScoreDict | None = None
         self._ml1_std: MetricLabelOneScoreDict | None = None
 
+        self._m2_mean: MetricLabelManyScoreDict | None = None # by classes
+
     # --- Properties to access computed results ---
 
     @property
@@ -112,6 +114,13 @@ class ScoreAggregator:
         if self._ml1_std is None:
             self._ml1_std = self._compute_ml1(np.std)
         return self._ml1_std
+
+    @property
+    def m2_mean(self) -> MetricLabelManyScoreDict:
+        """Metric -> Class -> Mean Score (aggregated across all classes)"""
+        if self._m2_mean is None:
+            self._m2_mean = self._compute_m2()
+        return self._m2_mean
 
     # --- Internal computation methods ---
 
@@ -186,6 +195,21 @@ class ScoreAggregator:
                 result[metric] = FLOAT(func(all_scores_for_metric))
             else:
                 result[metric] = FLOAT(np.nan)
+        return result
+
+    def _compute_m2(self) -> MetricLabelManyScoreDict:
+        """
+        Helper to compute MetricLabelManyScoreDict by
+        aggregating scores across all classes for each metric.
+        """
+        result: MetricLabelManyScoreDict = {}
+        n = len(next(iter(next(iter(self._mcm_scores.values())).values())))
+        print(f'{n=}')
+        for metric, class_scores_dict in self._mcm_scores.items():
+            result[metric] = []
+            for i in range(n):
+                s = [class_scores_dict[k][i] for k in class_scores_dict.keys()]
+                result[metric].append(FLOAT(np.mean(s)))
         return result
 
 def create_ClassLabelOneScoreDict(class_labels: ClassLabelsList, 

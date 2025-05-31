@@ -36,7 +36,7 @@ class _MultiHeadAttention(nn.Module):
         else:
             self.proj_k = self.proj_v
 
-        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.attn_dropout = nn.Dropout(attn_dropout, inplace=True)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
 

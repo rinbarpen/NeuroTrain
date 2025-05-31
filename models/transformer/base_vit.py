@@ -12,7 +12,7 @@ def pair(x: int|tuple[int, int]):
 
 
 class BaseViT(nn.Module):
-    def __init__(self, n_channels: int, patch_size: int|tuple[int, int], image_size: int|tuple[int, int], n_layers: int, embed_dim: int, num_heads: int, r: int, attn_dropout: float=0.2, attn_out_dropout: float=0.0, mlp_dropout: float=0.3, mlp_out_dropout: float=0.3, mlp_act=nn.LeakyReLU, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, rms_norm=False, *, use_learnable=False):
+    def __init__(self, n_channels: int, patch_size: int|tuple[int, int], image_size: int|tuple[int, int], n_layers: int, embed_dim: int, num_heads: int, r: int=4, attn_dropout: float=0.2, attn_out_dropout: float=0.0, mlp_dropout: float=0.3, mlp_out_dropout: float=0.3, mlp_act=nn.LeakyReLU, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, rms_norm=False, *, use_learnable=False):
         super(BaseViT, self).__init__()
 
         patch_size = pair(patch_size)
@@ -27,7 +27,7 @@ class BaseViT(nn.Module):
         return self.blocks(x)
 
 class CrossViT(nn.Module):
-    def __init__(self, n_channels: int, patch_size: int|tuple[int, int], image_size: int|tuple[int, int], n_layers: int, embed_dim: int, num_heads: int, r: int, attn_dropout: float=0.2, attn_out_dropout: float=0.0, mlp_dropout: float=0.3, mlp_out_dropout: float=0.3, mlp_act=nn.LeakyReLU, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, rms_norm=False, *, use_learnable=False):
+    def __init__(self, n_channels: int, patch_size: int|tuple[int, int], image_size: int|tuple[int, int], n_layers: int, embed_dim: int, num_heads: int, r: int=4, attn_dropout: float=0.2, attn_out_dropout: float=0.0, mlp_dropout: float=0.3, mlp_out_dropout: float=0.3, mlp_act=nn.LeakyReLU, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, rms_norm=False, *, use_learnable=False):
         super(CrossViT, self).__init__()
 
         patch_size = pair(patch_size)
