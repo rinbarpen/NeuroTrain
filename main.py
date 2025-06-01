@@ -31,14 +31,16 @@ if __name__ == "__main__":
     is_continue_mode = False # use this mode if encountering crash while training
 
     model = get_model(c["model"]["name"], c["model"]["config"])
-    if c['model']['pretained'] != "":
-        model_path = Path(c['model']['pretained'])
+    pretrained_model = c['model'].get('pretrained')
+    continue_checkpoint = c['model'].get('continue_checkpoint')
+    if pretrained_model and pretrained_model != "":
+        model_path = Path(pretrained_model)
         model_params = load_model(model_path, device)
         logging.info(f'Load model: {model_path}')
         model.load_state_dict(model_params)
 
-    if c['model']['continue_checkpoint'] != "":
-        model_path = Path(c['model']['continue_checkpoint'])
+    if continue_checkpoint and continue_checkpoint != "":
+        model_path = Path(continue_checkpoint)
         model_params = load_model(model_path, device)
         logging.info(f'Load model: {model_path}, Now is in continue mode')
         model.load_state_dict(model_params)
@@ -129,6 +131,4 @@ if __name__ == "__main__":
             inputs = [input_path]
             handle.predict(inputs, **c["predict"]["config"])
 
-    model.train()
     summary_model_info(model, input_size=(1, 512, 512))
-
