@@ -5,8 +5,10 @@ from PIL import Image
 import wandb
 import torch
 from torch import nn
-from torch.amp import GradScaler, autocast
+from torch.amp.grad_scaler import GradScaler
+from torch.amp.autocast_mode import autocast
 from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
+from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 import logging
 from rich.table import Table
@@ -48,7 +50,7 @@ class Trainer:
 
     def train(self, num_epochs: int, 
               criterion: CombineCriterion, 
-              optimizer: torch.optim.Optimizer,
+              optimizer: Optimizer,
               train_dataloader: DataLoader,
               valid_dataloader: DataLoader | None = None, 
               scaler: GradScaler | None = None, 

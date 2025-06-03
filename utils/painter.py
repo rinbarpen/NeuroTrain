@@ -10,11 +10,17 @@ from sklearn import metrics
 from PIL import Image
 
 from utils.annotation import buildin
-from utils.typed import ClassMetricOneScoreDict, MetricLabelManyScoreDict, MetricLabelOneScoreDict, ClassLabelManyScoreDict
+from utils.typed import (
+    ClassMetricOneScoreDict,
+    MetricLabelManyScoreDict,
+    MetricLabelOneScoreDict,
+    ClassLabelManyScoreDict,
+)
 
 # x, y, shape-like ['-o', '-D'] | font, color, label
 # labelsize for tick_params
 # linewidth linestyle for grid
+
 
 class BasePainter:
     def __init__(self, pa):
@@ -22,6 +28,7 @@ class BasePainter:
 
     def complete(self):
         return self.pa
+
 
 AXIS = Literal["x", "y", "xy"]
 
@@ -54,6 +61,7 @@ class Font:
         font._dict = fontdict
         return font
 
+
 class Bar:
     def __init__(self, ax, bars):
         self._ax = ax  # parent
@@ -79,6 +87,7 @@ class Bar:
 
     def complete(self):
         return self._ax
+
 
 class BarH:
     def __init__(self, ax, bars):
@@ -106,6 +115,7 @@ class BarH:
 
     def complete(self):
         return self._ax
+
 
 # TODO: How to paint with plot for subplot
 class Line:
@@ -166,12 +176,13 @@ class Line:
     def complete(self):
         return self._ax
 
+
 class Scatter:
     def __init__(self, ax, x, y):
         self._ax = ax
         self._x = x
         self._y = y
-    
+
     def complete(self):
         return self._ax
 
@@ -224,9 +235,11 @@ class Subplot:
     def xlabel(self, xlabel: str, *args, **kwargs):
         self._ax.set_xlabel(xlabel, *args, **kwargs)
         return self
+
     def ylabel(self, ylabel: str, *args, **kwargs):
         self._ax.set_ylabel(ylabel, *args, **kwargs)
         return self
+
     def label(self, axis: AXIS, label: str, *args, **kwargs):
         if axis == "x":
             self.xlabel(label, *args, **kwargs)
@@ -240,9 +253,11 @@ class Subplot:
     def xticks(self, xticks: np.ndarray):
         self._ax.set_xticks(xticks)
         return self
+
     def yticks(self, yticks: np.ndarray):
         self._ax.set_yticks(yticks)
         return self
+
     def ticks(self, axis: AXIS, ticks: np.ndarray):
         if axis == "x":
             self.xticks(ticks)
@@ -252,6 +267,7 @@ class Subplot:
             self.xticks(ticks)
             self.yticks(ticks)
         return self
+
     def tick_params(self, **kwargs):
         self._ax.tick_parmas(**kwargs)
         return self
@@ -259,9 +275,11 @@ class Subplot:
     def xlim(self, *args):
         self._ax.set_xlim(*args)
         return self
+
     def ylim(self, *args):
         self._ax.set_ylim(*args)
         return self
+
     def lim(self, axis: AXIS, *args):
         if axis == "x":
             self.xlim(*args)
@@ -274,8 +292,10 @@ class Subplot:
 
     def xaxis_visible(self, visible: bool = True):
         self._ax.xaxis.set_visible(visible)
+
     def yaxis_visible(self, visible: bool = True):
         self._ax.yaxis.set_visible(visible)
+
     def axis_visible(self, axis: AXIS, visible: bool = True):
         if axis == "x":
             self.xaxis_visible(visible)
@@ -285,12 +305,15 @@ class Subplot:
             self.xaxis_visible(visible)
             self.yaxis_visible(visible)
         return self
+
     def axis_off(self):
         self._ax.axis("off")
         return self
+
     def title(self, title: str):
         self._ax.set_title(title)
         return self
+
     def complete(self):
         return self._parent
 
@@ -428,9 +451,7 @@ class Subplot:
     ):
         metric_labels, scores = metric_score.keys(), metric_score.values()
         if use_barh:
-            bars = self._ax.barh(
-                metric_labels, scores, height
-            )
+            bars = self._ax.barh(metric_labels, scores, height)
             self._ax.set_xlim(0, 1)
             self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
             # self._ax.set_yticklabels(metric_labels)
@@ -447,9 +468,7 @@ class Subplot:
                         va="center",
                     )
         else:
-            bars = self._ax.bar(
-                metric_labels, scores, width
-            )
+            bars = self._ax.bar(metric_labels, scores, width)
             self._ax.set_ylim(0, 1)
             self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
             # self._ax.set_xticklabels(metric_labels)
@@ -470,6 +489,7 @@ class Subplot:
             self._ax.set_title(title)
         self._ax.legend()
         return self
+
     @buildin(desc="many metrics")
     def many_metrics(
         self,
@@ -559,13 +579,14 @@ class Subplot:
         self._ax.set_xlabel("False Positive Rate")
         self._ax.set_ylabel("True Positive Rate")
         return self
+
     @buildin(desc="ROC Curve with AUC")
     def auc(
         self,
         y_trues: list[np.ndarray],
         y_preds: list[np.ndarray],
         labels: list[str],
-        title: str="ROC Curve with AUC",
+        title: str = "ROC Curve with AUC",
     ):
         for y_true, y_pred, label in zip(y_trues, y_preds, labels):
             fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
@@ -578,8 +599,14 @@ class Subplot:
         return self
 
     @buildin(desc="PR Curve")
-    def pr_curve(self, precisions: list[np.ndarray], recalls: list[np.ndarray], labels: list[str], title: str="PR Curve"):
-        colors = sns.color_palette('husl', len(labels))
+    def pr_curve(
+        self,
+        precisions: list[np.ndarray],
+        recalls: list[np.ndarray],
+        labels: list[str],
+        title: str = "PR Curve",
+    ):
+        colors = sns.color_palette("husl", len(labels))
         for precision, recall, label, color in zip(precisions, recalls, labels, colors):
             self._ax.plot(precision, recall, label=label, color=color)
         self._ax.set_title(title)
@@ -732,7 +759,7 @@ class PaintHelper:
     #                     }
     #                 }
     #             ],
-    #             "with_text": True, # for len(paints) == 1 
+    #             "with_text": True, # for len(paints) == 1
     #             "legend": True,
     #             "xlim": [0, 1],
     #             "ylim": [0, 1],
@@ -791,6 +818,7 @@ class PaintHelper:
     #         }]
     #     }
 
+
 # class PainterParamPlotBuilder:
 #     _param = {
 #         'nrows': 1,
@@ -810,7 +838,7 @@ class PaintHelper:
 #                     # 'label': None,
 #                 },
 #             }],
-#             # "with_text": True, # for len(paints) == 1 
+#             # "with_text": True, # for len(paints) == 1
 #             "legend": True,
 #             "xlim": [0, 1],
 #             "ylim": [0, 1],
@@ -834,7 +862,7 @@ class PaintHelper:
 #     def title(self, x: str):
 #         self._param['title'] = x
 #         return self
-    
+
 #     def tight_layout(self, x: bool=True):
 #         self._param['tight_layout'] = x
 #         return self
@@ -844,7 +872,6 @@ class PaintHelper:
 #     def show(self, x: bool=True):
 #         self._param['show'] = x
 #         return self
-
 
 
 # class PaintParamDictBuilder:
@@ -866,7 +893,7 @@ class PaintHelper:
 #                     # 'label': None,
 #                 },
 #             }],
-#             # "with_text": True, # for len(paints) == 1 
+#             # "with_text": True, # for len(paints) == 1
 #             "legend": True,
 #             "xlim": [0, 1],
 #             "ylim": [0, 1],
