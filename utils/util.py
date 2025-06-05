@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnn
 from torch.amp.grad_scaler import GradScaler
 
 from pathlib import Path
-from PIL import Image 
+from PIL import Image
 from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
@@ -22,7 +22,12 @@ from utils.typed import FilePath, ImageInstance
 from utils.dataset.dataset import get_chained_datasets
 
 def prepare_logger():
-    c = get_config()['private']['log']
+    c = get_config_value('private.log', default={
+        'debug': False,
+        'verbose': False,
+        'log_file_format': '%Y-%m-%d %H_%M_%S',
+        'log_format': '%(asctime)s %(levelname)s | %(name)s | %(message)s',
+    })
 
     os.makedirs('logs', exist_ok=True)
     filename = os.path.join('logs', time.strftime(c['log_file_format'], time.localtime()) + '.log')
@@ -212,50 +217,6 @@ def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> f
     total_flops = flops.total()
     return total_flops / 1e9  # Convert to GFLOPs
 
-
-def split_image(
-    image: Image.Image, n_rows: int=1, n_cols: int=1, *, output_dir: Path | None = None
-) -> list[Image.Image]:
-    """
-    将图像分割成小块并保存到指定目录。
-
-    Args:
-        image (Image.Image): 图像文件实例。
-        n_rows (int): 一行图像块的数量。
-        n_cols (int): 一列图像块的数量。
-        output_dir (Path): 保存小块图像的目录。
-    """
-
-    width, height = image.size
-    tile_width, tile_height = width // n_cols, height // n_rows
-
-    tile_images = []
-    for i in range(0, height, tile_height):
-        for j in range(0, width, tile_width):
-            # 定义当前小块的边界
-            box = (j, i, j + tile_height, i + tile_width)
-
-            # 避免超出图像边界
-            if box[2] > width:
-                box = (box[0], box[1], width, box[3])  # Adjust right boundary
-            if box[3] > height:
-                box = (box[0], box[1], box[2], height)  # Adjust bottom boundary
-
-            # 提取小块
-            try:
-                tile_image = image.crop(box)
-            except Exception as e:
-                logging.error(f"切除图像失败。边界：{box}，错误：{e}")
-                raise e
-
-            tile_images.append(tile_image)
-
-    if output_dir:
-        for i, tile_image in enumerate(tile_images):
-            output_filename = output_dir / f"tile_{i:04d}.png"
-            tile_image.save(output_filename, "PNG")
-
-    return tile_images
 
 # freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
 # optimizer_filters = [lambda n: "encoder" not in n, lambda n: "encoder" in n and "clip" not in n]

@@ -502,6 +502,7 @@ class Subplot:
         width=0.35,
         tick_threshold=0.2,
         use_barh=True,
+        use_label=True,
     ):
         colors = sns.color_palette("husl", len(label_metric_score))
         for color, (class_label, metric_score) in zip(
@@ -510,7 +511,7 @@ class Subplot:
             metric_labels, scores = metric_score.keys(), metric_score.values()
             if use_barh:
                 bars = self._ax.barh(
-                    metric_labels, scores, height, color=color, label=class_label
+                    metric_labels, scores, height, color=color, label=class_label if use_label else None
                 )
                 self._ax.set_xlim(0, 1)
                 self._ax.set_xticks(np.arange(0, 1.1, tick_threshold))
@@ -529,7 +530,7 @@ class Subplot:
                         )
             else:
                 bars = self._ax.bar(
-                    metric_labels, scores, width, color=color, label=class_label
+                    metric_labels, scores, width, color=color, label=class_label if use_label else None
                 )
                 self._ax.set_ylim(0, 1)
                 self._ax.set_yticks(np.arange(0, 1.1, tick_threshold))
@@ -601,8 +602,8 @@ class Subplot:
     @buildin(desc="PR Curve")
     def pr_curve(
         self,
-        precisions: list[np.ndarray],
-        recalls: list[np.ndarray],
+        precisions: list[np.ndarray]|np.ndarray,
+        recalls: list[np.ndarray]|np.ndarray,
         labels: list[str],
         title: str = "PR Curve",
     ):
@@ -615,11 +616,21 @@ class Subplot:
         self._ax.legend()
         return self
 
+    # cmap bug
     @buildin(desc="image show")
     def image(self, image: Image.Image | cv2.Mat, cmap=None):
         self._ax.axis("off")
         self._ax.imshow(image, cmap=cmap)
         return self
+    
+    def no_title(self):
+        self.title('')
+        return self
+    
+    def no_xylabel(self):
+        self.label('xy', '')
+        return self
+    
 
     def instance(self):
         return self._ax

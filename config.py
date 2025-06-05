@@ -52,14 +52,15 @@ def set_config(config: dict):
 def get_config() -> dict:
     return CONFIG
 
-def get_config_value(key_field: str, split: str='.'):
+def get_config_value(key_field: str, split: str='.', default=None):
     keys = key_field.split(split)
     value = CONFIG
     try:
         for key in keys:
             value = value[key]
     except KeyError:
-        raise ValueError(f'{key_field} is not in config.')
+        print(f'{key_field} is not in config. Returning default value: {default}')
+        return default
     return value
 
 def load_config(filename: Path) -> dict:
@@ -73,12 +74,11 @@ def load_config(filename: Path) -> dict:
         case '.toml':
             with filename.open(mode='r', encoding='utf-8') as f:
                 config = toml.load(f)
+        case _:
+            raise ValueError(f'Unsupported config file format: {filename.suffix}')
 
     logging.info(f'Loading config from {filename}')
     return config
-
-def dump_config(filename: Path):
-    save_config(filename, CONFIG)
 
 def save_config(filename: Path, config: dict):
     match filename.suffix:
@@ -91,4 +91,9 @@ def save_config(filename: Path, config: dict):
         case '.toml':
             with filename.open(mode='w', encoding='utf-8') as f:
                 toml.dump(config, f)
-    logging.info(f'Loading config from {filename}')
+        case _:
+            raise ValueError(f'Unsupported config file format: {filename.suffix}')
+    logging.info(f'Saving config to {filename}')
+
+def dump_config(filename: Path):
+    save_config(filename, CONFIG)
