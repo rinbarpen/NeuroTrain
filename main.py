@@ -13,6 +13,8 @@ from models.models import get_model
 from utils.util import (get_train_tools, get_train_valid_test_dataloader, load_model, load_model_ext, prepare_logger, set_seed, summary_model_info)
 from utils.criterion import CombineCriterion, DiceLoss
 
+import torch.distributed as dist
+
 if __name__ == "__main__":
     parse_args()
     c = get_config()
@@ -21,6 +23,10 @@ if __name__ == "__main__":
     if c["seed"] >= 0:
         set_seed(c["seed"])
     device = c["device"]
+    # device = ','.join(device)
+    is_multigpu = ',' in device
+    if is_multigpu:
+        dist.barrier()
 
     output_dir = Path(c["output_dir"]) / c["task"] / c["run_id"]
     train_dir = output_dir / "train"

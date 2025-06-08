@@ -88,8 +88,8 @@ class _DataSaver:
     def _save_dataframe(
         self, df: pd.DataFrame, csv_filename: str, parquet_filename: str
     ):
-        df.to_csv(csv_filename)
-        fastparquet.write(parquet_filename, df)
+        df.to_csv(csv_filename, mode='a+')
+        fastparquet.write(parquet_filename, df, append=True)
 
     def _get_filenames(self, back: str) -> tuple[str, str]:
         csv_filename = self.base_dir / (back + ".csv")

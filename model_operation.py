@@ -48,6 +48,10 @@ class Trainer:
         self.train_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
         self.valid_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
+        # TODO:
+        # if is_continue_mode:
+        #     recovery()
+
     def train(self, num_epochs: int, 
               criterion: CombineCriterion, 
               optimizer: Optimizer,
@@ -155,7 +159,7 @@ class Trainer:
                 self.train_calculator.finish_one_epoch()
 
                 # validate
-                if valid_dataloader:
+                if enable_valid_when_training:
                     valid_loss = 0.0
                     self.model.eval()
 
@@ -201,7 +205,7 @@ class Trainer:
                     save_model(save_model_filename, self.model,             
                             ext_path=save_model_ext_filename, optimizer=optimizer,        
                             scaler=scaler, lr_scheduler=lr_scheduler,
-                            epoch=epoch, version=c['run_id'])
+                            epoch=epoch, version=c['run_id'], best_loss=best_loss)
                     self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
 
                 # save best model
@@ -212,20 +216,13 @@ class Trainer:
                         save_model(self.best_model_file_path, self.model, 
                                     ext_path=self.best_model_ext_file_path,
                                     optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                                    epoch=epoch, version=c['run_id'])
+                                    epoch=epoch, version=c['run_id'], best_loss=best_loss)
                         self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
-                else:
-                    loss = train_loss
-                    save_model(self.best_model_file_path, self.model, 
-                                ext_path=self.best_model_ext_file_path,
-                                optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                                epoch=epoch, version=c['run_id'])
-                    self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {loss=}')
 
                 save_model(self.last_model_file_path, self.model,
                         ext_path=self.last_model_ext_file_path,
                         optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                        epoch=num_epochs, version=c['run_id'])
+                        epoch=num_epochs, version=c['run_id'], best_loss=best_loss)
 
             # accumulation_step
             if enable_accumulation_step:
@@ -241,9 +238,8 @@ class Trainer:
             save_model(self.last_model_file_path, self.model,
                     ext_path=self.last_model_ext_file_path,
                     optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                    epoch=num_epochs, version=c['run_id'])
+                    epoch=num_epochs, version=c['run_id'], best_loss=best_loss)
             self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
-
 
         self.train_calculator.record_epochs(n_epochs=num_epochs)
         if enable_valid_when_training:
