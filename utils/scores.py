@@ -126,11 +126,13 @@ def dice_score(
         yp.flatten() for yp in np.split(y_pred, n_labels, axis=class_axis)
     ]
 
+    eps = 1e-6
+
     result = dict()
     for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
         intersection = np.logical_and(y_true, y_pred).sum()
         union = np.logical_or(y_true, y_pred).sum()
-        score = 2 * intersection / (union + 2 * intersection)
+        score = (2 * intersection + eps) / (union + eps)
         result[label] = np.float64(score)
 
     return result
@@ -250,7 +252,7 @@ def dice_loss(
     labels = [str(i) for i in range(y_true.shape[class_axis])]
     result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
     score = np.fromiter(result.values(), dtype=np.float64).mean()
-    return -score
+    return 1 - score
 
 
 def kl_divergence_loss(

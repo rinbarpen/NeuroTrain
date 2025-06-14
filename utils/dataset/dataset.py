@@ -7,11 +7,14 @@ from config import get_config_value
 from utils.dataset.custom_dataset import Betweens
 from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
 from utils.transform import get_transforms
+from utils.dataset import btcv_dataset
 
 def get_train_dataset(dataset_name: str, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
     transforms = get_transforms()
 
     match dataset_name.lower():
+        case 'btcv':
+            return btcv_dataset.BTCVDataset.get_train_dataset(base_dir, use_numpy=use_numpy, transforms=transforms, **kwargs)
         case 'drive':
             return drive_dataset.DriveDataset.get_train_dataset(base_dir, between, use_numpy, transforms=transforms, **kwargs)
         case 'stare':
@@ -33,6 +36,8 @@ def get_valid_dataset(dataset_name: str, base_dir: Path, between: tuple[float, f
     transforms = get_transforms()
 
     match dataset_name.lower():
+        case 'btcv':
+            return btcv_dataset.BTCVDataset.get_valid_dataset(base_dir, use_numpy=use_numpy, transforms=transforms, **kwargs)
         case 'drive':
             return drive_dataset.DriveDataset.get_valid_dataset(base_dir, between, use_numpy, transforms=transforms, **kwargs)
         case 'stare':
@@ -54,6 +59,8 @@ def get_test_dataset(dataset_name: str, base_dir: Path, between: tuple[float, fl
     transforms = get_transforms()
 
     match dataset_name.lower():
+        case 'btcv':
+            return btcv_dataset.BTCVDataset.get_test_dataset(base_dir, use_numpy=use_numpy, transforms=transforms, **kwargs)
         case 'drive':
             return drive_dataset.DriveDataset.get_test_dataset(base_dir, between, use_numpy, transforms=transforms, **kwargs)
         case 'stare':
@@ -116,15 +123,21 @@ class ChainedDatasets(Dataset):
 
 def get_chained_datasets(mode: Literal['train', 'test', 'valid']):
     c_datasets = get_config_value('datasets')
+    assert c_datasets is not None
 
-    def get_dataset(mode, dataset):
+    def get_dataset(mode: Literal['train', 'test', 'valid'], dataset):
         config = dataset['config'] if 'config' in dataset else {}
         match mode:
             case 'train':
-                return get_train_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['train'], **config)
+                dataset0 = get_train_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['train'], **config)
             case 'test':
-                return get_test_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['test'], **config)
+                dataset0 = get_test_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['test'], **config)
             case 'valid':
-                return get_valid_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['valid'], **config)
+                dataset0 = get_valid_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['valid'], **config)
+
+        if not dataset0:
+            logging.error(f"{dataset['name']} is empty!")
+
+        return dataset
 
     return ChainedDatasets([get_dataset(mode, dataset) for dataset in c_datasets])

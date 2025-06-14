@@ -22,7 +22,6 @@ class CustomDataset(Dataset):
     def __len__(self):
         return self.n
 
-    @classmethod
     @abstractmethod
     def __getitem__(self, index):
         ...
@@ -36,7 +35,7 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @abstractmethod
-    def name():
+    def name() -> str:
         ...
         # raise NotImplementedError(f"{self.__name__} hasn't been implemented.")
 
