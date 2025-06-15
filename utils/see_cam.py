@@ -126,17 +126,17 @@ class ImageHeatMapGenerator():
         return [self.check(image, transform_fn, is_rgb=is_rgb) for image in images]
 
     # image = Image.open(img_path).convert('L' or 'RGB')
-    def check_transformer_block_attention_heatmap(self, image: Image.Image, attn_scores: torch.Tensor, patch_size: tuple[int, int]|int, alpha: float = 0.5, head_type: Literal['mean', 'max']='mean'):
-        original_image_size = image.size # (H, W)
+    def check_transformer_block_attention_heatmap(self, image_np: np.ndarray, attn_scores: torch.Tensor, patch_size: tuple[int, int]|int, alpha: float = 0.5, head_type: Literal['mean', 'max']='mean') -> tuple[np.ndarray, np.ndarray]:
+        original_image_size = image_np.shape[-2], image_np.shape[-1] # (W, H)
         # attention
         # attn_scores is (B, H, N, N)
         if head_type == 'mean':
-            attn_scores = attn_scores.mean(dim=(0, 1))
+            attn_scores = attn_scores.mean(dim=(0, 1)) # (N, N)
         elif head_type == 'max':
-            attn_scores = attn_scores.max(dim=(0, 1))
+            attn_scores = attn_scores.mean(dim=0).max() # (N, N)
 
         if isinstance(patch_size, int):
-            patch_size = (patch_size, patch_size) # (h, w)
+            patch_size = (patch_size, patch_size) # (W_P, H_P)
 
         attn_map = attn_scores.reshape(patch_size)
         attn_map = (attn_map - attn_map.min()) / (attn_map.max() - attn_map.min())
@@ -146,7 +146,7 @@ class ImageHeatMapGenerator():
         colormap = plt.get_cmap("viridis")
         heatmap = colormap(attn_map)
         heatmap = (heatmap[:, :, :3] * 255).astype(np.uint8)
-        image = np.array(image, dtype=np.uint8)
+        image = image_np.astype(dtype=np.uint8)
         fused_image = cv2.addWeighted(heatmap, alpha, image, 1.0 - alpha, 0, dtype=np.uint8)
         # plt.figure(figsize=(6, 6))
         # plt.imshow(image)

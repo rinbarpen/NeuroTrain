@@ -35,7 +35,3 @@ class NNUNetDataset(CustomDataset):
 
         self.transforms = transforms
         self.n = len(self.config)
-
-    @staticmethod
-    def name():
-        return "NNUNetDataset"
