@@ -1,0 +1,16 @@
+amos2022:
+  root_dir: "data/AMOS2022"
+  classes: [""] # TODO
+  metrics: ["normalized_surface_dice", "dice"]
+  train:
+    base_dir: ""
+    source: ""
+    target: ""
+  valid:
+    base_dir: ""
+    source: ""
+    target: ""
+  test:
+    base_dir: ""
+    source: ""
+    target: ""

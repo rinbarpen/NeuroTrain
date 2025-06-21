@@ -14,7 +14,13 @@ ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 ALL_STYLES = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
 
+CACHE_DIR = 'data/cache'
 PRETRAINED_MODEL_DIR = 'data/cache/pretrained'
+CONFIG_DIR = 'configs'
+DATASET_CONFIG_DIR = 'configs/dataset'
+PIPELINE_CONFIG_DIR = 'configs/pipeline'
+SINGLE_CONFIG_DIR = 'configs/single'
+
 
 CONFIG: dict = {}
 

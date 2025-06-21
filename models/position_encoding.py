@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import math
+import numpy as np
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int=5000):
@@ -69,3 +70,38 @@ class Rotator:
         u = q[..., : q.shape[-1] // 2]
         v = q[..., q.shape[-1] // 2:]
         return torch.cat((-v, u), dim=-1)
+
+class SpatialPositionEmbedding(nn.Module):
+    def __init__(self, num_features: int = 64, scale: float|None = None) -> None:
+        super().__init__()
+        if scale is None or scale <= 0.0:
+            scale = 1.0
+        self.register_buffer(
+            "gaussian_matrix",
+            scale * torch.randn((2, num_features)), # (odd|even, N)
+        )
+
+    def forward(self, image_size: tuple[int, int]) -> torch.Tensor:
+        h, w = image_size
+        
+        device = self.gaussian_matrix.device
+        grid = torch.ones(image_size, device=device, dtype=torch.float32) # (H, W) # [0, 1]
+        y_embed = (grid.cumsum(dim=0) - 0.5) / h 
+        x_embed = (grid.cumsum(dim=1) - 0.5) / w
+
+        pe = self._pe_encoding(torch.stack([x_embed, y_embed], dim=-1))
+        return pe.permute(2, 0, 1) # (C, H, W)
+    
+    def forward_with_coords(self, coords_input: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
+        coords = coords_input.clone()
+        coords[:, :, 0] /= image_size[1]
+        coords[:, :, 1] /= image_size[0]
+
+        return self._pe_encoding(coords.to(torch.float))
+
+    def _pe_encoding(self, coords: torch.Tensor) -> torch.Tensor:
+        # (H, W), and all in [0, 1] 
+        coords = 2 * coords - 1
+        coords = coords @ self.gaussian_matrix.to(torch.float32)
+        coords = 2 * torch.pi * coords
+        return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1)

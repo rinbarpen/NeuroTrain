@@ -83,6 +83,6 @@ class MultiHeadCrossAttention(nn.Module):
 
         self.attn = _MultiHeadAttention(embed_dim, num_heads, num_groups, attn_type=attn_type, qkv_bias=qkv_bias, attn_dropout=attn_dropout, share_kv=False, rope=rope)
     
-    def forward(self, qk: torch.Tensor, v: torch.Tensor, mask: torch.Tensor|None=None):
-        return self.attn(qk, qk, v, mask=mask)
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor|None=None):
+        return self.attn(q, k, v, mask=mask)
 

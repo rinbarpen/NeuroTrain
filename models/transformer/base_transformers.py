@@ -76,7 +76,7 @@ class TransformerDecoder(nn.Module):
         self.norm2 = nn.LayerNorm(embed_dim) if not rms_norm else RMSNorm(embed_dim)
         self.norm3 = nn.LayerNorm(embed_dim) if not rms_norm else RMSNorm(embed_dim)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
+    def forward(self, x: torch.Tensor, prompt: torch.Tensor) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
         attn_weights = []
         if self.pre_norm:
             for _ in range(self.n_layers):
@@ -84,7 +84,7 @@ class TransformerDecoder(nn.Module):
                 x, attn_weight = self.attn(x)
                 x = self.attn_dropout(x) + x
                 x = self.norm2(x)
-                x, attn_weight_cross = self.attn(x, mask=get_attn_mask(x.shape[1], 'all'))
+                x, attn_weight_cross = self.cross_attn(prompt, x, x, mask=get_attn_mask(x.shape[1], 'all'))
                 x = self.attn_dropout(x) + x
                 x = self.norm3(x)
                 x = self.mlp(x)
@@ -96,7 +96,7 @@ class TransformerDecoder(nn.Module):
                 x, attn_weight = self.attn(x)
                 x = self.attn_dropout(x) + x
                 x = self.norm1(x)
-                x, attn_weight_cross = self.attn(x, mask=get_attn_mask(x.shape[1], 'all'))
+                x, attn_weight_cross = self.cross_attn(prompt, x, x, mask=get_attn_mask(x.shape[1], 'all'))
                 x = self.attn_dropout(x) + x
                 x = self.norm2(x)
                 x = self.mlp(x)

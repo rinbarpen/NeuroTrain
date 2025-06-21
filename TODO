@@ -14,3 +14,8 @@ Trainer:
 Analyzer:
  - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
  - [ ] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
+
+
+MODEL:
+ - [ ] ViT with Grid and Fixed patch size, and to retain spatial info in transformer
+ - [ ] 

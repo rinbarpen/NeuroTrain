@@ -11,7 +11,7 @@ from options import parse_args
 from model_operation import Trainer, Tester, Predictor
 from models.models import get_model
 from utils.util import (get_train_tools, get_train_valid_test_dataloader, load_model, load_model_ext, prepare_logger, set_seed, summary_model_info)
-from utils.criterion import CombineCriterion, DiceLoss
+from utils.criterion import CombineCriterion, DiceLoss, Loss
 
 import torch.distributed as dist
 
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         optimizer = tools['optimizer']
         lr_scheduler = tools['lr_scheduler']
         scaler = tools['scaler']
-        criterion = CombineCriterion([nn.BCEWithLogitsLoss(), DiceLoss()]) # Loss
+        criterion = CombineCriterion([Loss(nn.BCEWithLogitsLoss(), weight=0.3), DiceLoss(weight=1.0)]) # Loss
 
         if is_continue_mode and c['model']['continue_ext_checkpoint'] != "":
             model_ext_path = Path(c['model']['continue_ext_checkpoint'])

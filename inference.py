@@ -34,14 +34,14 @@ class SegmentPredictor(Predictor):
             input_filename = input.name
 
             with self.timer.timeit(input_filename + '.preprocess'):
-                input = self.preprocess(input)
+                input, ext = self.preprocess(input)
 
             with self.timer.timeit(input_filename + '.inference'):
                 input = input.to(device)
                 pred = self.model(input)
 
             with self.timer.timeit(input_filename + '.postprocess'):
-                image = self.postprocess(pred)
+                image = self.postprocess(pred, ext)
 
             output_filename = self.output_dir / input_filename
             image.save(output_filename)
@@ -49,15 +49,15 @@ class SegmentPredictor(Predictor):
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
 
-    @classmethod
-    def preprocess(self, input: Path) -> torch.Tensor:
-        input = Image.open(input).convert('L')
+    def preprocess(self, input: Path):
+        image = Image.open(input).convert('L')
         transforms = get_transforms()
-        input = transforms(input).unsqueeze(0)
-        return input
+        image_tensor = transforms(image).unsqueeze(0)
+        return image_tensor, {
+            'size': image.size
+        }
 
-    @classmethod
-    def postprocess(self, pred: torch.Tensor) -> Image.Image:
+    def postprocess(self, pred: torch.Tensor, config: dict) -> Image.Image:
         pred[pred >= 0.5] = 255
         pred[pred < 0.5] = 0
 
@@ -65,4 +65,6 @@ class SegmentPredictor(Predictor):
         pred = pred.squeeze(0).squeeze(0)
         pred = pred.astype(np.uint8)
         image = Image.fromarray(pred, mode='L')
+        if 'size' in config:
+            image = image.resize(config['size'])
         return image

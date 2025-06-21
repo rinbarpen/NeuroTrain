@@ -1,5 +1,6 @@
 drive:
   root_dir: "data/DRIVE"
+  metrics: ["dice"]
   classes: ["Retina"]
   train:
     base_dir: "training"
@@ -12,6 +13,7 @@ drive:
 stare:
   root_dir: "data/STARE"
   classes: ["Retina"]
+  metrics: ["dice"]
   train:
     base_dir: "training"
     source: "images/*.png"
@@ -23,6 +25,7 @@ stare:
 chasedb1:
   root_dir: "data/CHASEDB1"
   classes: ["Retina"]
+  metrics: ["dice"]
   train:
     base_dir: "training"
     source: "images/*.jpg"
@@ -34,6 +37,7 @@ chasedb1:
 isic2017:
   root_dir: "data/ISIC2017"
   classes: [""]
+  metrics: ["dice", "iou"]
   train:
     base_dir: ""
     source: "2017_Training_Data/*.jpg"

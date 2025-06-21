@@ -99,7 +99,7 @@ class Trainer:
                         compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
                         with autocast(device_type, dtype=compute_type):
                             outputs = self.model(inputs)
-                        
+
                             if not enable_accumulation_step:
                                 losses = criterion(targets, outputs)
                                 for loss in losses:
@@ -251,7 +251,6 @@ class Trainer:
         valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
-    @classmethod
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
         targets[targets >= 0.5] = 1
         targets[targets < 0.5] = 0
@@ -389,7 +388,6 @@ class Tester:
 
         self._print_table()
 
-    @classmethod
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
         targets[targets >= 0.5] = 1
         targets[targets < 0.5] = 0
@@ -472,14 +470,13 @@ class Predictor:
 
         pred_image.save(output_filename)
 
-    @classmethod
     def preprocess(self, input: Path) -> tuple[torch.Tensor, tuple[int, int]]:
         image = Image.open(input).convert('L')
         size = image.size # (H, W)
         transforms = get_transforms()
-        input = transforms(image).unsqueeze(0)
-        return input, size
-    @classmethod
+        image_tensor = transforms(image).unsqueeze(0)
+        return image_tensor, size
+
     def postprocess(self, pred: torch.Tensor) -> np.ndarray:
         pred[pred >= 0.5] = 255
         pred[pred < 0.5] = 0
