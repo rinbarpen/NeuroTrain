@@ -11,7 +11,7 @@ metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 name = "unet"
 continue_checkpoint = "" # use this if encountering crash while training
 continue_ext_checkpoint = "" # use this if encountering crash while training
-pretained = ""
+pretrained = ""
 
 [model.config]
 n_channels = 1
