@@ -35,18 +35,18 @@ PIL_TO_TENSOR=[]
 CONVERT_IMAGE_DTYPE=['float32']
 # TO_TENSOR=[]
 
-[[datasets]]
+[dataset]
 name = "DRIVE"
 base_dir = "./data/DRIVE"
 betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
 config = {}
 
-# [[datasets]]
+# [dataset]
 # name = "STARE"
 # base_dir = "./data/STARE"
 # betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
 
-# [[datasets]]
+# [dataset]
 # name = "CHASEDB1"
 # base_dir = "./data/CHASEDB1"
 # betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}

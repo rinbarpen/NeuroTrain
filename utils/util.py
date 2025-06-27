@@ -19,7 +19,7 @@ from fvcore.nn import FlopCountAnalysis
 
 from config import get_config, get_config_value
 from utils.typed import FilePath, ImageInstance
-from utils.dataset.dataset import get_chained_datasets
+from utils.dataset import get_dataset
 
 def prepare_logger():
     c = get_config_value('private.log', default={
@@ -98,8 +98,8 @@ def get_train_tools(model: nn.Module):
 def get_train_valid_test_dataloader(use_valid=False):
     c = get_config()
 
-    train_dataset = get_chained_datasets('train')
-    test_dataset = get_chained_datasets('test')
+    train_dataset = get_dataset('train')
+    test_dataset = get_dataset('test')
     num_workers = c["dataloader"]["num_workers"]
     shuffle = c["dataloader"]["shuffle"]
 

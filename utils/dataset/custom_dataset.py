@@ -10,17 +10,20 @@ class Betweens(TypedDict):
 
 class CustomDataset(Dataset):
     mapping=... # {'train': (), 'valid': (), 'test': ()}
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), use_numpy: bool=False):
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), use_numpy: bool=False, desired_n: int|None=None):
         super(Dataset, self).__init__()
 
         self.dataset_type = dataset_type
         self.base_dir = base_dir
         self.between = between
         self.use_numpy = use_numpy
-        self.n = 0
+        self.n = desired_n if desired_n else 0
 
     def __len__(self):
         return self.n
+
+    def get_slice(self):
+        return slice(int(self.between[0] * self.n), int(self.between[1] * self.n))
 
     @abstractmethod
     def __getitem__(self, index):

@@ -17,9 +17,10 @@ from typing import Literal
 
 from utils.transform import build_image_transforms
 from models.sample.unet import UNet
-from models.transformer.deit_vit import vit_base_patch16_224
+# from models.transformer.deit_vit import vit_base_patch16_224
 
-def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: int=0) -> None:
+
+def unet_check(image_file: Path, mask: np.ndarray, is_rgb: bool, *, target_category: int=0) -> None:
     # Load a pre-trained ResNet50 model
     model = UNet(1, 1, True)
     model.load_state_dict(torch.load(r'..\results\train\unet\weights\best_model.pth')['model'])
@@ -29,10 +30,9 @@ def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: 
     target_layers = [model.layer4[-1]]
 
     # Load and preprocess an image
-    image = Image.open(image)
-    image = image.convert('RGB') if is_rgb else image.convert('L')
+    image = Image.open(image_file).convert('RGB')
 
-    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, is_rgb=is_rgb)
+    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, gray_scale=not is_rgb)
     input_tensor = transform(image).unsqueeze(0)  # Add a batch dimension
 
     # Move the model and input tensor to the GPU if available
@@ -54,7 +54,10 @@ def unet_check(image: Path, mask: np.ndarray, is_rgb: bool, *, target_category: 
 
     cam_image = show_cam_on_image(image_np, grayscale_cam, use_rgb=is_rgb)
 
-def resnet50_check(image: Path, is_rgb: bool, *, target_category: int=0) -> None:
+    return Image.fromarray(cam_image, mode='RGB')
+
+
+def resnet50_check(image_file: Path, is_rgb: bool, *, target_category: int=0) -> None:
     # Load a pre-trained ResNet50 model
     model = resnet50(pretrained=True)
     model.eval()
@@ -63,10 +66,9 @@ def resnet50_check(image: Path, is_rgb: bool, *, target_category: int=0) -> None
     target_layers = [model.layer4[-1]]
 
     # Load and preprocess an image
-    image = Image.open(image)
-    image = image.convert('RGB') if is_rgb else image.convert('L')
+    image = Image.open(image_file).convert('RGB')
 
-    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, is_rgb=is_rgb)
+    transform = build_image_transforms(resize=(224, 224), is_pil_image=True, gray_scale=not is_rgb)
     input_tensor = transform(image).unsqueeze(0)  # Add a batch dimension
 
     # Move the model and input tensor to the GPU if available

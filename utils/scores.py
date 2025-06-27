@@ -126,7 +126,7 @@ def dice_score(
 
     result = dict()
     for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
-        intersection = (y_true & y_pred).sum()
+        intersection = np.logical_and(y_true, y_pred).sum()
         union = y_true.sum() + y_pred.sum()
         score = 2 * intersection / union if union > 0 else 0.0
         result[label] = np.float64(score)

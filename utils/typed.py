@@ -7,6 +7,14 @@ import cv2
 FilePath = Union[str, Path]
 ImageInstance = Union[Image.Image, cv2.Mat]
 
+def to_path(p: FilePath) -> Path:
+    return Path(p)
+
+def to_pil_image(img: ImageInstance) -> Image.Image:
+    if isinstance(img, Image.Image):
+        return img
+    return Image.fromarray(img)
+
 FLOAT = np.float64
 ClassLabel = str
 ClassLabelsList = List[ClassLabel]

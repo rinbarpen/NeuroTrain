@@ -15,15 +15,7 @@ from rich.table import Table
 from rich.console import Console
 
 from config import get_config, ALL_STYLES
-from utils.early_stopping import EarlyStopping
-from utils.data_saver import DataSaver
-from utils.typed import ScoreAggregator
-from utils.util import save_model
-from utils.timer import Timer
-from utils.scores import ScoreCalculator
-from utils.painter import Plot
-from utils.transform import get_transforms
-from utils.criterion import CombineCriterion
+from utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, get_transforms, CombineCriterion
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -63,7 +55,6 @@ class Trainer:
         c = get_config()
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_every_n_epoch"]
-        enable_valid_when_training = valid_dataloader is not None
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
 
@@ -80,7 +71,6 @@ class Trainer:
         train_losses = []
         valid_losses = []
         best_loss = float('inf')
-
 
         with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
@@ -146,7 +136,6 @@ class Trainer:
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
-
                 if lr_scheduler:
                     lr_scheduler.step()
 
@@ -159,7 +148,7 @@ class Trainer:
                 self.train_calculator.finish_one_epoch()
 
                 # validate
-                if enable_valid_when_training:
+                if valid_dataloader:
                     valid_loss = 0.0
                     self.model.eval()
 
@@ -192,7 +181,7 @@ class Trainer:
                     self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
                     self.valid_calculator.finish_one_epoch()
 
-                    if early_stop:
+                    if early_stopper:
                         early_stopper(valid_loss)
                         if early_stopper.is_stopped():
                             self.logger.info("Early stopping")
@@ -205,24 +194,32 @@ class Trainer:
                     save_model(save_model_filename, self.model,             
                             ext_path=save_model_ext_filename, optimizer=optimizer,        
                             scaler=scaler, lr_scheduler=lr_scheduler,
-                            epoch=epoch, version=c['run_id'], best_loss=best_loss)
+                            epoch=epoch, version=c['run_id'], loss=best_loss)
                     self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
 
                 # save best model
-                if enable_valid_when_training:
+                if valid_dataloader:
                     target_loss = valid_loss
                     if target_loss < best_loss:
                         best_loss = target_loss
                         save_model(self.best_model_file_path, self.model, 
                                     ext_path=self.best_model_ext_file_path,
                                     optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                                    epoch=epoch, version=c['run_id'], best_loss=best_loss)
+                                    epoch=epoch, version=c['run_id'], loss=best_loss)
                         self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                else:
+                    best_loss = train_loss
+                    save_model(self.best_model_file_path, self.model, 
+                                ext_path=self.best_model_ext_file_path,
+                                optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
+                                epoch=epoch, version=c['run_id'], loss=best_loss)
+                    self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+
 
                 save_model(self.last_model_file_path, self.model,
                         ext_path=self.last_model_ext_file_path,
                         optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                        epoch=num_epochs, version=c['run_id'], best_loss=best_loss)
+                        epoch=num_epochs, version=c['run_id'], loss=train_loss)
 
             # accumulation_step
             if enable_accumulation_step:
@@ -238,17 +235,17 @@ class Trainer:
             save_model(self.last_model_file_path, self.model,
                     ext_path=self.last_model_ext_file_path,
                     optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                    epoch=num_epochs, version=c['run_id'], best_loss=best_loss)
+                    epoch=num_epochs, version=c['run_id'], loss=best_loss)
             self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
         self.train_calculator.record_epochs(n_epochs=num_epochs)
-        if enable_valid_when_training:
+        if valid_dataloader:
             self.valid_calculator.record_epochs(n_epochs=num_epochs)
 
-        self._print_table(enable_valid_when_training)
+        self._print_table(valid_dataloader is not None)
 
         train_losses = np.array(train_losses, dtype=np.float64)
-        valid_losses = np.array(valid_losses, dtype=np.float64) if enable_valid_when_training else None
+        valid_losses = np.array(valid_losses, dtype=np.float64) if valid_dataloader else None
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
     def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):

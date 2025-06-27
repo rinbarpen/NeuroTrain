@@ -3,17 +3,26 @@ from pathlib import Path
 import logging
 from torch import nn
 import warnings
+import torch.distributed as dist
 
 warnings.filterwarnings("ignore")
 
 from config import get_config, dump_config, is_predict, is_train, is_test
 from options import parse_args
 from model_operation import Trainer, Tester, Predictor
-from models.models import get_model
-from utils.util import (get_train_tools, get_train_valid_test_dataloader, load_model, load_model_ext, prepare_logger, set_seed, summary_model_info)
-from utils.criterion import CombineCriterion, DiceLoss, Loss
-
-import torch.distributed as dist
+from models import get_model
+from utils import (
+    CombineCriterion,
+    DiceLoss,
+    Loss,
+    get_train_tools,
+    get_train_valid_test_dataloader,
+    load_model,
+    load_model_ext,
+    prepare_logger,
+    set_seed,
+    summary_model_info,
+)
 
 if __name__ == "__main__":
     parse_args()
@@ -24,7 +33,7 @@ if __name__ == "__main__":
         set_seed(c["seed"])
     device = c["device"]
     # device = ','.join(device)
-    is_multigpu = ',' in device
+    is_multigpu = "," in device
     if is_multigpu:
         dist.barrier()
 
@@ -34,21 +43,21 @@ if __name__ == "__main__":
     predict_dir = output_dir / "predict"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    is_continue_mode = False # use this mode if encountering crash while training
+    is_continue_mode = False  # use this mode if encountering crash while training
 
     model = get_model(c["model"]["name"], c["model"]["config"])
-    pretrained_model = c['model'].get('pretrained')
-    continue_checkpoint = c['model'].get('continue_checkpoint')
+    pretrained_model = c["model"].get("pretrained")
+    continue_checkpoint = c["model"].get("continue_checkpoint")
     if pretrained_model and pretrained_model != "":
         model_path = Path(pretrained_model)
         model_params = load_model(model_path, device)
-        logging.info(f'Load model: {model_path}')
+        logging.info(f"Load model: {model_path}")
         model.load_state_dict(model_params)
 
     if continue_checkpoint and continue_checkpoint != "":
         model_path = Path(continue_checkpoint)
         model_params = load_model(model_path, device)
-        logging.info(f'Load model: {model_path}, Now is in continue mode')
+        logging.info(f"Load model: {model_path}, Now is in continue mode")
         model.load_state_dict(model_params)
         is_continue_mode = True
 
@@ -58,30 +67,34 @@ if __name__ == "__main__":
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")
         dump_config(train_dir / "config.yaml")
-        logger = logging.getLogger('train')
-        logger.info(f'Dumping config[.json|.yaml|.toml] to the {train_dir}/config[.json|.yaml|.toml]')
+        logger = logging.getLogger("train")
+        logger.info(
+            f"Dumping config[.json|.yaml|.toml] to the {train_dir}/config[.json|.yaml|.toml]"
+        )
 
         finished_epoch = 0
         tools = get_train_tools(model)
-        optimizer = tools['optimizer']
-        lr_scheduler = tools['lr_scheduler']
-        scaler = tools['scaler']
-        criterion = CombineCriterion([Loss(nn.BCEWithLogitsLoss(), weight=0.3), DiceLoss(weight=1.0)]) # Loss
+        optimizer = tools["optimizer"]
+        lr_scheduler = tools["lr_scheduler"]
+        scaler = tools["scaler"]
+        criterion = CombineCriterion(
+            [Loss(nn.BCEWithLogitsLoss(), weight=0.3), DiceLoss(weight=1.0)]
+        )  # Loss
 
-        if is_continue_mode and c['model']['continue_ext_checkpoint'] != "":
-            model_ext_path = Path(c['model']['continue_ext_checkpoint'])
+        if is_continue_mode and c["model"]["continue_ext_checkpoint"] != "":
+            model_ext_path = Path(c["model"]["continue_ext_checkpoint"])
             model_ext_params = load_model_ext(model_ext_path, device)
-            finished_epoch = model_ext_params['epoch']
-            logger.info(f'Continue Train from {finished_epoch}')
+            finished_epoch = model_ext_params["epoch"]
+            logger.info(f"Continue Train from {finished_epoch}")
 
             try:
-                optimizer.load_state_dict(model_ext_params['optimizer'])
-                if lr_scheduler and model_ext_params['lr_scheduler']:
-                    lr_scheduler.load_state_dict(model_ext_params['lr_scheduler'])
-                if scaler and model_ext_params['scaler']:
-                    scaler.load_state_dict(model_ext_params['scaler'])
+                optimizer.load_state_dict(model_ext_params["optimizer"])
+                if lr_scheduler and model_ext_params["lr_scheduler"]:
+                    lr_scheduler.load_state_dict(model_ext_params["lr_scheduler"])
+                if scaler and model_ext_params["scaler"]:
+                    scaler.load_state_dict(model_ext_params["scaler"])
             except Exception as e:
-                logger.error(f'{e} WHILE LOADING EXT CHECKPOINT')
+                logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
 
         handle = Trainer(train_dir, model)
         handle.train(
@@ -95,37 +108,39 @@ if __name__ == "__main__":
             last_epoch=finished_epoch,
         )
 
-
     if is_test():
         test_dir.mkdir()
         dump_config(test_dir / "config.json")
         dump_config(test_dir / "config.yaml")
         dump_config(test_dir / "config.toml")
-        logger = logging.getLogger('test')
-        logger.info(f'Dumping config[.json|.yaml|.toml] to the {test_dir}/config[.json|.yaml|.toml]')
+        logger = logging.getLogger("test")
+        logger.info(
+            f"Dumping config[.json|.yaml|.toml] to the {test_dir}/config[.json|.yaml|.toml]"
+        )
 
         if is_train() and not is_continue_mode:
             model_path = train_dir / "weights" / "best.pt"
             model_params = load_model(model_path, device)
-            logger.info(f'Load model: {model_path}')
+            logger.info(f"Load model: {model_path}")
             model.load_state_dict(model_params)
 
         handle = Tester(test_dir, model)
         handle.test(test_dataloader=test_loader)
-
 
     if is_predict():
         predict_dir.mkdir()
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")
         dump_config(predict_dir / "config.yaml")
-        logger = logging.getLogger('predict')
-        logger.info(f'Dumping config[.json|.yaml|.toml] to the {predict_dir}/config[.json|.yaml|.toml]')
+        logger = logging.getLogger("predict")
+        logger.info(
+            f"Dumping config[.json|.yaml|.toml] to the {predict_dir}/config[.json|.yaml|.toml]"
+        )
 
         if is_train() and not is_continue_mode:
             model_path = train_dir / "weights" / "best.pt"
             model_params = load_model(model_path, device)
-            logger.info(f'Load model: {model_path}')
+            logger.info(f"Load model: {model_path}")
             model.load_state_dict(model_params)
 
         handle = Predictor(predict_dir, model)

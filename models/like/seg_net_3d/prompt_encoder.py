@@ -2,16 +2,18 @@ from torch import nn
 import torch
 
 from typing import Optional, List, Tuple
-
+from einops import rearrange
 from models.position_encoding import SpatialPositionEmbedding
 
 # window_size is the batch size of masks
 class PromptEncoder(nn.Module):
-    def __init__(self, embed_dim: int, patched_image_size: tuple[int, int], mask_channels: int, n_classes: int, n_tokens_per_class: int) -> None:
+    def __init__(self, embed_dim: int, image_size: tuple[int, int], patched_image_size: tuple[int, int], mask_channels: int, n_masks: int, n_tokens_per_mask: int) -> None:
         super(PromptEncoder, self).__init__()
         self.embed_dim = embed_dim
-        self.image_size = patched_image_size
-        self.n_mask_tokens = n_tokens_per_class * n_classes
+        self.image_size = image_size
+        self.patched_image_size = patched_image_size
+        self.n_masks = n_masks
+        self.n_mask_tokens = n_tokens_per_mask * n_masks
 
         self.pe = SpatialPositionEmbedding(embed_dim // 2)
 
@@ -24,15 +26,15 @@ class PromptEncoder(nn.Module):
         )
 
         self.mask_encoder = nn.Sequential(
-            nn.Conv2d(n_classes, mask_channels // 4, kernel_size=2, stride=2),
-            nn.LayerNorm(mask_channels // 4),
+            nn.Conv2d(n_masks, mask_channels // 4, kernel_size=2, stride=2),
+            nn.BatchNorm2d(mask_channels // 4),
             nn.GELU(),
             nn.Conv2d(mask_channels // 4, mask_channels, kernel_size=2, stride=2),
-            nn.LayerNorm(mask_channels),
+            nn.BatchNorm2d(mask_channels),
             nn.GELU(),
             nn.Conv2d(mask_channels, embed_dim, kernel_size=1),
         )
-        self.no_mask_embedding = nn.Embedding(1, embed_dim)
+        # self.no_mask_embedding = nn.Embedding(1, embed_dim)
 
     def forward(self, points: Optional[tuple[torch.Tensor, torch.Tensor]], bboxes: Optional[torch.Tensor], masks: Optional[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         # sparse tokens
@@ -50,12 +52,21 @@ class PromptEncoder(nn.Module):
 
         # dense tokens
         if masks:
-            dense_tokens = self._embed_masks(masks)
+            # blank fill
+            b, n, h, w, d = masks.shape
+            n_blank = self.window_size - d
+            blanks = torch.zeros(b, n, h, w, n_blank)
+            masks = torch.cat([blanks, masks], dim=-1) # b, self.n_masks, h, w, ws
         else:
-            dense_tokens = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(b, -1, self.image_embedding_size[0], self.image_embedding_size[1])
-        dense_tokens = dense_tokens.contiguous()
+            h, w = self.image_size
+            blanks = torch.zeros(b, self.n_masks, h, w, self.window_size)
+            masks = blanks # b, self.n_masks, h, w, ws
 
-        return sparse_tokens, dense_tokens # (B, N, D), (B, D, H, W)
+        masks = rearrange(masks, 'b c h w d -> b d c h w')
+        dense_tokens = self._embed_masks(masks)
+        masks = rearrange(masks, 'b d c h w -> b c h w d')
+
+        return sparse_tokens, dense_tokens # (B, N, D), (B, Dim, H, W, window_size)
 
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         points = points + 0.5 # shift to center of pixel
@@ -69,7 +80,7 @@ class PromptEncoder(nn.Module):
             
         point_embed = self.pe.forward_with_coords(points, self.image_size)
         point_embed[labels == -1] = 0.0
-        
+
         point_embedding = self.point_encoder(points, self.input_image_size)
 
         point_embedding[labels == -1] += self.not_a_point_embed.weight 

@@ -25,5 +25,5 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
 
-    def is_stopped(self):
+    def is_stopped(self) -> bool:
         return self.early_stop

@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from typing import Literal
 
 from config import get_config_value
-from utils.dataset.custom_dataset import Betweens
+from utils.dataset.custom_dataset import Betweens, CustomDataset
 from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
 from utils.transform import get_transforms
 from utils.dataset import btcv_dataset
@@ -97,47 +97,70 @@ def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: Betwee
         case _:
             logging.warning(f'No target dataset: {dataset_name}')
 
-class ChainedDatasets(Dataset):
-    def __init__(self, datasets: list[Dataset]|Dataset):
-        super(ChainedDatasets, self).__init__()
+# class ChainedDatasets(Dataset):
+#     def __init__(self, datasets: list[Dataset]|Dataset):
+#         super(ChainedDatasets, self).__init__()
 
-        if isinstance(datasets, Dataset):
-            self.datasets = [datasets]
-        else:
-            self.datasets = datasets
+#         if isinstance(datasets, Dataset):
+#             self.datasets = [datasets]
+#         else:
+#             self.datasets = datasets
 
-        self.lens = [len(dataset) for dataset in self.datasets]
+#         self.lens = [len(dataset) for dataset in self.datasets]
 
-    def __getitem__(self, index):
-        dataset_index = 0
-        while index >= self.lens[dataset_index]:
-            index -= self.lens[dataset_index]
-            dataset_index += 1
-        return self.datasets[dataset_index][index]
+#     def __getitem__(self, index):
+#         dataset_index = 0
+#         while index >= self.lens[dataset_index]:
+#             index -= self.lens[dataset_index]
+#             dataset_index += 1
+#         return self.datasets[dataset_index][index]
 
-    def __len__(self):
-        s = 0
-        for i in self.lens:
-            s += i
-        return s
+#     def __len__(self):
+#         s = 0
+#         for i in self.lens:
+#             s += i
+#         return s
 
-def get_chained_datasets(mode: Literal['train', 'test', 'valid']):
-    c_datasets = get_config_value('datasets')
-    assert c_datasets is not None
+# def get_chained_datasets(mode: Literal['train', 'test', 'valid']):
+#     c_datasets = get_config_value('datasets')
+#     assert c_datasets is not None
 
-    def get_dataset(mode: Literal['train', 'test', 'valid'], dataset):
-        config = dataset['config'] if 'config' in dataset else {}
-        match mode:
-            case 'train':
-                dataset0 = get_train_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['train'], **config)
-            case 'test':
-                dataset0 = get_test_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['test'], **config)
-            case 'valid':
-                dataset0 = get_valid_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['valid'], **config)
+#     def get_dataset(mode: Literal['train', 'test', 'valid'], dataset):
+#         config = dataset['config'] if 'config' in dataset else {}
+#         match mode:
+#             case 'train':
+#                 dataset0 = get_train_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['train'], **config)
+#             case 'test':
+#                 dataset0 = get_test_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['test'], **config)
+#             case 'valid':
+#                 dataset0 = get_valid_dataset(dataset['name'], Path(dataset['base_dir']), dataset['betweens']['valid'], **config)
 
-        if not dataset0:
-            logging.error(f"{dataset['name']} is empty!")
+#         if not dataset0:
+#             logging.error(f"{dataset['name']} is empty!")
 
-        return dataset
+#         return dataset0
 
-    return ChainedDatasets([get_dataset(mode, dataset) for dataset in c_datasets])
+#     # return ChainedDatasets([get_dataset(mode, dataset) for dataset in c_datasets])
+#     return get_dataset(mode, c_datasets)
+
+def get_dataset(mode: Literal['train', 'test', 'valid']):
+    c_dataset = get_config_value('dataset')
+    config = c_dataset.get('config', {})
+    match mode:
+        case 'train':
+            dataset0 = get_train_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['train'], **config)
+        case 'test':
+            dataset0 = get_test_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['test'], **config)
+        case 'valid':
+            dataset0 = get_valid_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['valid'], **config)
+
+    if not dataset0:
+        logging.error(f"{c_dataset['name']} is empty!")
+
+    return dataset0
+
+
+def random_sample(dataset: CustomDataset, sample_ratio: float=0.1, generator=None):
+    from torch.utils.data import RandomSampler
+    num_samples = int(sample_ratio * len(dataset))
+    return RandomSampler(dataset, num_samples=num_samples, generator=generator)
