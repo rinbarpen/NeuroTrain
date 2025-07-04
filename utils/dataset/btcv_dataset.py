@@ -12,7 +12,7 @@ import nibabel as nib
 from utils.dataset.nnunet_dataset import NNUNetDataset
 
 class BTCVDataset(NNUNetDataset):
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=transforms.Compose(transforms.Grayscale()), use_numpy=False, **kwargs):
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=transforms.Compose([transforms.Grayscale()]), use_numpy=False, **kwargs):
         super(BTCVDataset, self).__init__(base_dir=base_dir, dataset_type=dataset_type, use_numpy=use_numpy, config_filename='dataset_0.json')
 
         # TODO: complete numpy version

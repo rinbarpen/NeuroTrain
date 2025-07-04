@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from torch.utils.data import Dataset
 from typing import Literal
 
 from config import get_config_value
@@ -145,14 +144,16 @@ def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: Betwee
 
 def get_dataset(mode: Literal['train', 'test', 'valid']):
     c_dataset = get_config_value('dataset')
+    assert c_dataset is not None, "Dataset configuration is not defined in the config file."
+
     config = c_dataset.get('config', {})
     match mode:
         case 'train':
-            dataset0 = get_train_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['train'], **config)
+            dataset0 = get_train_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset.get('betweens', {'train': (0, 1)})['train'], **config)
         case 'test':
-            dataset0 = get_test_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['test'], **config)
+            dataset0 = get_test_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset.get('betweens', {'test': (0, 1)})['test'], **config)
         case 'valid':
-            dataset0 = get_valid_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset['betweens']['valid'], **config)
+            dataset0 = get_valid_dataset(c_dataset['name'], Path(c_dataset['base_dir']), c_dataset.get('betweens', {'valid': (0, 1)})['valid'], **config)
 
     if not dataset0:
         logging.error(f"{c_dataset['name']} is empty!")

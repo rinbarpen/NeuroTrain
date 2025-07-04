@@ -29,8 +29,7 @@ class DriveDataset(CustomDataset):
         images = [p for p in base_dir.glob(image_glob)]
         masks = [p for p in base_dir.glob(label_glob)]
 
-        self.n = len(images)
-        bw = self.get_slice()
+        bw = self.get_slice(len(images))
         self.images = images[bw]
         self.masks = masks[bw]
         self.n = len(self.images)

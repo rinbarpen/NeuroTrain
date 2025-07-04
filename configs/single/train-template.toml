@@ -40,6 +40,8 @@ name = "DRIVE"
 base_dir = "./data/DRIVE"
 betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
 config = {}
+# scan from configs/dataset by default. if lacked, retry to scan from the default.yaml. None means directly to scan from the default.yaml
+# ref = amos2022.yaml 
 
 # [dataset]
 # name = "STARE"

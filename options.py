@@ -69,6 +69,9 @@ def parse_args():
         sys.exit(0)
 
     config_file = Path(args.config)
+    if not config_file.exists():
+        from config import SINGLE_CONFIG_DIR
+        config_file = Path(SINGLE_CONFIG_DIR) / args.config
     CONFIG = load_config(config_file)
 
     if args.seed:

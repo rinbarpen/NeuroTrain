@@ -5,38 +5,37 @@ import logging
 from pathlib import Path
 import toml
 import yaml
-import colorlog
-import os
-import time
 
-def prepare_logger():
-    log_colors = {
-        'DEBUG': 'cyan',
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'FATAL': 'bold_red',
-    }
-    formatter = colorlog.ColoredFormatter(
-        '%(log_color)s %(asctime)s %(levelname)s | %(name)s | %(message)s',
-        log_colors=log_colors
-    )
+from utils import prepare_logger
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
+# def prepare_logger():
+#     log_colors = {
+#         'DEBUG': 'cyan',
+#         'INFO': 'green',
+#         'WARNING': 'yellow',
+#         'ERROR': 'red',
+#         'FATAL': 'bold_red',
+#     }
+#     formatter = colorlog.ColoredFormatter(
+#         '%(log_color)s %(asctime)s %(levelname)s | %(name)s | %(message)s',
+#         log_colors=log_colors
+#     )
 
-    os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', time.strftime('%Y-%m-%d %H_%M_%S.log', time.localtime()))
-    file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
-    file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s | %(name)s | %(message)s'
-    ))
+#     console_handler = logging.StreamHandler()
+#     console_handler.setFormatter(formatter)
 
-    log_level = logging.DEBUG
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+#     os.makedirs('logs', exist_ok=True)
+#     filename = os.path.join('logs', time.strftime('%Y-%m-%d %H_%M_%S.log', time.localtime()))
+#     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
+#     file_handler.setFormatter(logging.Formatter(
+#         '%(asctime)s %(levelname)s | %(name)s | %(message)s'
+#     ))
+
+#     log_level = logging.DEBUG
+#     root_logger = logging.getLogger()
+#     root_logger.setLevel(log_level)
+#     root_logger.addHandler(console_handler)
+#     root_logger.addHandler(file_handler)
 
 
 if __name__ == '__main__':
@@ -48,6 +47,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config_path = Path(args.config)
+    if not config_path.exists():
+        from config import PIPELINE_CONFIG_DIR
+        config_path = Path(PIPELINE_CONFIG_DIR) / args.config
+
     match config_path.suffix:
         case '.toml':
             with config_path.open('r', encoding='utf-8') as f:
@@ -64,7 +67,7 @@ if __name__ == '__main__':
     for name, config in pipeline_config.items():
         config_file = config['config']
         ext_args = config['ext_args']
-        
+
         try:
             process = subprocess.Popen(["main.py", "-c", config_file, *ext_args])
             process.wait()

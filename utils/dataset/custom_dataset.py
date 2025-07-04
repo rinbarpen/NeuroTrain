@@ -22,8 +22,8 @@ class CustomDataset(Dataset):
     def __len__(self):
         return self.n
 
-    def get_slice(self):
-        return slice(int(self.between[0] * self.n), int(self.between[1] * self.n))
+    def get_slice(self, n: int):
+        return slice(int(self.between[0] * n), int(self.between[1] * n))
 
     @abstractmethod
     def __getitem__(self, index):

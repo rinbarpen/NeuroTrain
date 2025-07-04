@@ -21,6 +21,7 @@ DATASET_CONFIG_DIR = 'configs/dataset'
 PIPELINE_CONFIG_DIR = 'configs/pipeline'
 SINGLE_CONFIG_DIR = 'configs/single'
 
+INPUT_SHAPE = (1, 512, 512)  # Default input shape for models
 
 CONFIG: dict = {}
 

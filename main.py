@@ -96,8 +96,8 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
 
-        handle = Trainer(train_dir, model)
-        handle.train(
+        handler = Trainer(train_dir, model)
+        handler.train(
             num_epochs=c["train"]["epoch"],
             criterion=criterion,
             optimizer=optimizer,
@@ -124,8 +124,8 @@ if __name__ == "__main__":
             logger.info(f"Load model: {model_path}")
             model.load_state_dict(model_params)
 
-        handle = Tester(test_dir, model)
-        handle.test(test_dataloader=test_loader)
+        handler = Tester(test_dir, model)
+        handler.test(test_dataloader=test_loader)
 
     if is_predict():
         predict_dir.mkdir()
@@ -143,13 +143,14 @@ if __name__ == "__main__":
             logger.info(f"Load model: {model_path}")
             model.load_state_dict(model_params)
 
-        handle = Predictor(predict_dir, model)
+        handler = Predictor(predict_dir, model)
         input_path = Path(c["predict"]["input"])
         if input_path.is_dir():
             inputs = [filename for filename in input_path.iterdir()]
-            handle.predict(inputs, **c["predict"]["config"])
+            handler.predict(inputs, **c["predict"]["config"])
         else:
             inputs = [input_path]
-            handle.predict(inputs, **c["predict"]["config"])
+            handler.predict(inputs, **c["predict"]["config"])
 
-    summary_model_info(model, input_size=(1, 512, 512))
+    from config import INPUT_SHAPE
+    summary_model_info(model, input_size=INPUT_SHAPE)

@@ -118,7 +118,7 @@ def get_train_valid_test_dataloader(use_valid=False):
         shuffle=shuffle,
     )
     if use_valid:
-        valid_dataset = get_chained_datasets('valid')
+        valid_dataset = get_dataset('valid')
         valid_loader = DataLoader(
             valid_dataset,
             batch_size=c["valid"]["batch_size"],
@@ -128,9 +128,9 @@ def get_train_valid_test_dataloader(use_valid=False):
         )
 
         return train_loader, valid_loader, test_loader
-    
+
     return train_loader, None, test_loader
-    
+
 def save_model(path: FilePath, model: nn.Module, *, 
                ext_path: FilePath|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
