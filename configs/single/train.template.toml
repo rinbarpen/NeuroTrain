@@ -6,6 +6,7 @@ device = "cuda"
 seed = -1
 classes = ["Retina"]
 metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
+postprocess = "binary_segmentation" # binary_segmentation, instance_segmentation, ...
 
 [model]
 name = "unet"

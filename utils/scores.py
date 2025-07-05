@@ -16,7 +16,6 @@ def f1_score(
     labels: ClassLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
     n_labels = len(labels)
 
@@ -29,7 +28,7 @@ def f1_score(
 
     result = dict()
     for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
-        score = metrics.f1_score(y_true, y_pred, average=average)
+        score = metrics.f1_score(y_true, y_pred)
         result[label] = np.float64(score)
 
     return result
@@ -40,7 +39,6 @@ def recall_score(
     labels: ClassLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
     n_labels = len(labels)
 
@@ -53,7 +51,7 @@ def recall_score(
 
     result = dict()
     for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
-        score = metrics.recall_score(y_true, y_pred, average=average)
+        score = metrics.recall_score(y_true, y_pred)
         result[label] = np.float64(score)
 
     return result
@@ -64,7 +62,6 @@ def precision_score(
     labels: ClassLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
     n_labels = len(labels)
 
@@ -77,7 +74,7 @@ def precision_score(
 
     result = dict()
     for label, y_true, y_pred in zip(labels, y_true_flatten, y_pred_flatten):
-        score = metrics.precision_score(y_true, y_pred, average=average)
+        score = metrics.precision_score(y_true, y_pred)
         result[label] = np.float64(score)
 
     return result
@@ -88,7 +85,6 @@ def accuracy_score(
     labels: ClassLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
     n_labels = len(labels)
 
@@ -112,7 +108,6 @@ def dice_score(
     labels: ClassLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
     n_labels = len(labels)
 
@@ -430,12 +425,8 @@ def scores(
     metric_labels: MetricLabelsList,
     *,
     class_axis: int = 1,
-    average: str = "binary",
 ):
-    result: MetricClassOneScoreDict = create_MetricClassOneScoreDict(
-        metric_labels, labels
-    )
-    # result_after: MetricAfterDict = create_MetricAfterDict(labels)
+    result = {metric: {label: FLOAT() for label in labels} for metric in metric_labels}
 
     MAP = {
         "iou": iou_score,
@@ -448,12 +439,9 @@ def scores(
 
     for metric in metric_labels:
         result[metric] = MAP[metric](
-            y_true, y_pred, labels, class_axis=class_axis, average=average
+            y_true, y_pred, labels, 
+            class_axis=class_axis
         )
-        # values = np.array(list(result[metric].values()))
-        # result_after["mean"][metric] = values.mean()
-        # result_after["argmax"][metric] = labels[values.argmax()]
-        # result_after["argmin"][metric] = labels[values.argmin()]
 
     return result
 
@@ -497,32 +485,6 @@ def scores(
 #            'recall': '2',
 #            'f1': '2',
 #            'dice': '2'}}
-
-
-def dice_loss(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    *,
-    class_axis: int = 1,
-    average: str = "binary",
-) -> np.float64:
-    labels = [str(i) for i in range(y_true.shape[class_axis])]
-    result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
-    score = np.fromiter(result.values(), dtype=np.float64).mean()
-    return score
-
-
-def kl_divergence_loss(
-    y_true: np.ndarray, y_pred: np.ndarray, *, epsilon: float = 1e-7
-):
-    # 确保输入为概率分布
-    y_true = np.clip(y_true, epsilon, 1.0 - epsilon)
-    y_pred = np.clip(y_pred, epsilon, 1.0 - epsilon)
-
-    # 计算 KL 散度: sum(p * log(p/q))
-    kl_div = np.sum(y_true * np.log(y_true / y_pred), axis=1)
-    return np.mean(kl_div)
-
 
 class ScoreCalculator:
     def __init__(

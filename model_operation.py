@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.console import Console
 
 from config import get_config, ALL_STYLES
-from utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, get_transforms, CombineCriterion
+from utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, get_transforms, CombineCriterion, select_postprocess_fn
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -40,6 +40,10 @@ class Trainer:
         self.train_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
         self.valid_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
+        postprocess_name = c.get('postprocess', "")
+        assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
+
+        self.postprocess = select_postprocess_fn(postprocess_name)
         # TODO:
         # if is_continue_mode:
         #     recovery()
@@ -248,13 +252,6 @@ class Trainer:
         valid_losses = np.array(valid_losses, dtype=np.float64) if valid_dataloader else None
         self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
 
-    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
-        targets[targets >= 0.5] = 1
-        targets[targets < 0.5] = 0
-        outputs[outputs >= 0.5] = 1
-        outputs[outputs < 0.5] = 0
-        return targets, outputs
-
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
         class_labels  = c['classes']
@@ -365,6 +362,10 @@ class Tester:
         metric_labels = c['metrics']
         self.calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
+        postprocess_name = c.get('postprocess', "")
+        self.postprocess = select_postprocess_fn(postprocess_name)
+        assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
+
     @torch.no_grad()
     def test(self, test_dataloader: DataLoader):
         c = get_config()
@@ -384,13 +385,6 @@ class Tester:
         self.calculator.record_batches()
 
         self._print_table()
-
-    def postprocess(self, targets: torch.Tensor, outputs: torch.Tensor):
-        targets[targets >= 0.5] = 1
-        targets[targets < 0.5] = 0
-        outputs[outputs >= 0.5] = 1
-        outputs[outputs < 0.5] = 0
-        return targets, outputs
 
     def _print_table(self):
         c = get_config()
@@ -432,6 +426,11 @@ class Predictor:
         self.logger = logging.getLogger('predict')
         self.timer = Timer()
 
+        c = get_config()
+        postprocess_name = c.get('postprocess', "")
+        self.postprocess = select_postprocess_fn(postprocess_name)
+        assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
+
     @torch.inference_mode()
     def predict(self, inputs: list[Path], **kwargs):
         c = get_config()
@@ -444,41 +443,29 @@ class Predictor:
             input_filename = input.name
 
             with self.timer.timeit(task=input_filename + '.preprocess'):
-                input_tensor, original_size = self.preprocess(input)
+                image = Image.open(input).convert('L')
+                size = image.size # (H, W)
+                transforms = get_transforms()
+                image_tensor = transforms(image).unsqueeze(0)
 
             with self.timer.timeit(task=input_filename + '.inference'):
-                input_tensor = input_tensor.to(device)
-                pred_tensor = self.model(input_tensor)
+                image_tensor = image_tensor.to(device)
+                pred_tensor = self.model(image_tensor)
 
             with self.timer.timeit(task=input_filename + '.postprocess'):
-                pred_np = self.postprocess(pred_tensor)
+                import torch.nn.functional as F
+                pred = F.sigmoid(pred_tensor)
+                pred[pred >= 0.5] = 255
+                pred[pred < 0.5] = 0
 
-            self.record(input, pred_np, filename=input_filename, original_size=original_size)
+                pred = pred.detach().cpu().numpy()
+                pred = pred.squeeze(0).squeeze(0)
+                pred = pred.astype(np.uint8)
+
+            output_filename = self.output_dir / input_filename
+            pred_image = Image.fromarray(pred, mode='L')
+            pred_image = pred_image.resize(size)
+            pred_image.save(output_filename)
 
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
-
-    def record(self, input: Path, pred: np.ndarray, **kwargs):
-        output_filename = self.output_dir / kwargs['filename']
-        original_size = kwargs['original_size'] # (W, H)
-
-        pred_image = Image.fromarray(pred, mode='L')
-        pred_image = pred_image.resize(original_size)
-
-        pred_image.save(output_filename)
-
-    def preprocess(self, input: Path) -> tuple[torch.Tensor, tuple[int, int]]:
-        image = Image.open(input).convert('L')
-        size = image.size # (H, W)
-        transforms = get_transforms()
-        image_tensor = transforms(image).unsqueeze(0)
-        return image_tensor, size
-
-    def postprocess(self, pred: torch.Tensor) -> np.ndarray:
-        pred[pred >= 0.5] = 255
-        pred[pred < 0.5] = 0
-
-        pred = pred.detach().cpu().numpy()
-        pred = pred.squeeze(0).squeeze(0)
-        pred = pred.astype(np.uint8)
-        return pred

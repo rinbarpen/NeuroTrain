@@ -41,7 +41,7 @@ from .scores import (
     precision_score,
     dsc_score,
 )
-from .scores import dice_loss, kl_divergence_loss
+from .criterion import dice_loss, kl_divergence_loss
 from .see_cam import ImageHeatMapGenerator
 from .util import (
     prepare_logger,
@@ -56,4 +56,4 @@ from .util import (
     model_gflops,
     freeze_layers,
 )
-from .postprocess import postprocess_binary_segmentation, postprocess_instance_segmentation
+from .postprocess import select_postprocess_fn

@@ -220,124 +220,124 @@ class ScoreAggregator:
                 result[metric].append(FLOAT(np.mean(s)))
         return result
 
-def create_ClassLabelOneScoreDict(class_labels: ClassLabelsList, 
-                                  default_score: FLOAT=0.0) -> ClassLabelOneScoreDict:
-    return {label: default_score for label in class_labels}
-def create_ClassLabelManyScoreDict(class_labels: ClassLabelsList) -> ClassLabelManyScoreDict:
-    return {label: [] for label in class_labels}
-def create_MetricLabelOneScoreDict(metric_labels: MetricLabelsList, 
-                                   default_score: FLOAT=0.0) -> MetricLabelOneScoreDict:
-    return {label: default_score for label in metric_labels}
-def create_MetricLabelManyScoreDict(metric_labels: MetricLabelsList) -> MetricLabelManyScoreDict:
-    return {label: [] for label in metric_labels}
-def create_MetricClassOneScoreDict(metric_labels: MetricLabelsList, 
-                                   class_labels: ClassLabelsList, 
-                                   default_score: FLOAT=0.0) -> MetricClassOneScoreDict:
-    return {metric: {label: default_score for label in class_labels} for metric in metric_labels}
-def create_MetricClassManyScoreDict(metric_labels: MetricLabelsList, 
-                                    class_labels: ClassLabelsList) -> MetricClassManyScoreDict:
-    return {metric: {label: [] for label in class_labels} for metric in metric_labels}
-def create_ClassMetricOneScoreDict(metric_labels: MetricLabelsList, 
-                                   class_labels: ClassLabelsList, 
-                                   default_score: FLOAT=0.0) -> ClassMetricOneScoreDict:
-    return {label: {metric: default_score for metric in metric_labels} for label in class_labels}
-def create_ClassMetricManyScoreDict(metric_labels: MetricLabelsList, 
-                                    class_labels: ClassLabelsList) -> ClassMetricManyScoreDict:
-    return {label: {metric: [] for metric in metric_labels} for label in class_labels}
+# def create_ClassLabelOneScoreDict(class_labels: ClassLabelsList, 
+#                                   default_score: FLOAT=0.0) -> ClassLabelOneScoreDict:
+#     return {label: default_score for label in class_labels}
+# def create_ClassLabelManyScoreDict(class_labels: ClassLabelsList) -> ClassLabelManyScoreDict:
+#     return {label: [] for label in class_labels}
+# def create_MetricLabelOneScoreDict(metric_labels: MetricLabelsList, 
+#                                    default_score: FLOAT=0.0) -> MetricLabelOneScoreDict:
+#     return {label: default_score for label in metric_labels}
+# def create_MetricLabelManyScoreDict(metric_labels: MetricLabelsList) -> MetricLabelManyScoreDict:
+#     return {label: [] for label in metric_labels}
+# def create_MetricClassOneScoreDict(metric_labels: MetricLabelsList, 
+#                                    class_labels: ClassLabelsList, 
+#                                    default_score: FLOAT=0.0) -> MetricClassOneScoreDict:
+#     return {metric: {label: default_score for label in class_labels} for metric in metric_labels}
+# def create_MetricClassManyScoreDict(metric_labels: MetricLabelsList, 
+#                                     class_labels: ClassLabelsList) -> MetricClassManyScoreDict:
+#     return {metric: {label: [] for label in class_labels} for metric in metric_labels}
+# def create_ClassMetricOneScoreDict(metric_labels: MetricLabelsList, 
+#                                    class_labels: ClassLabelsList, 
+#                                    default_score: FLOAT=0.0) -> ClassMetricOneScoreDict:
+#     return {label: {metric: default_score for metric in metric_labels} for label in class_labels}
+# def create_ClassMetricManyScoreDict(metric_labels: MetricLabelsList, 
+#                                     class_labels: ClassLabelsList) -> ClassMetricManyScoreDict:
+#     return {label: {metric: [] for metric in metric_labels} for label in class_labels}
 
-def create_MetricAfterDict(metric_labels: MetricLabelsList) -> MetricAfterDict:
-    return {
-        'mean': create_MetricLabelOneScoreDict(metric_labels),
-        'std': create_MetricLabelOneScoreDict(metric_labels),
-        'argmax': {metric: '' for metric in metric_labels},
-        'argmin': {metric: '' for metric in metric_labels},
-    }
+# def create_MetricAfterDict(metric_labels: MetricLabelsList) -> MetricAfterDict:
+#     return {
+#         'mean': create_MetricLabelOneScoreDict(metric_labels),
+#         'std': create_MetricLabelOneScoreDict(metric_labels),
+#         'argmax': {metric: '' for metric in metric_labels},
+#         'argmin': {metric: '' for metric in metric_labels},
+#     }
 
-def convert_to_ClassMetricManyScoreDict(data: MetricClassManyScoreDict) -> ClassMetricManyScoreDict:
-    result = {}
-    for metric_label, class_map in data.items():
-        for class_label, scores in class_map.items():
-            if class_label not in result:
-                result[class_label] = {}
-            result[class_label][metric_label] = scores
-    return result
+# def convert_to_ClassMetricManyScoreDict(data: MetricClassManyScoreDict) -> ClassMetricManyScoreDict:
+#     result = {}
+#     for metric_label, class_map in data.items():
+#         for class_label, scores in class_map.items():
+#             if class_label not in result:
+#                 result[class_label] = {}
+#             result[class_label][metric_label] = scores
+#     return result
 
-def convert_to_MetricClassManyScoreDict(data: ClassMetricManyScoreDict) -> MetricClassManyScoreDict:
-    result = {}
-    for class_label, metric_map in data.items():
-        for metric_label, scores in metric_map.items():
-            if metric_label not in result:
-                result[metric_label] = {}
-            result[metric_label][class_label] = scores
-    return result
+# def convert_to_MetricClassManyScoreDict(data: ClassMetricManyScoreDict) -> MetricClassManyScoreDict:
+#     result = {}
+#     for class_label, metric_map in data.items():
+#         for metric_label, scores in metric_map.items():
+#             if metric_label not in result:
+#                 result[metric_label] = {}
+#             result[metric_label][class_label] = scores
+#     return result
 
-def convert_to_ClassMetricOneScoreDict(data: MetricClassOneScoreDict) -> ClassMetricOneScoreDict:
-    result = {}
-    for metric_label, class_map in data.items():
-        for class_label, score in class_map.items():
-            if class_label not in result:
-                result[class_label] = {}
-            result[class_label][metric_label] = score
-    return result
+# def convert_to_ClassMetricOneScoreDict(data: MetricClassOneScoreDict) -> ClassMetricOneScoreDict:
+#     result = {}
+#     for metric_label, class_map in data.items():
+#         for class_label, score in class_map.items():
+#             if class_label not in result:
+#                 result[class_label] = {}
+#             result[class_label][metric_label] = score
+#     return result
 
-def convert_to_MetricClassOneScoreDict(data: ClassMetricOneScoreDict) -> MetricClassOneScoreDict:
-    result = {}
-    for class_label, metric_map in data.items():
-        for metric_label, score in metric_map.items():
-            if metric_label not in result:
-                result[metric_label] = {}
-            result[metric_label][class_label] = score
-    return result
+# def convert_to_MetricClassOneScoreDict(data: ClassMetricOneScoreDict) -> MetricClassOneScoreDict:
+#     result = {}
+#     for class_label, metric_map in data.items():
+#         for metric_label, score in metric_map.items():
+#             if metric_label not in result:
+#                 result[metric_label] = {}
+#             result[metric_label][class_label] = score
+#     return result
 
-def mean_from_ClassMetricManyScoreDict(data: ClassMetricManyScoreDict) -> ClassMetricOneScoreDict:
-    result = {}
-    for class_label, metric_map in data.items():
-        result[class_label] = {}
-        for metric_label, scores in metric_map.items():
-            result[class_label][metric_label] = np.mean(scores)
-    return result
+# def mean_from_ClassMetricManyScoreDict(data: ClassMetricManyScoreDict) -> ClassMetricOneScoreDict:
+#     result = {}
+#     for class_label, metric_map in data.items():
+#         result[class_label] = {}
+#         for metric_label, scores in metric_map.items():
+#             result[class_label][metric_label] = np.mean(scores)
+#     return result
 
-def mean_from_MetricClassManyScoreDict(data: MetricClassManyScoreDict) -> MetricClassOneScoreDict:
-    result = {}
-    for metric_label, class_map in data.items():
-        result[metric_label] = {}
-        for class_label, scores in class_map.items():
-            result[metric_label][class_label] = np.mean(scores)
-    return result
+# def mean_from_MetricClassManyScoreDict(data: MetricClassManyScoreDict) -> MetricClassOneScoreDict:
+#     result = {}
+#     for metric_label, class_map in data.items():
+#         result[metric_label] = {}
+#         for class_label, scores in class_map.items():
+#             result[metric_label][class_label] = np.mean(scores)
+#     return result
 
-def std_from_ClassMetricManyScoreDict(data: ClassMetricManyScoreDict) -> ClassMetricOneScoreDict:
-    result = {}
-    for class_label, metric_map in data.items():
-        result[class_label] = {}
-        for metric_label, scores in metric_map.items():
-            result[class_label][metric_label] = np.std(scores)
-    return result
+# def std_from_ClassMetricManyScoreDict(data: ClassMetricManyScoreDict) -> ClassMetricOneScoreDict:
+#     result = {}
+#     for class_label, metric_map in data.items():
+#         result[class_label] = {}
+#         for metric_label, scores in metric_map.items():
+#             result[class_label][metric_label] = np.std(scores)
+#     return result
 
-def std_from_MetricClassManyScoreDict(data: MetricClassManyScoreDict) -> MetricClassOneScoreDict:
-    result = {}
-    for metric_label, class_map in data.items():
-        result[metric_label] = {}
-        for class_label, scores in class_map.items():
-            result[metric_label][class_label] = np.std(scores)
-    return result
+# def std_from_MetricClassManyScoreDict(data: MetricClassManyScoreDict) -> MetricClassOneScoreDict:
+#     result = {}
+#     for metric_label, class_map in data.items():
+#         result[metric_label] = {}
+#         for class_label, scores in class_map.items():
+#             result[metric_label][class_label] = np.std(scores)
+#     return result
 
-def mean_from_MetricLabelManyScoreDict(data: MetricLabelManyScoreDict) -> MetricLabelOneScoreDict:
-    result = {}
-    for metric_label, scores in data.items():
-        result[metric_label] = np.mean(scores)
-    return result
-def std_from_MetricLabelManyScoreDict(data: MetricLabelManyScoreDict) -> MetricLabelOneScoreDict:
-    result = {}
-    for metric_label, scores in data.items():
-        result[metric_label] = np.std(scores)
-    return result
-def mean_from_ClassLabelManyScoreDict(data: ClassLabelManyScoreDict) -> ClassLabelOneScoreDict:
-    result = {}
-    for class_label, scores in data.items():
-        result[class_label] = np.mean(scores)
-    return result
-def std_from_ClassLabelManyScoreDict(data: ClassLabelManyScoreDict) -> ClassLabelOneScoreDict:
-    result = {}
-    for class_label, scores in data.items():
-        result[class_label] = np.std(scores)
-    return result
+# def mean_from_MetricLabelManyScoreDict(data: MetricLabelManyScoreDict) -> MetricLabelOneScoreDict:
+#     result = {}
+#     for metric_label, scores in data.items():
+#         result[metric_label] = np.mean(scores)
+#     return result
+# def std_from_MetricLabelManyScoreDict(data: MetricLabelManyScoreDict) -> MetricLabelOneScoreDict:
+#     result = {}
+#     for metric_label, scores in data.items():
+#         result[metric_label] = np.std(scores)
+#     return result
+# def mean_from_ClassLabelManyScoreDict(data: ClassLabelManyScoreDict) -> ClassLabelOneScoreDict:
+#     result = {}
+#     for class_label, scores in data.items():
+#         result[class_label] = np.mean(scores)
+#     return result
+# def std_from_ClassLabelManyScoreDict(data: ClassLabelManyScoreDict) -> ClassLabelOneScoreDict:
+#     result = {}
+#     for class_label, scores in data.items():
+#         result[class_label] = np.std(scores)
+#     return result
