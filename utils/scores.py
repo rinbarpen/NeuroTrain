@@ -509,7 +509,7 @@ def dice_loss(
     labels = [str(i) for i in range(y_true.shape[class_axis])]
     result = dice_score(y_true, y_pred, labels, class_axis=class_axis, average=average)
     score = np.fromiter(result.values(), dtype=np.float64).mean()
-    return 1 - score
+    return score
 
 
 def kl_divergence_loss(
