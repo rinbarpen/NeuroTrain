@@ -78,7 +78,8 @@ if __name__ == "__main__":
         lr_scheduler = tools["lr_scheduler"]
         scaler = tools["scaler"]
         criterion = CombineCriterion(
-            [Loss(nn.BCEWithLogitsLoss(), weight=0.3), DiceLoss(weight=1.0)]
+            Loss(nn.BCEWithLogitsLoss(), weight=0.3), 
+            DiceLoss(weight=1.0)
         )  # Loss
 
         if is_continue_mode and c["model"]["continue_ext_checkpoint"] != "":

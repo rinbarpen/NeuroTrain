@@ -95,19 +95,16 @@ class Trainer:
                             outputs = self.model(inputs)
 
                             if not enable_accumulation_step:
-                                losses = criterion(targets, outputs)
-                                for loss in losses:
-                                    scaler.scale(loss).backward()
-                                    sum_loss += loss.item()
+                                loss = criterion(targets, outputs)
+                                scaler.scale(loss).backward()
+                                sum_loss += loss.item()
                                 scaler.step(optimizer)
                                 scaler.update()
                             else:
-                                losses = criterion(targets, outputs)
-                                for loss in losses:
-                                    loss /= accumulation_steps
-                                    scaler.scale(loss).backward()
-                                    sum_loss += loss.item()
-                                loss = torch.concat(losses).sum()
+                                loss = criterion(targets, outputs)
+                                loss /= accumulation_steps
+                                scaler.scale(loss).backward()
+                                sum_loss += loss.item()
                                 if i % accumulation_steps == 0:
                                     scaler.step(optimizer)
                                     scaler.update()
@@ -115,17 +112,15 @@ class Trainer:
                     else:
                         outputs = self.model(inputs)
                         if not enable_accumulation_step:
-                            losses = criterion(targets, outputs)
-                            for loss in losses:
-                                loss.backward()
-                                sum_loss += loss.item()
+                            loss = criterion(targets, outputs)
+                            loss.backward()
+                            sum_loss += loss.item()
                             optimizer.step()
                         else:
-                            losses = criterion(targets, outputs)
-                            for loss in losses:
-                                loss /= accumulation_steps
-                                loss.backward()
-                                sum_loss += loss.item()
+                            loss = criterion(targets, outputs)
+                            loss /= accumulation_steps
+                            loss.backward()
+                            sum_loss += loss.item()
                             if i % accumulation_steps == 0:
                                 optimizer.step()
                                 optimizer.zero_grad()
@@ -227,7 +222,7 @@ class Trainer:
 
             # accumulation_step
             if enable_accumulation_step:
-                if i % accumulation_steps != 0:
+                if (len(train_dataloader) * num_epochs) % accumulation_steps != 0:
                     if scaler:
                         scaler.step(optimizer)
                         scaler.update()

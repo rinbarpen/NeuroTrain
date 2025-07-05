@@ -1,29 +1,38 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import numpy as np
 
 def dice_loss(
     y_true: torch.Tensor,
-    y_pred: torch.Tensor,
+    y_pred: torch.Tensor, # y_pred 预期为 logits
     *,
     class_axis: int = 1,
-    eps: float = 1e-6,
+    smooth: float = 1e-6,
+    # 新增参数，指定是否在内部进行激活
+    apply_activation: bool = True,
+    activation_type: str = 'sigmoid', # 'sigmoid' for binary/multilabel, 'softmax' for multiclass
 ) -> torch.Tensor:
-    # 确保 class_axis 是正数索引
     if class_axis < 0:
         class_axis += y_true.ndim
 
+    # 对预测值应用激活函数
+    if apply_activation:
+        if activation_type == 'sigmoid':
+            y_pred = torch.sigmoid(y_pred)
+        elif activation_type == 'softmax':
+            # 对于 softmax，需要知道类别维度
+            y_pred = torch.softmax(y_pred, dim=class_axis)
+        else:
+            raise ValueError(f"Unsupported activation_type: {activation_type}")
+
     reduction_dims = tuple(i for i in range(y_true.ndim) if i != class_axis)
 
-    intersection = torch.sum(y_true * y_pred, dim=reduction_dims)
-    union = torch.sum(y_true, dim=reduction_dims) + torch.sum(y_pred, dim=reduction_dims)
+    intersection = (y_true * y_pred).sum(dim=reduction_dims)
+    union = (y_true + y_pred).sum(dim=reduction_dims)
+    union = torch.where(union == 0, intersection, union)
 
-    dice_scores = (2.0 * intersection + eps) / (union + eps)
-
-    mean_dice_score = dice_scores.mean()
-
-    return 1.0 - mean_dice_score
+    dice_scores = (2.0 * intersection + smooth) / (union + smooth)
+    return 1.0 - dice_scores.mean()
 
 def kl_divergence_loss(
     y_true: torch.Tensor, y_pred: torch.Tensor, *, epsilon: float = 1e-7
@@ -52,19 +61,12 @@ def distillation_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor
 
 
 class CombineCriterion(nn.Module):
-    def __init__(self, loss_fns: nn.Module|list[nn.Module]):
+    def __init__(self, *loss_fns):
         super(CombineCriterion, self).__init__()
-        if isinstance(loss_fns, list):
-            self.criterions = loss_fns
-        else:
-            self.criterions = [loss_fns]
+        self.loss_fns = loss_fns
 
-    def forward(self, targets, preds):
-        all_loss = []
-        for criterion in self.criterions:
-            loss = criterion(targets, preds)
-            all_loss.append(loss)
-        return all_loss
+    def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
+        return torch.stack([loss_fn(targets, preds) for loss_fn in self.loss_fns]).sum()
 
 class Loss(nn.Module):
     def __init__(self, loss_fn: nn.Module|None=None, weight: float=1.0):
@@ -79,14 +81,13 @@ class Loss(nn.Module):
 
 
 class DiceLoss(Loss):
-    def __init__(self, weight: float=1.0):
+    def __init__(self, weight: float=1.0, activation_type: str='sigmoid'): # 增加 activation_type 参数
         super(DiceLoss, self).__init__(weight=weight)
+        self.activation_type = activation_type
 
     def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
-        loss = dice_loss(targets, preds)
-        x = torch.tensor(loss)
-        x.requires_grad = True
-        return x * self.weight
+        loss = dice_loss(targets, preds, apply_activation=True, activation_type=self.activation_type)
+        return loss * self.weight
 
 class KLLoss(Loss):
     def __init__(self, weight: float=1.0):
