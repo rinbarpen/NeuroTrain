@@ -21,7 +21,7 @@ def parse_args():
     train_parser.add_argument('-e', '--epoch', type=int, help='epoch')
     train_parser.add_argument('-lr', '--learning_rate', type=float, help='learning_rate')
     train_parser.add_argument('--weight_decay', type=float, help='weight_decay')
-    train_parser.add_argument('--save_every_n_epoch', type=int, help='save_every_n_epoch')
+    train_parser.add_argument('--save_period', type=float, help='save_period')
     train_parser.add_argument('--grad_accumulation_steps', type=int, help='grad_accumulation_steps')
     ## amp mode: bf16 int8 ..
     # bfloat16, float16, 
@@ -111,8 +111,8 @@ def parse_args():
             CONFIG['train']['optimizer']['learning_rate'] = args.learning_rate
         if args.weight_decay:
             CONFIG['train']['optimizer']['weight_decay'] = args.weight_decay
-        if args.save_every_n_epoch:
-            CONFIG['train']['save_every_n_epoch'] = args.save_every_n_epoch
+        if args.save_period:
+            CONFIG['train']['save_period'] = args.save_period
         if args.weight_decay:
             CONFIG['train']['optimizer']['weight_decay'] = args.weight_decay
         if args.amp != 'none':
@@ -149,9 +149,9 @@ def parse_args():
 
     if args.check:
         CONFIG['private']['mode'] |= (TRAIN_MODE | TEST_MODE | PREDICT_MODE)
-        CONFIG['train']['batch_size'] = 1
+        CONFIG['train']['batch_size'] = 2
         CONFIG['train']['epoch'] = 3
-        CONFIG['train']['save_every_n_epoch'] = 1
+        CONFIG['train']['save_period'] = 1
 
     if args.wandb:
         try:

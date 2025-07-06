@@ -4,7 +4,7 @@ from pathlib import Path
 from src.utils.typed import *
 from src.utils.painter import Plot
 from src.utils.data_saver import DataSaver
-from src.defines import neighbour_code_to_normals
+from src.utils.scores import scores
 
 
 # ScoreAggregator: 用于聚合和统计分数
@@ -181,7 +181,7 @@ class ScoreAggregator:
                 result[metric].append(FLOAT(np.mean(s)))
         return result
 
-class ScoreCalculator:
+class MetricRecorder:
     def __init__(
         self,
         output_dir: FilePath,
@@ -211,7 +211,6 @@ class ScoreCalculator:
             class_dir.mkdir(parents=True, exist_ok=True)
 
     def finish_one_batch(self, targets: np.ndarray, outputs: np.ndarray):
-        from src.utils.scores import scores
         metrics = scores(
             targets, outputs, labels=self.class_labels, metric_labels=self.metric_labels
         )

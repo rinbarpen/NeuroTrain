@@ -3,7 +3,7 @@ from .criterion import CombineCriterion, DiceLoss, Loss, KLLoss
 from .data_saver import DataSaver
 from .early_stopping import EarlyStopping
 from .image_utils import ImageUtils
-from .metric_recorder import ScoreAggregator, ScoreCalculator
+from .metric_recorder import ScoreAggregator, MetricRecorder
 from .typed import (
     to_path,
     to_pil_image,

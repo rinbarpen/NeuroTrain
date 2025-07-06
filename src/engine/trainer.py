@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.console import Console
 
 from src.config import get_config, ALL_STYLES
-from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, CombineCriterion, select_postprocess_fn
+from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, MetricRecorder, Plot, CombineCriterion, select_postprocess_fn
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -23,8 +23,8 @@ class Trainer:
         self.save_model_dir = output_dir / "weights"
         self.last_model_file_path = self.save_model_dir / "last.pt"
         self.best_model_file_path = self.save_model_dir / "best.pt"
-        self.last_model_ext_file_path = self.save_model_dir / "last-ext.pt"
-        self.best_model_ext_file_path = self.save_model_dir / "best-ext.pt"
+        self.last_model_ext_file_path = self.save_model_dir / "last.ext.pt"
+        self.best_model_ext_file_path = self.save_model_dir / "best.ext.pt"
 
         self.model = model
 
@@ -35,8 +35,8 @@ class Trainer:
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.train_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-        self.valid_calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.train_metric_recorder = MetricRecorder(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.valid_metric_recorder = MetricRecorder(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
         postprocess_name = c.get('postprocess', "")
         assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
@@ -56,7 +56,8 @@ class Trainer:
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
         device = torch.device(c['device'])
-        save_every_n_epoch = c["train"]["save_every_n_epoch"]
+        save_every_n_epoch = c["train"]["save_period"] if c["train"]["save_period"] >= 1 else c["train"]["save_period"] * num_epochs
+        save_every_n_epoch = int(save_every_n_epoch)
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
 
@@ -129,7 +130,7 @@ class Trainer:
                     pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
 
                     targets, outputs = self.postprocess(targets, outputs)
-                    self.train_calculator.finish_one_batch(
+                    self.train_metric_recorder.finish_one_batch(
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
@@ -142,7 +143,7 @@ class Trainer:
                 pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
 
                 self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
-                self.train_calculator.finish_one_epoch()
+                self.train_metric_recorder.finish_one_epoch()
 
                 # validate
                 if valid_dataloader:
@@ -165,7 +166,7 @@ class Trainer:
                             pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
 
                             targets, outputs = self.postprocess(targets, outputs)
-                            self.valid_calculator.finish_one_batch(
+                            self.valid_metric_recorder.finish_one_batch(
                                 targets.detach().cpu().numpy(), 
                                 outputs.detach().cpu().numpy())
 
@@ -176,7 +177,7 @@ class Trainer:
                     pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
 
                     self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
-                    self.valid_calculator.finish_one_epoch()
+                    self.valid_metric_recorder.finish_one_epoch()
 
                     if early_stopper:
                         early_stopper(valid_loss)
@@ -235,9 +236,9 @@ class Trainer:
                     epoch=num_epochs, version=c['run_id'], loss=best_loss)
             self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
-        self.train_calculator.record_epochs(n_epochs=num_epochs)
+        self.train_metric_recorder.record_epochs(n_epochs=num_epochs)
         if valid_dataloader:
-            self.valid_calculator.record_epochs(n_epochs=num_epochs)
+            self.valid_metric_recorder.record_epochs(n_epochs=num_epochs)
 
         self._print_table(valid_dataloader is not None)
 
@@ -250,10 +251,10 @@ class Trainer:
         class_labels  = c['classes']
         metric_labels = c['metrics']
 
-        train_scores = ScoreAggregator(self.train_calculator.epoch_metric_label_scores)
+        train_scores = ScoreAggregator(self.train_metric_recorder.epoch_metric_label_scores)
         train_mean_scores = train_scores.ml1_mean
         train_metric_class_scores = (train_scores.mc1_mean, train_scores.mc1_std)
-        valid_scores = ScoreAggregator(self.valid_calculator.epoch_metric_label_scores) if enable_valid_when_training else None
+        valid_scores = ScoreAggregator(self.valid_metric_recorder.epoch_metric_label_scores) if enable_valid_when_training else None
         valid_mean_scores = valid_scores.ml1_mean if valid_scores else None
         valid_metric_class_scores = (valid_scores.mc1_mean, valid_scores.mc1_std) if valid_scores else None
 

@@ -59,14 +59,14 @@ num_workers = 4
 shuffle = true
 
 [train]
-batch_size = 1
-epoch = 3
-save_every_n_epoch = 1
+batch_size = 2
+epoch = 200
+save_period = 0.2
 grad_accumulation_steps = 0 # <= 0 for disabled
 
 [train.optimizer]
 type = 'adam' # sgd, adam, adamw
-learning_rate = 3e-6
+learning_rate = 3e-5
 weight_decay = 1e-8
 
 # [train.lr_scheduler]
@@ -79,9 +79,6 @@ weight_decay = 1e-8
 
 # [train.early_stopping]
 # patience = 3
-
-[valid]
-batch_size = 1
 
 [test]
 batch_size = 1

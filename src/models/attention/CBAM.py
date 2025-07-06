@@ -14,7 +14,7 @@ class CBAM(nn.Module):
     def __init__(self, channels, reduction: int=1, use_optimization: bool=True):
         super(CBAM, self).__init__()
 
-        self.ca = ECAModule() if use_optimization else SEModule(channels, reduction)
+        self.ca = ECAModule(channels) if use_optimization else SEModule(channels, reduction)
         self.sa = CAModule()
 
     def forward(self, x):

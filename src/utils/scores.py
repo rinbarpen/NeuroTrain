@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 from sklearn import metrics
 
-from src.defines import neighbour_code_to_normals
+from src.static import neighbour_code_to_normals
 from src.utils.typed import *
 
 # y_true, y_pred: (B, C, X)
