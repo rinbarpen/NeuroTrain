@@ -8,9 +8,9 @@ from argparse import ArgumentParser
 from rich import print as rich_print
 from rich.json import JSON
 from rich.console import Console
-# from utils.typed import Betweens
-from utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
-from utils.transform import VisionTransformersBuilder
+# from src.utils.typed import Betweens
+from src.utils.dataset import drive_dataset, bowl2018_dataset, chasedb1_dataset, isic2017_dataset, isic2018_dataset, stare_dataset
+from src.utils.transform import VisionTransformersBuilder
 
 c = {}
 

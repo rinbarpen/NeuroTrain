@@ -6,7 +6,7 @@ import numpy as np
 from torchvision import transforms
 from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset, Betweens
 
 # Instance Segmentation Dataset
 class BOWL2018Dataset(CustomDataset):
@@ -26,7 +26,7 @@ class BOWL2018Dataset(CustomDataset):
         if kwargs.__contains__("n_instance"):
             self.config["n_instance"] = kwargs["n_instance"]
         else:
-            from config import get_config
+            from src.config import get_config
             c = get_config()
             self.config["n_instance"] = len(c["classes"])
 
@@ -90,7 +90,7 @@ class BOWL2018Dataset(CustomDataset):
         if "n_instance" in kwargs.keys():
             n_instance = kwargs["n_instance"]
         else:
-            from config import get_config
+            from src.config import get_config
             c = get_config()
             n_instance = len(c["classes"])
 

@@ -17,9 +17,9 @@ from PIL import Image
 from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
-from config import get_config, get_config_value
-from utils.typed import FilePath, ImageInstance
-from utils.dataset import get_dataset
+from src.config import get_config, get_config_value
+from src.utils.typed import FilePath, ImageInstance
+from src.dataset import get_dataset
 
 def prepare_logger():
     c = get_config_value('private.log', default={
@@ -28,6 +28,7 @@ def prepare_logger():
         'log_file_format': '%Y-%m-%d %H_%M_%S',
         'log_format': '%(asctime)s %(levelname)s | %(name)s | %(message)s',
     })
+    assert c is not None
 
     os.makedirs('logs', exist_ok=True)
     filename = os.path.join('logs', time.strftime(c['log_file_format'], time.localtime()) + '.log')

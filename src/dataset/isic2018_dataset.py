@@ -6,7 +6,7 @@ from torchvision import transforms
 import yaml
 from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset, Betweens
 
 class ISIC2018Dataset(CustomDataset):
     mapping = {"train": ("ISIC2018_Task1-2_Training_Input/*.jpg", "ISIC2018_Task1-2_Training_Input/*.jpg"), 

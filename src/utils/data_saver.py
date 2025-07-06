@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from pathlib import Path
 
-from utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict, MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict, ClassMetricManyScoreDict)
+from src.utils.typed import (ClassLabelManyScoreDict, ClassLabelOneScoreDict, ClassMetricOneScoreDict, MetricAfterDict, MetricClassManyScoreDict, MetricClassOneScoreDict, MetricLabelOneScoreDict, ClassMetricManyScoreDict)
 
 # sync mode
 class _DataSaver:

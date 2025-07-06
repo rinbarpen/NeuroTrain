@@ -9,8 +9,8 @@ from pathlib import Path
 from sklearn import metrics
 from PIL import Image
 
-from utils.annotation import buildin
-from utils.typed import (
+from src.utils.annotation import buildin
+from src.utils.typed import (
     ClassMetricOneScoreDict,
     MetricLabelManyScoreDict,
     MetricLabelOneScoreDict,

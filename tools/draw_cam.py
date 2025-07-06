@@ -12,7 +12,7 @@ import torch
 from PIL import Image
 import cv2
 from argparse import ArgumentParser
-from models.sample.unet import UNet
+from src.models.models.sample.unet import UNet
 
 
 def cam_segment(model: nn.Module, target_layers: list, input_tensor: torch.Tensor, image_np: np.ndarray, target_category: int, mask_path: Path, *, is_rgb=True, show=False):

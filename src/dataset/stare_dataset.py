@@ -1,18 +1,18 @@
 import torch
-import yaml
-from PIL import Image
-import numpy as np
-from pathlib import Path
 from torchvision import transforms
+from pathlib import Path
+from PIL import Image
+import yaml
+import numpy as np
 from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset, Betweens
 
-class ChaseDB1Dataset(CustomDataset):
-    mapping = {"train": ("training/images/*.jpg", "training/1st_label/*.png"),
-               "test":  ("test/images/*.jpg", "test/1st_label/*.png")}
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
-        super(ChaseDB1Dataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
+class StareDataset(CustomDataset):
+    mapping = {"train": ("training/images/*.png", "training/1st_labels_ah/*.png"), 
+               "test":  ("test/images/*.png", "test/1st_labels_ah/*.png")}
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
+        super(StareDataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
 
         if 'source' in kwargs.keys() and 'target' in kwargs.keys():
             image_glob, label_glob = kwargs['source'], kwargs['target']
@@ -38,31 +38,31 @@ class ChaseDB1Dataset(CustomDataset):
         image, mask = self.images[index], self.masks[index]
         if self.use_numpy:
             return torch.from_numpy(np.load(image)), torch.from_numpy(np.load(mask))
-
+        
         if self.config['is_rgb']:
             image, mask = Image.open(image).convert('RGB'), Image.open(mask).convert('RGB')
         else:
             image, mask = Image.open(image).convert('L'), Image.open(mask).convert('L')
-
+        
         image, mask = self.transforms(image), self.transforms(mask)
         return image, mask
 
     @staticmethod
     def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
-        save_dir = save_dir / ChaseDB1Dataset.name()
+        save_dir = save_dir / StareDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        train_dataset = ChaseDB1Dataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
-        test_dataset  = ChaseDB1Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
+        train_dataset = StareDataset.get_train_dataset(base_dir, between=betweens['train'])
+        test_dataset = StareDataset.get_test_dataset(base_dir, between=betweens['test'])
 
         from torch.utils.data import DataLoader
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+        test_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
 
         for dataloader, data_dir, dataset_type in zip((train_dataloader, test_dataloader), (save_dir, save_dir), ('train', 'test')):
             for i, (image, mask) in enumerate(dataloader):
-                image_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
-                mask_path = data_dir / ChaseDB1Dataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy') 
+                image_path = data_dir / StareDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
+                mask_path = data_dir / StareDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 mask_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -75,13 +75,13 @@ class ChaseDB1Dataset(CustomDataset):
 
     @staticmethod
     def name():
-        return "CHASEDB1"
+        return "STARE"
     @staticmethod
     def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return ChaseDB1Dataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
+        return StareDataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
     @staticmethod
     def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         return None
     @staticmethod
     def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return ChaseDB1Dataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)
+        return StareDataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)

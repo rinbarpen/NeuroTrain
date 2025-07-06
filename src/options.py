@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 
 import wandb
 
-from config import PREDICT_MODE, TEST_MODE, TRAIN_MODE, set_config, load_config
+from src.config import PREDICT_MODE, TEST_MODE, TRAIN_MODE, set_config, load_config
 
 def parse_args():
     parser = ArgumentParser('NeuroTrain')
@@ -70,7 +70,7 @@ def parse_args():
 
     config_file = Path(args.config)
     if not config_file.exists():
-        from config import SINGLE_CONFIG_DIR
+        from src.config import SINGLE_CONFIG_DIR
         config_file = Path(SINGLE_CONFIG_DIR) / args.config
     CONFIG = load_config(config_file)
 

@@ -1,21 +1,19 @@
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
-from PIL import Image
-import wandb
 import torch
 from torch import nn
 from torch.amp.grad_scaler import GradScaler
 from torch.amp.autocast_mode import autocast
-from torch.optim.lr_scheduler import LRScheduler, CosineAnnealingLR
+from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 import logging
 from rich.table import Table
 from rich.console import Console
 
-from config import get_config, ALL_STYLES
-from utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, get_transforms, CombineCriterion, select_postprocess_fn
+from src.config import get_config, ALL_STYLES
+from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, ScoreCalculator, Plot, CombineCriterion, select_postprocess_fn
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -49,12 +47,12 @@ class Trainer:
         #     recovery()
 
     def train(self, num_epochs: int, 
-              criterion: CombineCriterion, 
-              optimizer: Optimizer,
-              train_dataloader: DataLoader,
-              valid_dataloader: DataLoader | None = None, 
-              scaler: GradScaler | None = None, 
-              lr_scheduler: LRScheduler | None = None,
+              criterion, 
+              optimizer,
+              train_dataloader,
+              valid_dataloader = None, 
+              scaler = None, 
+              lr_scheduler = None,
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
         device = torch.device(c['device'])
@@ -266,7 +264,6 @@ class Trainer:
         table.add_column("Class/Metric", justify="center")
         for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
             table.add_column(metric, justify="center", style=style)
-        
         for class_label in class_labels:
             mean_scores = train_metric_class_scores[0]
             std_scores = train_metric_class_scores[1]
@@ -287,24 +284,14 @@ class Trainer:
             table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
         console.print(table)
 
-    def _save_after_train(self, num_epochs: int, train_losses: np.ndarray, valid_losses: np.ndarray|None, optimizer=None, scaler=None, lr_scheduler=None):
-        """
-        Save train and valid losses, and log to wandb if enabled.
-        Args:
-            num_epochs (int): Number of epochs.
-            train_losses (np.ndarray): Array of training losses. Dim=1
-            valid_losses (np.ndarray|None): Array of validation losses, if available. Dim=1
-            optimizer (torch.optim.Optimizer|None): Optimizer state to save.
-            scaler (GradScaler|None): GradScaler state to save.
-            lr_scheduler (LRScheduler|None): Learning rate scheduler state to save.
-        """
+    def _save_after_train(self, num_epochs: int, train_losses, valid_losses=None, optimizer=None, scaler=None, lr_scheduler=None):
         c = get_config()
 
         self.data_saver.save_train_loss(train_losses)
 
         plot = Plot(1, 1)
         plot = plot.subplot().epoch_loss(num_epochs, train_losses, 'train', title='Train/Epoch-Loss')
-        if valid_losses:
+        if valid_losses is not None:
             self.data_saver.save_valid_loss(valid_losses)
             plot = plot.epoch_loss(num_epochs, valid_losses, 'valid', title='Train&Valid/Epoch-Loss').complete()
             self.logger.info(f'Save train & valid loss info under the {self.output_dir}')
@@ -317,6 +304,7 @@ class Trainer:
 
         if c['private']['wandb']:
             train_c = c['train']
+            import wandb
             wandb.log({
                 "train": {
                     "train_losses": train_losses,
@@ -342,125 +330,3 @@ class Trainer:
                     } if lr_scheduler else None,
                 },
             })
-
-class Tester:
-    def __init__(self, output_dir: Path, model: nn.Module):
-        self.output_dir = output_dir
-        self.model = model
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = logging.getLogger('test')
-        self.data_saver = DataSaver(output_dir)
-
-        c = get_config()
-        class_labels = c['classes']
-        metric_labels = c['metrics']
-        self.calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
-
-        postprocess_name = c.get('postprocess', "")
-        self.postprocess = select_postprocess_fn(postprocess_name)
-        assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
-
-    @torch.no_grad()
-    def test(self, test_dataloader: DataLoader):
-        c = get_config()
-        device = torch.device(c['device'])
-        self.model = self.model.to(device)
-
-        for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
-            inputs, targets = inputs.to(device), targets.to(device)
-            # (B, N, H, W) => N is n_classes
-            outputs = self.model(inputs)
-
-            targets, outputs = self.postprocess(targets, outputs)
-            self.calculator.finish_one_batch(
-                targets.detach().cpu().numpy(),
-                outputs.detach().cpu().numpy())
-
-        self.calculator.record_batches()
-
-        self._print_table()
-
-    def _print_table(self):
-        c = get_config()
-
-        class_labels  = c['classes']
-        metric_labels = c['metrics']
-        scores = ScoreAggregator(self.calculator.all_metric_label_scores)
-
-        test_mean_scores = scores.ml1_mean
-        test_metric_class_scores = (scores.mc1_mean, scores.mc1_std)
-        
-        styles = ALL_STYLES
-        console = Console()
-
-        table = Table(title='Metric Class Mean Score(Test)')
-        table.add_column("Class/Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
-            table.add_column(metric, justify="center", style=style)
-        for class_label in class_labels:
-            mean_scores = test_metric_class_scores[0]
-            std_scores = test_metric_class_scores[1]
-            table.add_row("Test/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
-        console.print(table)
-
-        table = Table(title='Summary of Metric(Test)')
-        table.add_column("Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
-            table.add_column(metric, justify="center", style=style)
-        table.add_row("Test", *[f'{score:.3f}' for score in test_mean_scores.values()])
-        console.print(table)
-
-
-class Predictor:
-    def __init__(self, output_dir: Path, model: nn.Module):
-        self.output_dir = output_dir
-        self.model = model
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = logging.getLogger('predict')
-        self.timer = Timer()
-
-        c = get_config()
-        postprocess_name = c.get('postprocess', "")
-        self.postprocess = select_postprocess_fn(postprocess_name)
-        assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
-
-    @torch.inference_mode()
-    def predict(self, inputs: list[Path], **kwargs):
-        c = get_config()
-        device = torch.device(c['device'])
-
-        self.model = self.model.to(device)
-        self.model.eval()
-
-        for input in tqdm(inputs, desc="Predicting..."):
-            input_filename = input.name
-
-            with self.timer.timeit(task=input_filename + '.preprocess'):
-                image = Image.open(input).convert('L')
-                size = image.size # (H, W)
-                transforms = get_transforms()
-                image_tensor = transforms(image).unsqueeze(0)
-
-            with self.timer.timeit(task=input_filename + '.inference'):
-                image_tensor = image_tensor.to(device)
-                pred_tensor = self.model(image_tensor)
-
-            with self.timer.timeit(task=input_filename + '.postprocess'):
-                import torch.nn.functional as F
-                pred = F.sigmoid(pred_tensor)
-                pred[pred >= 0.5] = 255
-                pred[pred < 0.5] = 0
-
-                pred = pred.detach().cpu().numpy()
-                pred = pred.squeeze(0).squeeze(0)
-                pred = pred.astype(np.uint8)
-
-            output_filename = self.output_dir / input_filename
-            pred_image = Image.fromarray(pred, mode='L')
-            pred_image = pred_image.resize(size)
-            pred_image.save(output_filename)
-
-        cost = self.timer.total_elapsed_time()
-        self.logger.info(f'Predicting had cost {cost}s')

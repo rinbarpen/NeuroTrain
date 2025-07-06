@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Literal
 
-from utils.transform import build_image_transforms
-from models.sample.unet import UNet
+from src.utils.transform import build_image_transforms
+from src.models.sample.unet import UNet
 # from models.transformer.deit_vit import vit_base_patch16_224
 
 

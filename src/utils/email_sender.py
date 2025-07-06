@@ -1,4 +1,4 @@
-# Not implementation!
+# TODO: Not implementation!
 
 import smtplib
 from email.mime.multipart import MIMEMultipart

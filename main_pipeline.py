@@ -6,7 +6,7 @@ from pathlib import Path
 import toml
 import yaml
 
-from utils import prepare_logger
+from src.utils import prepare_logger
 
 # def prepare_logger():
 #     log_colors = {
@@ -48,7 +48,7 @@ if __name__ == '__main__':
 
     config_path = Path(args.config)
     if not config_path.exists():
-        from config import PIPELINE_CONFIG_DIR
+        from src.config import PIPELINE_CONFIG_DIR
         config_path = Path(PIPELINE_CONFIG_DIR) / args.config
 
     match config_path.suffix:

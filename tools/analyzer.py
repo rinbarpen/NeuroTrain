@@ -8,9 +8,9 @@ from typing import TypedDict
 from pathlib import Path
 from pydantic import BaseModel, Field
 
-from utils.util import load_model, load_model_ext, model_gflops, Timer
-from utils.typed import ClassLabelManyScoreDict
-from utils.painter import Plot
+from src.utils.util import load_model, load_model_ext, model_gflops, Timer
+from src.utils.typed import ClassLabelManyScoreDict
+from src.utils.painter import Plot
 
 
 MODEL_FILE = str|Path

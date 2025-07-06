@@ -9,7 +9,7 @@ import logging
 
 import nibabel as nib
 
-from utils.dataset.nnunet_dataset import NNUNetDataset
+from .nnunet_dataset import NNUNetDataset
 
 class BTCVDataset(NNUNetDataset):
     def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=transforms.Compose([transforms.Grayscale()]), use_numpy=False, **kwargs):

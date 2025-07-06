@@ -7,11 +7,13 @@ import torch.distributed as dist
 
 warnings.filterwarnings("ignore")
 
-from config import get_config, dump_config, is_predict, is_train, is_test
-from options import parse_args
-from model_operation import Trainer, Tester, Predictor
-from models import get_model
-from utils import (
+from src.config import get_config, dump_config, is_predict, is_train, is_test
+from src.options import parse_args
+from src.engine.trainer import Trainer
+from src.engine.tester import Tester
+from src.engine.predictor import Predictor
+from src.models.models import get_model
+from src.utils import (
     CombineCriterion,
     DiceLoss,
     Loss,
@@ -153,5 +155,5 @@ if __name__ == "__main__":
             inputs = [input_path]
             handler.predict(inputs, **c["predict"]["config"])
 
-    from config import INPUT_SHAPE
+    from src.config import INPUT_SHAPE
     summary_model_info(model, input_size=INPUT_SHAPE)

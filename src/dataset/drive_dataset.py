@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 from typing import Literal
 
-from utils.dataset.custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset, Betweens
 
 class DriveDataset(CustomDataset):
     mapping = {"train": ("training/images/*.png", "training/1st_manual/*.png"), 

@@ -11,9 +11,9 @@ from torchvision import transforms
 import logging
 from typing import Sequence
 
-from model_operation import Predictor
-from config import get_config
-from utils import get_transforms, to_path, FilePath, build_image_transforms, VisionTransformersBuilder, Timer
+from src.engine.model_operation import Predictor
+from src.config import get_config
+from src.utils import get_transforms, to_path, FilePath, build_image_transforms, VisionTransformersBuilder, Timer
 
 class SegmentPredictor:
     def __init__(self, output_dir: Path, 
