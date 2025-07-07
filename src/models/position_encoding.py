@@ -71,7 +71,7 @@ class Rotator:
         v = q[..., q.shape[-1] // 2:]
         return torch.cat((-v, u), dim=-1)
 
-class SpatialPositionEmbedding(nn.Module):
+class SpatialPositionEncoding(nn.Module):
     def __init__(self, num_features: int = 64, scale: float|None = None) -> None:
         super().__init__()
         if scale is None or scale <= 0.0:

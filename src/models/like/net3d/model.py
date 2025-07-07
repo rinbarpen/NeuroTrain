@@ -35,6 +35,44 @@ class DepthAttention3D(nn.Module):
         depth_attention_map = F.sigmoid(self.conv_depth(avg_out)) # B, 1, D, 1, 1
         return depth_attention_map * x # Broadcast attention map across H, W and channels
 
+class CBAM3D(nn.Module):
+    """
+    3D版CBAM注意力模块，包含通道注意力和空间注意力。
+    输入: (B, C, D, H, W)
+    输出: (B, C, D, H, W)
+    """
+    def __init__(self, in_channels, reduction=16, kernel_size=7):
+        super().__init__()
+        # 通道注意力
+        self.avg_pool = nn.AdaptiveAvgPool3d(1)
+        self.max_pool = nn.AdaptiveMaxPool3d(1)
+        self.mlp = nn.Sequential(
+            nn.Conv3d(in_channels, in_channels // reduction, kernel_size=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(in_channels // reduction, in_channels, kernel_size=1, bias=False)
+        )
+        self.sigmoid_channel = nn.Sigmoid()
+        # 空间注意力
+        self.conv_spatial = nn.Conv3d(2, 1, kernel_size=(kernel_size, kernel_size, kernel_size),
+                                      padding=kernel_size//2, bias=False)
+        self.sigmoid_spatial = nn.Sigmoid()
+
+    def forward(self, x):
+        # 通道注意力
+        avg_out = self.mlp(self.avg_pool(x))
+        max_out = self.mlp(self.max_pool(x))
+        channel_attn = self.sigmoid_channel(avg_out + max_out)
+        x = x * channel_attn
+
+        # 空间注意力
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        spatial_attn = torch.cat([avg_out, max_out], dim=1)
+        spatial_attn = self.conv_spatial(spatial_attn)
+        spatial_attn = self.sigmoid_spatial(spatial_attn)
+        x = x * spatial_attn
+        return x
+
 class TripleAttention3D(nn.Module):
     """
     Triple attention mechanism combining:
@@ -46,7 +84,7 @@ class TripleAttention3D(nn.Module):
     """
     def __init__(self, in_channels, kernel_size=3):
         super(TripleAttention3D, self).__init__()
-        self.cbam = CBAM(in_channels)
+        self.cbam = CBAM3D(in_channels)
         self.depth_attention = DepthAttention3D(in_channels, kernel_size)
 
     def forward(self, x):
@@ -63,17 +101,17 @@ class InceptionLightBlock(nn.Module):
     
     Each branch outputs a feature map, which are concatenated along the channel dimension.
     """
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, bias=True, activation: Type[nn.Module]=nn.ReLU):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, bias=True, activation: Type[nn.Module]=nn.ReLU):
         super(InceptionLightBlock, self).__init__()
         
         # Branch 1: Standard Conv2d
-        self.branch_std = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
+        self.branch_std = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size//2, bias=bias)
         
         # Branch 2: Depthwise Separable Conv2d
-        self.branch_dw = get_dwconv_layer2d(in_channels, out_channels, stride=stride, bias=bias)
+        self.branch_dw = get_dwconv_layer2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, bias=bias)
         
         # Branch 3: ACConv (Attention Convolution)
-        self.branch_ac = ACConv(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.branch_ac = ACConv(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size//2)
         
         # Final convolution to combine branches
         self.final_conv = nn.Conv2d(3 * out_channels, out_channels, kernel_size=1)
@@ -160,11 +198,13 @@ class UpBlockDecoder(nn.Module):
     """
     def __init__(self, in_channels, out_channels, num_heads=8, attn_drop=0., proj_drop=0., activation=nn.ReLU):
         super().__init__()
+        self.upsample2x = nn.UpsamplingBilinear2d(scale_factor=2)
         self.cross_attn = CrossAttention(dim=in_channels, num_heads=num_heads, attn_drop=attn_drop, proj_drop=proj_drop)
         self.conv1 = InceptionLightBlock(in_channels, out_channels, activation=activation)
         self.conv2 = InceptionLightBlock(out_channels, out_channels, activation=activation)
 
     def forward(self, x, prompt):
+        x = self.upsample2x(x)
         # cross-attention融合
         fused = self.cross_attn(prompt, x)
         # 两个InceptionLightBlock
@@ -187,6 +227,7 @@ class Encoder(nn.Module):
         self.layer1 = backbone.layer1
         self.layer2 = backbone.layer2
         self.layer3 = backbone.layer3
+        self.layer4 = backbone.layer4
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -196,11 +237,18 @@ class Encoder(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        x1 = x = self.prepare_layer(x)
-        x2 = x = self.layer1(x)
-        x3 = x = self.layer2(x)
-        x4 = x = self.layer3(x)
-        return x1, x2, x3, x4
+        xs = []
+        x = self.prepare_layer(x) # (64, 224, 224)
+        x = self.layer1(x) # (64, 112, 112)
+        xs.append(x)
+        x = self.layer2(x) # (128, 56, 56)
+        xs.append(x)
+        x = self.layer3(x) # (256, 28, 28)
+        xs.append(x)
+        x = self.layer4(x) # (512, 14, 14)
+        xs.append(x)
+        xs.reverse()
+        return xs
 
 class PreMaskEncoder(nn.Module):
     """
@@ -212,17 +260,19 @@ class PreMaskEncoder(nn.Module):
         self.conv1 = DownConv3d(n_classes, 64, activation=activation)
         self.conv2 = DownConv3d(64, 128, activation=activation)
         self.conv3 = DownConv3d(128, 256, activation=activation)
-        self.attn = TripleAttention3D(256)
-        self.conv = nn.Conv3d(256, 512, kernel_size=(2, 1, 1), bias=False)
+        self.conv4 = DownConv3d(256, 512, activation=activation)
+        self.attn = TripleAttention3D(512)
+        self.conv = nn.Conv3d(512, 512, kernel_size=(2, 1, 1), bias=False)
 
     def forward(self, x: torch.Tensor):
         # (B, C, D, H, W), D is 8x
-        while x.size(-3) < 8:
+        while x.size(-3) < 16:
             x = torch.cat([x, x], dim=-3)
 
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
+        x = self.conv4(x)
         x = self.attn(x)
 
         avg_x = torch.mean(x, dim=-3, keepdim=True) 
@@ -233,25 +283,38 @@ class PreMaskEncoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, n_classes, num_heads=8, attn_dropout=0.3, proj_drop=0.2, activation=nn.ReLU):
-        super(Decoder).__init__()
+        super(Decoder, self).__init__()
 
         self.up_block1 = UpBlockDecoder(512, 256, num_heads=num_heads, attn_drop=attn_dropout, proj_drop=proj_drop, activation=activation)
         self.up_block2 = UpBlockDecoder(256, 128, num_heads=num_heads, attn_drop=attn_dropout, proj_drop=proj_drop, activation=activation)
         self.up_block3 = UpBlockDecoder(128, 64, num_heads=num_heads, attn_drop=attn_dropout, proj_drop=proj_drop, activation=activation)
+        self.up_block4 = UpBlockDecoder(64, 64, num_heads=num_heads, attn_drop=attn_dropout, proj_drop=proj_drop, activation=activation)
         self.head = nn.Conv2d(64, n_classes, kernel_size=1)
 
-    def forward(self, x: Sequence[torch.Tensor], mask_prompt: torch.Tensor):
-        x = self.fuse(x, mask_prompt)
+        self.mask_upers = nn.ModuleList([
+            nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2, bias=False),
+            nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2, bias=False),
+            nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, bias=False),
+        ])
 
+    def forward(self, x: Sequence[torch.Tensor], mask_prompt: torch.Tensor):
+        prompts = self.fuse(x, mask_prompt)
+        y = x[0]
+        y = self.up_block1(y, prompts[0])
+        y = self.up_block2(y, prompts[1])
+        y = self.up_block3(y, prompts[2])
+        y = self.up_block4(y, prompts[3])
+        x = y
         x = self.head(x)
         return x
 
     def fuse(self, xs: Sequence[torch.Tensor], mask: torch.Tensor):
-        y = []
-        for x in xs:
+        x = xs[0] + mask
+        y = [x]
+        for x, mask_uper in zip(xs[1:], self.mask_upers):
+            mask = mask_uper(mask)
             x = x + mask
             y.append(x)
-            mask = F.interpolate(mask, scale_factor=2, mode='bilinear')
         return y
 
 class Model(nn.Module):
@@ -264,7 +327,7 @@ class Model(nn.Module):
         super().__init__()
         self.encoder = Encoder(in_channels=in_channels, activation=activation[0])
         self.premask_encoder = PreMaskEncoder(n_classes=n_classes, activation=activation[1])
-        self.decoder = Decoder(n_classes=n_classes, num_heads=num_heads, attn_dropout=attn_dropout, proj_drop=proj_drop, activation=activation)
+        self.decoder = Decoder(n_classes=n_classes, num_heads=num_heads, attn_dropout=attn_dropout, proj_drop=proj_drop, activation=activation[1])
 
     def forward(self, x, masks):
         # x: (B, in_channels, H, W)

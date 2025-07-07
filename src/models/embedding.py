@@ -2,16 +2,18 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .position_encoding import PositionalEncoding, LearnablePositionalEncoding
+from .position_encoding import PositionalEncoding, LearnablePositionalEncoding, SpatialPositionEncoding
 
-# class Embedding(nn.Module):
-#     def __init__(self, vocab_size: int, embed_dim: int):
-#         super(Embedding).__init__(self)
-#         self.embedding = nn.Embedding(vocab_size, embed_dim)
+class EmbeddingWithPE(nn.Module):
+    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, *, use_learnable=False):
+        super(EmbeddingWithPE, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.pe = PositionalEncoding(embed_dim, max_len) if not use_learnable else LearnablePositionalEncoding(embed_dim, max_len)
 
-#     def forward(self, x):
-#         x = self.embedding(x)
-#         return x
+    def forward(self, x):
+        x = self.embedding(x)  
+        x = self.pe(x)
+        return x
 
 class PatchEmbedding(nn.Module):
     def __init__(self, n_channels: int, embed_dim: int, patch_size: int|tuple[int, int]):
@@ -39,13 +41,26 @@ class PatchEmbeddingWithPE(nn.Module):
         x = self.pe(x)
         return x
 
-class EmbeddingWithPE(nn.Module):
-    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, *, use_learnable=False):
-        super(EmbeddingWithPE, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.pe = PositionalEncoding(embed_dim, max_len=max_len) if not use_learnable else LearnablePositionalEncoding(embed_dim, max_len)
+class SpatialEmbedding(nn.Module):
+    def __init__(self, n_channels: int, embed_dim: int):
+        super(SpatialEmbedding, self).__init__()
+    
+        self.conv = nn.Conv2d(n_channels, embed_dim, kernel_size=1)
 
-    def forward(self, x):
-        x = self.embedding(x)  
-        x = self.pe(x)
+    def forward(self, x: torch.Tensor):
+        # (B, C, H, W) -> (B, H, W, D)
+        x = self.conv(x)
+        x = x.permute(0, 2, 3, 1)
+        return x
+class SpatialEmbeddingWithPE(nn.Module):
+    def __init__(self, n_channels: int, embed_dim: int, scale: float|None=None):
+        super(SpatialEmbeddingWithPE, self).__init__()
+    
+        self.embed = SpatialEmbedding(n_channels, embed_dim)
+        self.pe = SpatialPositionEncoding(embed_dim, scale)
+
+    def forward(self, x: torch.Tensor, img_size: tuple[int, int]):
+        # (B, H, W, D)
+        x = self.embed(x)
+        x += self.pe(img_size)
         return x
