@@ -1,5 +1,11 @@
-- [ ] Email Alert
-- [x] UV support
+ - [ ] Email Alert
+ - [x] UV support
+ - [ ] Support Continue Mode
+ - [ ] support peft
+ - [ ] support colab
+ - [ ] support web viewer
+ - [ ] complete inference and common predictors
+ - [ ] manage paths from any modules
 
 Trainer:
  - [ ] Record and Show the inference time in one batch and one turn and GLOPS, Parameters after training
@@ -15,7 +21,8 @@ Analyzer:
  - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
  - [ ] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
 
-
 MODEL:
  - [ ] ViT with Grid and Fixed patch size, and to retain spatial info in transformer
- - [ ] 
+ - [x] Spatial Embedding
+ - [x] Rotator
+ - [ ] Pretrained model Manager

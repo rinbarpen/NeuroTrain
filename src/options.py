@@ -94,7 +94,7 @@ def parse_args():
     if args.continue_checkpoint:
         checkpoint_filename = args.continue_checkpoint
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
-        ext_checkpoint_filename = f"{os.path.splitext(checkpoint_filename)[0]}-ext.pt"
+        ext_checkpoint_filename = f"{os.path.splitext(checkpoint_filename)[0]}.ext.pt"
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
     if args.pretrained:
         CONFIG['model']['pretrained'] = args.pretrained

@@ -14,10 +14,8 @@ from src.engine.tester import Tester
 from src.engine.predictor import Predictor
 from src.models.models import get_model
 from src.utils import (
-    CombineCriterion,
-    DiceLoss,
-    Loss,
     get_train_tools,
+    get_train_criterion,
     get_train_valid_test_dataloader,
     load_model,
     load_model_ext,
@@ -79,10 +77,7 @@ if __name__ == "__main__":
         optimizer = tools["optimizer"]
         lr_scheduler = tools["lr_scheduler"]
         scaler = tools["scaler"]
-        criterion = CombineCriterion(
-            Loss(nn.BCEWithLogitsLoss(), weight=0.3), 
-            DiceLoss(weight=1.0)
-        )  # Loss
+        criterion = get_train_criterion()
 
         if is_continue_mode and c["model"]["continue_ext_checkpoint"] != "":
             model_ext_path = Path(c["model"]["continue_ext_checkpoint"])

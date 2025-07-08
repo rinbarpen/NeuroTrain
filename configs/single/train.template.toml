@@ -18,6 +18,16 @@ pretrained = ""
 n_channels = 1
 n_classes = 1
 
+[[criterion]]
+type = 'dice'
+weight = 1.0 # default is 1.0
+config = {}
+
+[[criterion]]
+type = 'bce'
+weight = 0.3
+config = {}
+
 [transform]
 # (RESIZE, resize)
 # (ROTATION, degree)

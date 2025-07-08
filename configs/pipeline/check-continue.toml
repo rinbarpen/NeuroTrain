@@ -1,0 +1,7 @@
+[init]
+config = "configs/single/train.template.toml"
+ext_args = ["--task_name", "continue", "--run_id", "0", "--train", "--test", "--predict", "-e", "200"]
+
+[continue]
+config = "output/continue/0/train/config.toml"
+ext_args = ["--continue_checkpoint", "output/continue/0/train/weights/best.pt"]

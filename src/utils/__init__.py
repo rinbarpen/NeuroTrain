@@ -39,13 +39,14 @@ from .scores import (
     precision_score,
     dsc_score,
 )
-from .criterion import dice_loss, kl_divergence_loss
+from .criterion import dice_loss, kl_divergence_loss, get_criterion
 from .see_cam import ImageHeatMapGenerator
 from .util import (
     prepare_logger,
     set_seed,
     summary_model_info,
     get_train_tools,
+    get_train_criterion,
     get_train_valid_test_dataloader,
     save_model,
     load_model,

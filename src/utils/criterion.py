@@ -109,3 +109,19 @@ class DistillationLoss(Loss):
             temperature=self.temperature
         )
         return loss * self.weight
+    
+
+
+def get_criterion(c: dict):
+    c_type = c['type'].lower()
+    weight = c.get('weight', 1)
+    cc = c['config']
+
+    if 'dice' in c_type:
+        return DiceLoss(weight, **cc)
+    elif 'bce' in c_type:
+        return nn.BCEWithLogitsLoss(weight, **cc)
+    elif 'ce' in c_type:
+        return nn.CrossEntropyLoss(weight, **cc)
+
+    return None

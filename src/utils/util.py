@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.amp.grad_scaler import GradScaler
 
+
 from pathlib import Path
 from PIL import Image
 from torchsummary import summary
@@ -20,6 +21,7 @@ from fvcore.nn import FlopCountAnalysis
 from src.config import get_config, get_config_value
 from src.utils.typed import FilePath, ImageInstance
 from src.dataset import get_dataset
+from src.utils.criterion import CombineCriterion, get_criterion
 
 def prepare_logger():
     c = get_config_value('private.log', default={
@@ -95,6 +97,11 @@ def get_train_tools(model: nn.Module):
         'lr_scheduler': scheduler,
         'scaler': GradScaler() if 'scaler' in c['train'] else None,
     }
+
+def get_train_criterion():
+    c = get_config()
+    criterions = [get_criterion(cc) for cc in c['criterion']]
+    return CombineCriterion(criterions)
 
 def get_train_valid_test_dataloader(use_valid=False):
     c = get_config()
