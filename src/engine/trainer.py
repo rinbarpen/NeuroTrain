@@ -134,6 +134,7 @@ class Trainer:
                         targets.detach().cpu().numpy(), 
                         outputs.detach().cpu().numpy())
 
+                # 调整 lr per one epoch
                 if lr_scheduler:
                     lr_scheduler.step()
 
@@ -197,6 +198,7 @@ class Trainer:
 
                 # save best model
                 if valid_dataloader:
+                    assert valid_loss
                     target_loss = valid_loss
                     if target_loss < best_loss:
                         best_loss = target_loss

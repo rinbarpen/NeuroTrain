@@ -1,0 +1,132 @@
+# Painter配置文件
+# 用于重载预设的cmap、font和theme设置
+
+[cmap]
+# 重载医学影像场景的colormap
+[cmap.medical]
+grayscale = "bone"  # 将灰度图改为bone colormap
+thermal = "plasma"  # 将热图改为plasma colormap
+
+# 重载机器学习训练场景的colormap
+[cmap.ml_training]
+loss = "magma"      # 将损失曲线改为magma colormap
+accuracy = "viridis" # 保持viridis不变
+
+# 重载数据分析场景的colormap
+[cmap.analysis]
+correlation = "seismic"  # 将相关性矩阵改为seismic colormap
+heatmap_blue = "Blues_r" # 使用反向Blues colormap
+
+# 直接设置场景级别的默认colormap
+classification = "Set2"  # 分类场景默认使用Set2
+regression = "coolwarm" # 回归场景默认使用coolwarm
+
+[font]
+# 重载标题字体设置
+[font.title]
+family = "Times New Roman"
+weight = "bold"
+size = 18
+
+# 重载标签字体设置
+[font.label]
+family = "Arial"
+weight = "normal"
+size = 14
+
+# 重载科学字体设置
+[font.scientific]
+family = "Computer Modern"
+weight = "normal"
+size = 12
+
+# 重载等宽字体设置
+[font.monospace]
+family = "Courier New"
+weight = "normal"
+size = 11
+
+# 重载演示字体设置
+[font.presentation]
+family = "Helvetica"
+weight = "bold"
+size = 16
+
+[theme]
+# 重载主题类别的默认设置
+# scientific = "seaborn-v0_8-whitegrid"  # 科学研究默认主题
+# medical = "grayscale"                  # 医学影像默认主题
+# presentation = "seaborn-v0_8-talk"     # 演示默认主题
+
+# 重载具体主题类型
+[theme.scientific]
+default = "seaborn-v0_8-whitegrid"
+publication = "seaborn-v0_8-paper"
+minimal = "seaborn-v0_8-white"
+
+[theme.medical]
+default = "grayscale"
+grayscale = "gray"
+high_contrast = "high_contrast"
+monochrome = "monochrome"
+
+[theme.presentation]
+default = "seaborn-v0_8-talk"
+poster = "seaborn-v0_8-poster"
+talk = "seaborn-v0_8-talk"
+dark = "dark_background"
+
+# 自定义主题样式配置
+[theme.custom_styles]
+
+# 自定义科学主题
+[theme.custom_styles.my_scientific]
+style = "seaborn-v0_8-whitegrid"
+context = "paper"
+palette = "deep"
+font_scale = 1.2
+
+[theme.custom_styles.my_scientific.rc]
+"figure.figsize" = [10, 7]
+"font.family" = "serif"
+"font.serif" = ["Times New Roman", "Computer Modern"]
+"axes.linewidth" = 1.2
+"grid.linewidth" = 0.6
+"lines.linewidth" = 2.0
+
+[theme.custom_styles.my_scientific.custom_rc]
+"axes.labelsize" = 14
+"xtick.labelsize" = 12
+"ytick.labelsize" = 12
+"legend.fontsize" = 12
+"axes.titlesize" = 16
+
+# 自定义医学主题
+[theme.custom_styles.my_medical]
+style = "seaborn-v0_8-white"
+context = "notebook"
+palette = ["#2E86AB", "#A23B72", "#F18F01", "#C73E1D"]
+font_scale = 1.1
+
+[theme.custom_styles.my_medical.rc]
+"figure.figsize" = [12, 8]
+"font.family" = "sans-serif"
+"font.sans-serif" = ["Arial", "Helvetica"]
+"axes.linewidth" = 1.5
+"lines.linewidth" = 2.5
+
+# 自定义演示主题
+[theme.custom_styles.my_presentation]
+style = "seaborn-v0_8-darkgrid"
+context = "talk"
+palette = "bright"
+font_scale = 1.4
+
+[theme.custom_styles.my_presentation.rc]
+"figure.figsize" = [14, 10]
+"font.family" = "sans-serif"
+"axes.linewidth" = 2.0
+"grid.linewidth" = 1.2
+"lines.linewidth" = 3.0
+"axes.labelweight" = "bold"
+"font.weight" = "bold"

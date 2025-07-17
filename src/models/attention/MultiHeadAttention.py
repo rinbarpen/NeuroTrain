@@ -31,7 +31,7 @@ class _MultiHeadAttention(nn.Module):
 
         self.proj_q = nn.Linear(embed_dim, embed_dim, bias=qkv_bias)
         self.proj_v = nn.Linear(embed_dim, self.num_groups * self.head_dim, bias=qkv_bias)
-        if share_kv:
+        if not share_kv:
             self.proj_k = nn.Linear(embed_dim, self.num_groups * self.head_dim, bias=qkv_bias)
         else:
             self.proj_k = self.proj_v

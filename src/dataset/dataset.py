@@ -1,8 +1,10 @@
 import logging
 from pathlib import Path
 from typing import Literal
+from torch.nn.utils import DataLoader
 
-from src.config import get_config_value
+
+from src.config import get_config_value, get_config
 from src.utils.transform import get_transforms
 from .custom_dataset import Betweens, CustomDataset
 
@@ -93,3 +95,39 @@ def random_sample(dataset: CustomDataset, sample_ratio: float=0.1, generator=Non
     from torch.utils.data import RandomSampler
     num_samples = int(sample_ratio * len(dataset))
     return RandomSampler(dataset, num_samples=num_samples, generator=generator)
+
+def get_train_valid_test_dataloader(use_valid=False):
+    c = get_config()
+
+    train_dataset = get_dataset('train')
+    test_dataset = get_dataset('test')
+    num_workers = c["dataloader"]["num_workers"]
+    shuffle = c["dataloader"]["shuffle"]
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=c["train"]["batch_size"],
+        pin_memory=True,
+        num_workers=num_workers,
+        shuffle=shuffle,
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=c["test"]["batch_size"],
+        pin_memory=True,
+        num_workers=num_workers,
+        shuffle=shuffle,
+    )
+    if use_valid:
+        valid_dataset = get_dataset('valid')
+        valid_loader = DataLoader(
+            valid_dataset,
+            batch_size=c["valid"]["batch_size"],
+            pin_memory=True,
+            num_workers=num_workers,
+            shuffle=shuffle,
+        )
+
+        return train_loader, valid_loader, test_loader
+
+    return train_loader, None, test_loader

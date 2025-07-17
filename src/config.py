@@ -14,9 +14,12 @@ ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 ALL_STYLES = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
 
-CACHE_DIR = 'data/cache'
-PRETRAINED_MODEL_DIR = 'data/cache/pretrained'
+DATASET_ROOT_DIR = 'data'
+CACHE_DIR = 'data/cache' # for numpy version's dataset
+MODEL_DIR = 'models'
+PRETRAINED_MODEL_DIR = 'models/pretrained'
 CONFIG_DIR = 'configs'
+CAHCER_CONFIG_DIR = 'configs/cacher'
 DATASET_CONFIG_DIR = 'configs/dataset'
 PIPELINE_CONFIG_DIR = 'configs/pipeline'
 SINGLE_CONFIG_DIR = 'configs/single'

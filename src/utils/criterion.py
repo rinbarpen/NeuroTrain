@@ -120,8 +120,8 @@ def get_criterion(c: dict):
     if 'dice' in c_type:
         return DiceLoss(weight, **cc)
     elif 'bce' in c_type:
-        return nn.BCEWithLogitsLoss(weight, **cc)
+        return Loss(nn.BCEWithLogitsLoss(**cc), weight)
     elif 'ce' in c_type:
-        return nn.CrossEntropyLoss(weight, **cc)
+        return Loss(nn.CrossEntropyLoss(**cc), weight)
 
     return None

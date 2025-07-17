@@ -20,7 +20,6 @@ from fvcore.nn import FlopCountAnalysis
 
 from src.config import get_config, get_config_value
 from src.utils.typed import FilePath, ImageInstance
-from src.dataset import get_dataset
 from src.utils.criterion import CombineCriterion, get_criterion
 
 def prepare_logger():
@@ -61,7 +60,8 @@ def set_seed(seed: int):
 
 def get_train_tools(model: nn.Module):
     c = get_config()
-    optimizer_c = c['train']['optimizer']
+    train_c = c['train']
+    optimizer_c = train_c['optimizer']
     match optimizer_c['type'].lower():
         case 'sgd':
             optimizer = torch.optim.SGD(
@@ -69,75 +69,46 @@ def get_train_tools(model: nn.Module):
         case 'adamw':
             optimizer = torch.optim.AdamW(
                 model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
-        case 'adam':
-            optimizer = torch.optim.Adam(
-                model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
-        case _:
+        case 'adam' | _:
             optimizer = torch.optim.Adam(
                 model.parameters(), lr=optimizer_c['learning_rate'], weight_decay=optimizer_c['weight_decay'])
 
-    if not 'lr_scheduler' in c['train']:
+    if 'lr_scheduler' not in train_c:
         scheduler = None
     else:
-        scheduler_c = c['train']['lr_scheduler']
+        scheduler_c = c['lr_scheduler']
         match scheduler_c['type'].lower():
             case 'step':
                 step_size = scheduler_c['step_size']
                 gamma = scheduler_c.get('gamma', 0.1)
                 scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
             case 'mstep':
-                milestones = scheduler_c['step_size']
+                milestones = scheduler_c['step_size'] # list
+                if isinstance(milestones, int):
+                    milestones = [milestones]
                 gamma = scheduler_c.get('gamma', 0.1)
                 scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+            case 'cos':
+                T_max = scheduler_c.get('T_max', train_c['epoch'])  # 周期
+                eta_min = scheduler_c.get('eta_min', 0)  # 最小学习率
+                scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+            case 'cos_warm':
+                T_0 = scheduler_c.get('T_0', 10)  # 首次周期
+                T_mult = scheduler_c.get('T_mult', 2)  # 周期倍数
+                eta_min = scheduler_c.get('eta_min', 0.001)  # 最小学习率
+                scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=T_0, T_mult=T_mult, eta_min=eta_min)
             case _:
                 scheduler = LRScheduler(optimizer)
 
     return {
         'optimizer': optimizer,
         'lr_scheduler': scheduler,
-        'scaler': GradScaler() if 'scaler' in c['train'] else None,
+        'scaler': GradScaler() if 'scaler' in train_c else None,
     }
 
 def get_train_criterion():
     c = get_config()
-    criterions = [get_criterion(cc) for cc in c['criterion']]
-    return CombineCriterion(criterions)
-
-def get_train_valid_test_dataloader(use_valid=False):
-    c = get_config()
-
-    train_dataset = get_dataset('train')
-    test_dataset = get_dataset('test')
-    num_workers = c["dataloader"]["num_workers"]
-    shuffle = c["dataloader"]["shuffle"]
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=c["train"]["batch_size"],
-        pin_memory=True,
-        num_workers=num_workers,
-        shuffle=shuffle,
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=c["test"]["batch_size"],
-        pin_memory=True,
-        num_workers=num_workers,
-        shuffle=shuffle,
-    )
-    if use_valid:
-        valid_dataset = get_dataset('valid')
-        valid_loader = DataLoader(
-            valid_dataset,
-            batch_size=c["valid"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=shuffle,
-        )
-
-        return train_loader, valid_loader, test_loader
-
-    return train_loader, None, test_loader
+    return CombineCriterion(*[get_criterion(cc) for cc in c['criterion']])
 
 def save_model(path: FilePath, model: nn.Module, *, 
                ext_path: FilePath|None=None,

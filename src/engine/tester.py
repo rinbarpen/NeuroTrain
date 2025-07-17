@@ -8,7 +8,7 @@ from rich.table import Table
 from rich.console import Console
 
 from src.config import get_config, ALL_STYLES
-from src.utils import DataSaver, ScoreAggregator, ScoreCalculator, Plot, select_postprocess_fn
+from src.utils import DataSaver, ScoreAggregator, MetricRecorder, Plot, select_postprocess_fn
 
 class Tester:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -22,7 +22,7 @@ class Tester:
         c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
-        self.calculator = ScoreCalculator(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
+        self.calculator = MetricRecorder(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
 
         postprocess_name = c.get('postprocess', "")
         self.postprocess = select_postprocess_fn(postprocess_name)

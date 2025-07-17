@@ -2,8 +2,8 @@ import torch
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 from typing import List, Sequence
-from src.config import get_config
 
+from src.config import get_config
 
 # VisionTransformersBuilder may be flawed
 class VisionTransformersBuilder:

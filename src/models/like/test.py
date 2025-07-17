@@ -7,11 +7,11 @@ from einops import einsum, rearrange, repeat, reduce
 
 from typing import List, Tuple, Type, Sequence
 
-from ...conv.DWConv import get_dwconv_layer3d, get_dwconv_layer2d
-from ...conv.ACConv import ACConv
-from ...attention.CAModule import CAModule
-from ...attention.SEModule import SEModule
-from ...attention.CBAM import CBAM
+from ..conv.DWConv import get_dwconv_layer3d, get_dwconv_layer2d
+from ..conv.ACConv import ACConv
+from ..attention.CAModule import CAModule
+from ..attention.SEModule import SEModule
+from ..attention.CBAM import CBAM
 
 class DepthAttention3D(nn.Module):
     """
@@ -22,8 +22,7 @@ class DepthAttention3D(nn.Module):
         super().__init__()
         # Apply a 1D conv (1x1xk) along the depth dimension.
         # Input: B, C, D, 1, 1 -> Output: B, 1, D, 1, 1
-        self.conv_depth = nn.Conv3d(in_channels, 1, kernel_size=1,
-                                     padding=1, bias=False)
+        self.conv_depth = nn.Conv3d(in_channels, 1, kernel_size=1, bias=False)
 
     def forward(self, x):
         # x: B, C, D, H, W
@@ -66,7 +65,7 @@ class SpatialAttention3D(nn.Module):
     """
     def __init__(self, kernel_size=7):
         super().__init__()
-        self.conv = nn.Conv3d(2, 1, kernel_size=(kernel_size, kernel_size, kernel_size), padding=kernel_size//2, bias=False)
+        self.conv = nn.Conv3d(2, 1, kernel_size=kernel_size, padding=kernel_size//2, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -160,13 +159,13 @@ class DecoderConvBlock(nn.Module):
         return x
 
 class MaskEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels: list[int], out_channels: list[int]):
         super(MaskEncoder, self).__init__()
 
         self.down1 = nn.Sequential(
             nn.Conv3d(in_channels[0], out_channels[0], kernel_size=(1, 2, 2), stride=(1, 2, 2)),
             nn.Conv3d(in_channels[1], out_channels[1], kernel_size=(1, 2, 2), stride=(1, 2, 2)),
-            TripleAttention3D(out_channels[2]),
+            TripleAttention3D(out_channels[1]),
         )
         self.down2 = nn.Sequential(
             nn.Conv3d(in_channels[2], out_channels[2], kernel_size=(1, 2, 2), stride=(1, 2, 2)),
@@ -191,8 +190,8 @@ class CrossAttention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim ** -0.5
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
 
         self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
         self.kv_proj = nn.Linear(dim, dim * 2, bias=qkv_bias) # For Key and Value
@@ -200,47 +199,56 @@ class CrossAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, query_feature, key_value_feature):
-        # 范式：query和key/value空间shape可不同，输出shape与query一致
+    def forward(self, query_feature, key_value_feature, mask=None):
+        # 范式：query和key/value空间shape可不同，输出shape与kv一致
         B, C, Hq, Wq = query_feature.shape
         _, _, Hkv, Wkv = key_value_feature.shape
 
-        # flatten空间维度
-        query = query_feature.flatten(2).transpose(1, 2)  # (B, Nq, C)
-        kv = key_value_feature.flatten(2).transpose(1, 2) # (B, Nkv, C)
+        # 先将query特征插值到key_value特征的空间shape
+        if (Hq != Hkv) or (Wq != Wkv):
+            query_feature = F.interpolate(query_feature, size=(Hkv, Wkv), mode="bilinear", align_corners=False)
+        q = rearrange(query_feature, 'b c h w -> b (h w) c')
+        kv = rearrange(key_value_feature, 'b c h w -> b (h w) c')
 
         # Q, K, V投影
-        q = self.q_proj(query).reshape(B, -1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3) # (B, num_heads, Nq, head_dim)
-        kv_proj = self.kv_proj(kv).reshape(B, -1, 2, self.num_heads, C // self.num_heads)
-        k = kv_proj[:, :, 0].permute(0, 2, 1, 3) # (B, num_heads, Nkv, head_dim)
-        v = kv_proj[:, :, 1].permute(0, 2, 1, 3) # (B, num_heads, Nkv, head_dim)
+        q = self.q_proj(q)
+        q = rearrange(q, 'b n (h d) -> b h n d', h=self.num_heads, d=self.head_dim)
+        kv = self.kv_proj(kv).reshape(B, -1, 2, self.num_heads, C // self.num_heads)
+        kv = rearrange(kv, 'b n (h c d) -> b h c n d', h=self.num_heads, d=self.head_dim, c=2)
+        k, v = torch.chunk(kv, 2, dim=2) # (b, h, Nkv, d)
 
         # 注意力
-        attn = (q @ k.transpose(-2, -1)) * self.scale # (B, num_heads, Nq, Nkv)
+        attn = (q @ k.transpose(-2, -1)) * self.scale # (b, h, Nq, Nkv)
+        if mask is not None:
+            attn = attn.masked_fill(mask == 0, float('-inf'))
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
         # 加权V
-        x = (attn @ v).transpose(1, 2).reshape(B, -1, C) # (B, Nq, C)
+        x = (attn @ v).transpose(1, 2).reshape(B, -1, C) # (B, Nq, D)
         x = self.proj(x)
         x = self.proj_drop(x)
 
-        # 恢复query空间shape
-        x = x.transpose(1, 2).reshape(B, C, Hq, Wq)
+        # 恢复kv空间shape
+        x = x.transpose(1, 2).reshape(B, C, Hkv, Wkv)
         return x
 
-class Backbone(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, n_channels=1, backbone_fn=resnet34, pretrained=True):
         super().__init__()
 
         backbone = backbone_fn(pretrained=pretrained)
         self.prepare_layer = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, padding=1, bias=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1, bias=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1, bias=True),
+            nn.Conv2d(n_channels, 64, kernel_size=7, stride=2, padding=3, bias=True),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+        )
+        self.prepare_layer = nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
         )
         self.layer1 = backbone.layer1
         self.layer2 = backbone.layer2
@@ -257,6 +265,7 @@ class Backbone(nn.Module):
     def forward(self, x):
         xs = []
         x = self.prepare_layer(x) # (64, 224, 224)
+        print(x.shape)
         x = self.layer1(x) # (64, 112, 112)
         xs.append(x)
         x = self.layer2(x) # (128, 56, 56)
@@ -294,22 +303,29 @@ class Model(nn.Module):
     def __init__(self, n_channels=1, n_classes=1, dim=512, depth_size: int|None=None, qkv_bias=True, attn_drop=0.0, proj_drop=0.0, decoder_channels=[64, 128, 256, 512]):
         super().__init__()
 
+        self.n_channels = n_channels
+        self.n_classes = n_classes
         self.depth_size = depth_size if depth_size is not None else 1
 
-        self.backbone = Backbone(n_channels)
+        self.encoder = Encoder(n_channels)
         self.decoder = Decoder(decoder_channels, dim=dim, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=proj_drop)
-        self.mask_encoder = MaskEncoder(n_classes, decoder_channels[3])
+        self.mask_encoder = MaskEncoder([n_classes, *decoder_channels[:3]], decoder_channels)
         self.head = nn.Conv2d(decoder_channels[0], n_classes, kernel_size=1)
 
     def forward(self, xs):
         # (B, C, H, W, D)
         o = []
         for x in xs.unbind(-1):
-            masks = torch.stack(o[-self.depth_size:], dim=2)
-            
-            prompt = self.mask_encoder(masks)
+            try:
+                masks = torch.stack(o[-self.depth_size:], dim=2)
+                prompt = self.mask_encoder(masks)
+            except RuntimeError:
+                b, _, h, w = x.shape
+                in_shape = (b, self.n_classes, 1, h, w)
+                masks = torch.randn(in_shape, device=x.device)
+                prompt = self.mask_encoder(masks)
 
-            ys = self.backbone(x)
+            ys = self.encoder(x)
             y = self.decoder(ys, prompt)
 
             y = self.head(y)

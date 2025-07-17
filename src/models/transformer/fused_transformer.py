@@ -2,7 +2,7 @@ import math
 
 import torch
 from torch import nn
-import torch.functional as F
+import torch.nn.functional as F
 from ..embedding import PatchEmbedding
 from ..position_encoding import PositionalEncoding
 

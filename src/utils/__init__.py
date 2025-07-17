@@ -28,7 +28,7 @@ from .typed import (
 )
 from .timer import Timer
 from .annotation import time_cost, deprecated, buildin, timer
-from .painter import Plot, PaintHelper, plt
+from .painter import Plot, plt, CMAP, LINE_STYLE, THEME, CmapPresets, ThemePresets, Font
 from .scores import (
     scores,
     f1_score,
@@ -47,7 +47,6 @@ from .util import (
     summary_model_info,
     get_train_tools,
     get_train_criterion,
-    get_train_valid_test_dataloader,
     save_model,
     load_model,
     load_model_ext,
