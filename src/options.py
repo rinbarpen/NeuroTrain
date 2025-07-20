@@ -36,7 +36,7 @@ def parse_args():
     ## common
     train_parser.add_argument('-b', '--batch_size', type=int, help='batch_size')
     train_parser.add_argument('--num_workers', type=int, help='dataset num_workers')
-    train_parser.add_argument('--data', type=str, help='dataset names')
+    train_parser.add_argument('--data', type=str, help='dataset names (not recommend to use)')
     train_parser.add_argument('--data_dir', type=str, help='dataset directory')
     # Predict
     predict_parser = parser.add_argument_group(title='Predict Options', description='Predict options')
@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument('--predict', action='store_true', default=False, help='Predict mode')
     parser.add_argument('--check', action='store_true', default=False, help='Check mode')
     parser.add_argument('--output_dir', type=str, help='output directory')
-    parser.add_argument('--continue_checkpoint', type=str, help='continue model checkpoint')
+    parser.add_argument('--continue_id', type=str, help='continue with $run_id$')
     parser.add_argument('--pretrained', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
     parser.add_argument('--run_id', type=str, help='run id')
@@ -88,14 +88,20 @@ def parse_args():
         CONFIG['private']['log']['debug'] = args.debug
 
     if args.data:
-        CONFIG['dataset'] = [{"name": args.data, "base_dir": args.data_dir}]
+        CONFIG['dataset'] = {"name": args.data, "base_dir": args.data_dir}
     if args.num_workers:
         CONFIG['dataloader']['num_workers'] = args.num_workers
-    if args.continue_checkpoint:
-        checkpoint_filename = args.continue_checkpoint
+    if args.continue_id:
+        if args.continue_id.lower() == 'auto':
+            continue_id = os.listdir(CONFIG['output_dir'])[-1] # select the last run_id
+        else:
+            continue_id = args.continue_id
+        checkpoint_filename = os.path.join(CONFIG['output_dir'], continue_id, 'train', 'weights', 'last.pt')
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
-        ext_checkpoint_filename = f"{os.path.splitext(checkpoint_filename)[0]}.ext.pt"
+        ext_checkpoint_filename = os.path.join(CONFIG['output_dir'], continue_id, 'train', 'weights', 'ext.pt')
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
+        CONFIG['run_id'] = continue_id
+
     if args.pretrained:
         CONFIG['model']['pretrained'] = args.pretrained
     if args.model:
@@ -142,7 +148,7 @@ def parse_args():
     if args.predict:
         CONFIG['private']['mode'] |= PREDICT_MODE
 
-    if args.run_id:
+    if args.run_id and not args.continue_checkpoint:
         CONFIG['run_id'] = args.run_id
     elif CONFIG['run_id'] is None or CONFIG['run_id'] == '':
         CONFIG['run_id'] = time.strftime('%Y%m%d_%H%M%S', time.localtime())

@@ -24,6 +24,14 @@ def deprecated(f):
         return f(*args, **kwargs)
     return wrapper
 
+def supported_in_future(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        print(f"Function {f.__name__} will be supported in the future.")
+        return f(*args, **kwargs)
+    return wrapper
+
+
 @singleton
 class Register:
     _modules: dict[str, set[str]] = {}

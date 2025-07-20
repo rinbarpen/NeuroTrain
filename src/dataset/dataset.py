@@ -37,6 +37,8 @@ def _get_dataset_by_case(dataset_name: str):
 
 def get_train_dataset(dataset_name: str, base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
     transforms = get_transforms()
+    if dataset_name.lower() == 'cholect50':
+        return 
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None

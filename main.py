@@ -94,7 +94,7 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
 
-        handler = Trainer(train_dir, model)
+        handler = Trainer(train_dir, model, is_continue_mode=is_continue_mode)
         handler.train(
             num_epochs=c["train"]["epoch"],
             criterion=criterion,

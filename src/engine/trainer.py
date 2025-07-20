@@ -11,12 +11,13 @@ from torch.utils.data import DataLoader
 import logging
 from rich.table import Table
 from rich.console import Console
+import json
 
 from src.config import get_config, ALL_STYLES
 from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, MetricRecorder, Plot, CombineCriterion, select_postprocess_fn
 
 class Trainer:
-    def __init__(self, output_dir: Path, model: nn.Module):
+    def __init__(self, output_dir: Path, model: nn.Module, is_continue_mode: bool=False):
         self.output_dir = output_dir
         self.train_loss_image_path = output_dir / "train_epoch_loss.png"
         self.valid_loss_image_path = output_dir / "valid_epoch_loss.png"
@@ -42,9 +43,114 @@ class Trainer:
         assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
 
         self.postprocess = select_postprocess_fn(postprocess_name)
-        # TODO:
-        # if is_continue_mode:
-        #     recovery()
+        if is_continue_mode:
+            self._recovery()
+
+    def _recovery(self):
+        recovery_dir = self.output_dir / 'recovery'
+        with open(recovery_dir / 'train_metrics.json', 'r') as f:
+            self.train_metric_recorder.epoch_metric_label_scores = json.load(f)
+        with open(recovery_dir / 'valid_metrics.json', 'r') as f:
+            self.valid_metric_recorder.epoch_metric_label_scores = json.load(f)
+
+    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, optimizer: Optimizer, criterion, scaler: GradScaler | None, pbar: tqdm):
+        c = get_config()
+        device = torch.device(c['device'])
+        accumulation_steps = c["train"]["grad_accumulation_steps"]
+        enable_accumulation_step = accumulation_steps > 0
+
+        self.model.train()
+        train_loss = 0.0
+
+        if not enable_accumulation_step:
+            optimizer.zero_grad()
+
+        for i, (inputs, targets) in enumerate(train_dataloader, 1):
+            inputs, targets = inputs.to(device), targets.to(device)
+
+            sum_loss = 0.0
+            if scaler:
+                device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
+                compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
+                with autocast(device_type, dtype=compute_type):
+                    outputs = self.model(inputs)
+
+                    if not enable_accumulation_step:
+                        loss = criterion(targets, outputs)
+                        scaler.scale(loss).backward()
+                        sum_loss += loss.item()
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        loss = criterion(targets, outputs)
+                        loss /= accumulation_steps
+                        scaler.scale(loss).backward()
+                        sum_loss += loss.item()
+                        if i % accumulation_steps == 0:
+                            scaler.step(optimizer)
+                            scaler.update()
+                            optimizer.zero_grad()
+            else:
+                outputs = self.model(inputs)
+                if not enable_accumulation_step:
+                    loss = criterion(targets, outputs)
+                    loss.backward()
+                    sum_loss += loss.item()
+                    optimizer.step()
+                else:
+                    loss = criterion(targets, outputs)
+                    loss /= accumulation_steps
+                    loss.backward()
+                    sum_loss += loss.item()
+                    if i % accumulation_steps == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+
+            batch_loss = sum_loss
+            train_loss += batch_loss
+            pbar.update()
+            pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
+
+            targets, outputs = self.postprocess(targets, outputs)
+            self.train_metric_recorder.finish_one_batch(
+                targets.detach().cpu().numpy(), 
+                outputs.detach().cpu().numpy())
+        
+        train_loss /= len(train_dataloader)
+        self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
+        self.train_metric_recorder.finish_one_epoch()
+        return train_loss
+
+    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, criterion, pbar: tqdm):
+        c = get_config()
+        device = torch.device(c['device'])
+        self.model.eval()
+        valid_loss = 0.0
+
+        with torch.no_grad():
+            for inputs, targets in valid_dataloader:
+                inputs, targets = inputs.to(device), targets.to(device)
+
+                outputs = self.model(inputs)
+                losses = criterion(targets, outputs)
+                valid_sum_loss = 0.0
+                for loss in losses:
+                    valid_sum_loss += loss.item()
+
+                batch_loss = valid_sum_loss
+                valid_loss += batch_loss
+                pbar.update(1)
+                pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
+
+                targets, outputs = self.postprocess(targets, outputs)
+                self.valid_metric_recorder.finish_one_batch(
+                    targets.detach().cpu().numpy(), 
+                    outputs.detach().cpu().numpy())
+
+        valid_loss /= len(valid_dataloader)
+        self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
+        self.valid_metric_recorder.finish_one_epoch()
+        return valid_loss
 
     def train(self, num_epochs: int, 
               criterion, 
@@ -58,6 +164,9 @@ class Trainer:
         device = torch.device(c['device'])
         save_every_n_epoch = c["train"]["save_period"] if c["train"]["save_period"] >= 1 else c["train"]["save_period"] * num_epochs
         save_every_n_epoch = int(save_every_n_epoch)
+        save_metric_period = c["train"]["save_metric_period"] if c["train"]["save_metric_period"] >= 1 else c["train"]["save_metric_period"] * num_epochs
+        save_metric_period = int(save_metric_period)
+
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
 
@@ -77,114 +186,40 @@ class Trainer:
 
         with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
-                self.model.train()
-                train_loss = 0.0
-
-                if not enable_accumulation_step:
-                    optimizer.zero_grad()
-
-                for i, (inputs, targets) in enumerate(train_dataloader, 1):
-                    inputs, targets = inputs.to(device), targets.to(device)
-
-                    sum_loss = 0.0
-                    if scaler:
-                        device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
-                        compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
-                        with autocast(device_type, dtype=compute_type):
-                            outputs = self.model(inputs)
-
-                            if not enable_accumulation_step:
-                                loss = criterion(targets, outputs)
-                                scaler.scale(loss).backward()
-                                sum_loss += loss.item()
-                                scaler.step(optimizer)
-                                scaler.update()
-                            else:
-                                loss = criterion(targets, outputs)
-                                loss /= accumulation_steps
-                                scaler.scale(loss).backward()
-                                sum_loss += loss.item()
-                                if i % accumulation_steps == 0:
-                                    scaler.step(optimizer)
-                                    scaler.update()
-                                    optimizer.zero_grad()
-                    else:
-                        outputs = self.model(inputs)
-                        if not enable_accumulation_step:
-                            loss = criterion(targets, outputs)
-                            loss.backward()
-                            sum_loss += loss.item()
-                            optimizer.step()
-                        else:
-                            loss = criterion(targets, outputs)
-                            loss /= accumulation_steps
-                            loss.backward()
-                            sum_loss += loss.item()
-                            if i % accumulation_steps == 0:
-                                optimizer.step()
-                                optimizer.zero_grad()
-
-                    batch_loss = sum_loss
-                    train_loss += batch_loss
-                    pbar.update()
-                    pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch})
-
-                    targets, outputs = self.postprocess(targets, outputs)
-                    self.train_metric_recorder.finish_one_batch(
-                        targets.detach().cpu().numpy(), 
-                        outputs.detach().cpu().numpy())
+                train_loss = self._train_epoch(epoch, num_epochs, train_dataloader, optimizer, criterion, scaler, pbar)
+                train_losses.append(train_loss)
+                pbar.update(0)
+                pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
 
                 # 调整 lr per one epoch
                 if lr_scheduler:
                     lr_scheduler.step()
 
-                train_loss /= len(train_dataloader)
-                train_losses.append(train_loss)
-                pbar.update(0)
-                pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
-
-                self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
-                self.train_metric_recorder.finish_one_epoch()
-
                 # validate
                 if valid_dataloader:
-                    valid_loss = 0.0
-                    self.model.eval()
-
-                    with torch.no_grad():
-                        for inputs, targets in valid_dataloader:
-                            inputs, targets = inputs.to(device), targets.to(device)
-
-                            outputs = self.model(inputs)
-                            losses = criterion(targets, outputs)
-                            valid_sum_loss = 0.0
-                            for loss in losses:
-                                valid_sum_loss += loss.item()
-
-                            batch_loss = valid_sum_loss
-                            valid_loss += batch_loss
-                            pbar.update(1)
-                            pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
-
-                            targets, outputs = self.postprocess(targets, outputs)
-                            self.valid_metric_recorder.finish_one_batch(
-                                targets.detach().cpu().numpy(), 
-                                outputs.detach().cpu().numpy())
-
-                    valid_loss /= len(valid_dataloader)
+                    valid_loss = self._valid_epoch(epoch, num_epochs, valid_dataloader, criterion, pbar)
                     valid_losses.append(valid_loss)
 
                     pbar.update(0)
                     pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
-
-                    self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
-                    self.valid_metric_recorder.finish_one_epoch()
 
                     if early_stopper:
                         early_stopper(valid_loss)
                         if early_stopper.is_stopped():
                             self.logger.info("Early stopping")
                             break
+                else:
+                    valid_loss = None
+
+                # medium info and recovery
+                if save_metric_period > 0 and epoch % save_metric_period == 0:
+                    self._save_train_info(epoch, num_epochs, train_loss, valid_loss)
+                    recovery_dir = (self.train_metric_recorder.output_dir / 'recovery')
+                    recovery_dir.mkdir()
+                    with open(recovery_dir / 'train_metrics.json', 'w') as f:
+                        json.dump(self.train_metric_recorder.epoch_metric_label_scores, f)
+                    with open(recovery_dir / 'valid_metrics.json', 'w') as f:
+                        json.dump(self.valid_metric_recorder.epoch_metric_label_scores, f)
 
                 # save every n epoch
                 if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
@@ -246,7 +281,9 @@ class Trainer:
 
         train_losses = np.array(train_losses, dtype=np.float64)
         valid_losses = np.array(valid_losses, dtype=np.float64) if valid_dataloader else None
-        self._save_after_train(num_epochs, train_losses, valid_losses, optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler)
+        self._save_train_info(train_losses, valid_losses)
+        self._wandb_save(train_losses, valid_losses, optimizer, scaler, lr_scheduler)
+
 
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
@@ -287,16 +324,16 @@ class Trainer:
             table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
         console.print(table)
 
-    def _save_after_train(self, num_epochs: int, train_losses, valid_losses=None, optimizer=None, scaler=None, lr_scheduler=None):
-        c = get_config()
-
+    def _save_train_info(self, epochs: int, num_epochs: int, train_losses, valid_losses=None):
         self.data_saver.save_train_loss(train_losses)
 
         plot = Plot(1, 1)
-        plot = plot.subplot().epoch_loss(num_epochs, train_losses, 'train', title='Train/Epoch-Loss')
+        plot = plot.subplot().epoch_loss(epochs, train_losses, 'train', title='Train/Epoch-Loss')
+        plot = plot.xlim(1, num_epochs).complete()
         if valid_losses is not None:
             self.data_saver.save_valid_loss(valid_losses)
-            plot = plot.epoch_loss(num_epochs, valid_losses, 'valid', title='Train&Valid/Epoch-Loss').complete()
+            plot = plot.epoch_loss(epochs, valid_losses, 'valid', title='Valid/Epoch-Loss')
+            plot = plot.xlim(1, num_epochs).complete()
             self.logger.info(f'Save train & valid loss info under the {self.output_dir}')
         else:
             plot = plot.complete()
@@ -305,6 +342,8 @@ class Trainer:
 
         self.logger.info(f'Save train/epoch_loss graph to {self.train_loss_image_path}')
 
+    def _wandb_save(self, train_losses, valid_losses=None, optimizer=None, scaler=None, lr_scheduler=None):
+        c = get_config()
         if c['private']['wandb']:
             train_c = c['train']
             import wandb
@@ -314,15 +353,7 @@ class Trainer:
                     "valid_losses": valid_losses,
                     "loss_image": self.train_loss_image_path,
                 },
-                "config": {
-                    "batch_size": train_c['batch_size'],
-                    "epoch": train_c['epoch'],
-                    "dataset": c['dataset'],
-                    "save_every_n_epoch": train_c['save_every_n_epoch'],
-                    "early_stopping": {
-                        **{k: v for k, v in train_c['early_stopping'].items()},
-                    } if train_c.get('early_stopping') else None,
-                },
+                "config": c,
                 "model_data": {
                     "model": self.model.state_dict(),
                     "optimizer": optimizer.state_dict() if optimizer else None,

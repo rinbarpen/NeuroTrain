@@ -752,6 +752,32 @@ class Subplot:
             self.ylabel(label, font, *args, **kwargs)
         return self
     
+    def lim(self, axis: AXIS, xlim: tuple[float, float]|None=None, ylim: tuple[float, float]|None=None):
+        if axis == "x":
+            if xlim is None: 
+                xlim = ylim
+            self._ax.set_xlim(xlim)
+        elif axis == "y":
+            if ylim is None:
+                ylim = xlim
+            self._ax.set_ylim(ylim)
+        else:
+            if xlim is None:
+                xlim = ylim
+            if ylim is None:
+                ylim = xlim
+            self._ax.set_xlim(xlim)
+            self._ax.set_ylim(ylim)
+        return self
+    
+    def xlim(self, lim: tuple[float, float]):
+        self._ax.set_xlim(lim)
+        return self
+    
+    def ylim(self, lim: tuple[float, float]):
+        self._ax.set_ylim(lim)
+        return self
+    
     def title(self, title: str, font: Font = None, **kwargs):
         """设置子图标题
         
@@ -776,8 +802,8 @@ class Subplot:
         label: str = "Loss",
         title="Epoch-Loss",
     ):
-        epoches = np.arange(1, num_epoch + 1, dtype=np.int32)
-        self._ax.plot(epoches, losses, label=label)
+        epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
+        self._ax.plot(epochs, losses, label=label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel("Epoch")
