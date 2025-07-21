@@ -214,7 +214,7 @@ class Trainer:
 
                 # medium info and recovery
                 if save_metric_period > 0 and epoch % save_metric_period == 0:
-                    self._save_train_info(epoch, num_epochs, train_loss, valid_loss)
+                    self._save_train_info(epoch, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
                     with open(self.recovery_dir / 'train_metrics.json', 'w') as f:
                         json.dump(self.train_metric_recorder.epoch_metric_label_scores, f)
                     with open(self.recovery_dir / 'valid_metrics.json', 'w') as f:
@@ -278,9 +278,7 @@ class Trainer:
 
         self._print_table(valid_dataloader is not None)
 
-        train_losses = np.array(train_losses, dtype=np.float64)
-        valid_losses = np.array(valid_losses, dtype=np.float64) if valid_dataloader else None
-        self._save_train_info(num_epochs, num_epochs, train_losses, valid_losses)
+        self._save_train_info(num_epochs, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
         self._wandb_save(train_losses, valid_losses, optimizer, scaler, lr_scheduler)
 
 
