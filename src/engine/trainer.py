@@ -281,7 +281,7 @@ class Trainer:
 
         train_losses = np.array(train_losses, dtype=np.float64)
         valid_losses = np.array(valid_losses, dtype=np.float64) if valid_dataloader else None
-        self._save_train_info(train_losses, valid_losses)
+        self._save_train_info(num_epochs, num_epochs, train_losses, valid_losses)
         self._wandb_save(train_losses, valid_losses, optimizer, scaler, lr_scheduler)
 
 
