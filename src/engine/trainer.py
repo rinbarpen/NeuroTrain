@@ -26,10 +26,12 @@ class Trainer:
         self.best_model_file_path = self.save_model_dir / "best.pt"
         self.last_model_ext_file_path = self.save_model_dir / "last.ext.pt"
         self.best_model_ext_file_path = self.save_model_dir / "best.ext.pt"
-
+        self.recovery_dir = self.output_dir / 'recovery'
+        
         self.model = model
 
-        self.save_model_dir.mkdir()
+        self.save_model_dir.mkdir(exist_ok=True)
+        self.recovery_dir.mkdir(exist_ok=True)
         self.logger = logging.getLogger('train')
         self.data_saver = DataSaver(output_dir)
 
@@ -47,10 +49,9 @@ class Trainer:
             self._recovery()
 
     def _recovery(self):
-        recovery_dir = self.output_dir / 'recovery'
-        with open(recovery_dir / 'train_metrics.json', 'r') as f:
+        with open(self.recovery_dir / 'train_metrics.json', 'r') as f:
             self.train_metric_recorder.epoch_metric_label_scores = json.load(f)
-        with open(recovery_dir / 'valid_metrics.json', 'r') as f:
+        with open(self.recovery_dir / 'valid_metrics.json', 'r') as f:
             self.valid_metric_recorder.epoch_metric_label_scores = json.load(f)
 
     def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, optimizer: Optimizer, criterion, scaler: GradScaler | None, pbar: tqdm):
@@ -214,11 +215,9 @@ class Trainer:
                 # medium info and recovery
                 if save_metric_period > 0 and epoch % save_metric_period == 0:
                     self._save_train_info(epoch, num_epochs, train_loss, valid_loss)
-                    recovery_dir = (self.train_metric_recorder.output_dir / 'recovery')
-                    recovery_dir.mkdir()
-                    with open(recovery_dir / 'train_metrics.json', 'w') as f:
+                    with open(self.recovery_dir / 'train_metrics.json', 'w') as f:
                         json.dump(self.train_metric_recorder.epoch_metric_label_scores, f)
-                    with open(recovery_dir / 'valid_metrics.json', 'w') as f:
+                    with open(self.recovery_dir / 'valid_metrics.json', 'w') as f:
                         json.dump(self.valid_metric_recorder.epoch_metric_label_scores, f)
 
                 # save every n epoch
