@@ -72,6 +72,7 @@ shuffle = true
 batch_size = 2
 epoch = 200
 save_period = 0.2
+save_metric_period = 0.2
 grad_accumulation_steps = 0 # <= 0 for disabled
 
 [train.optimizer]

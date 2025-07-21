@@ -752,30 +752,22 @@ class Subplot:
             self.ylabel(label, font, *args, **kwargs)
         return self
     
-    def lim(self, axis: AXIS, xlim: tuple[float, float]|None=None, ylim: tuple[float, float]|None=None):
+    def lim(self, axis: AXIS, start: float, end: float):
         if axis == "x":
-            if xlim is None: 
-                xlim = ylim
-            self._ax.set_xlim(xlim)
+            self._ax.set_xlim(start, end)
         elif axis == "y":
-            if ylim is None:
-                ylim = xlim
-            self._ax.set_ylim(ylim)
+            self._ax.set_ylim(start, end)
         else:
-            if xlim is None:
-                xlim = ylim
-            if ylim is None:
-                ylim = xlim
-            self._ax.set_xlim(xlim)
-            self._ax.set_ylim(ylim)
+            self._ax.set_xlim(start, end)
+            self._ax.set_ylim(start, end)
         return self
     
-    def xlim(self, lim: tuple[float, float]):
-        self._ax.set_xlim(lim)
+    def xlim(self, start: float, end: float):
+        self._ax.set_xlim(start, end)
         return self
     
-    def ylim(self, lim: tuple[float, float]):
-        self._ax.set_ylim(lim)
+    def ylim(self, start: float, end: float):
+        self._ax.set_ylim(start, end)
         return self
     
     def title(self, title: str, font: Font = None, **kwargs):

@@ -4,7 +4,6 @@ import yaml
 import toml
 from pathlib import Path
 import logging
-from src.utils.annotation import supported_in_future
 
 # GLOBAL CONSTANTS
 TRAIN_MODE = 1
@@ -27,7 +26,6 @@ SINGLE_CONFIG_DIR = 'configs/single'
 
 INPUT_SHAPE = (1, 512, 512)  # Default input shape for models
 
-@supported_in_future
 class TrainOutputFilenameEnv:
     OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
     OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'
@@ -38,7 +36,6 @@ class TrainOutputFilenameEnv:
     OUTPUT_TRAIN_LOSS_DETAILS_FILENAME = '{train_dir}/train_epoch_loss.csv'
     OUTPUT_VALID_LOSS_DETAILS_FILENAME = '{train_dir}/valid_epoch_loss.csv'
 
-@supported_in_future
 class InferenceOutputFilenameEnv:
     OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}.{input_file_ext}'
 

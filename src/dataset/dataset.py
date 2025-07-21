@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 from typing import Literal
-from torch.nn.utils import DataLoader
+from torch.utils.data import DataLoader
 
 
 from src.config import get_config_value, get_config
