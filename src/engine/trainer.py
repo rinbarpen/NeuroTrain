@@ -329,7 +329,7 @@ class Trainer:
 
         plot = Plot(1, 1)
         plot = plot.subplot().epoch_loss(epochs, train_losses, 'train', title='Train/Epoch-Loss')
-        plot = plot.xlim(1, num_epochs).complete()
+        plot = plot.xlim(1, num_epochs)
         if valid_losses is not None:
             self.data_saver.save_valid_loss(valid_losses)
             plot = plot.epoch_loss(epochs, valid_losses, 'valid', title='Valid/Epoch-Loss')
