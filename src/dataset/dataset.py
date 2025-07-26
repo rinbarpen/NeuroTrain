@@ -31,6 +31,9 @@ def _get_dataset_by_case(dataset_name: str):
     elif name == 'chasedb1':
         from .chasedb1_dataset import ChaseDB1Dataset
         return ChaseDB1Dataset
+    elif name == 'mnist':
+        from .mnist_dataset import MNISTDataset
+        return MNISTDataset
     else:
         logging.warning(f'No target dataset: {dataset_name}')
         return None

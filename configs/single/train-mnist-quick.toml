@@ -1,0 +1,76 @@
+output_dir = "./output"
+task = "MNIST_Quick_Classification_Test"
+entity = "Lab"
+run_id = "" 
+device = "cuda"
+seed = 42
+classes = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+metrics = ['accuracy', 'f1']
+postprocess = "classification"
+
+[model]
+name = "timm"  # 使用timm模型
+continue_checkpoint = ""
+continue_ext_checkpoint = ""
+pretrained = ""
+
+[model.config]
+model_name = "efficientnet_b0"  # 轻量级模型
+n_channels = 1
+n_classes = 10
+pretrained = true
+
+[[criterion]]
+type = 'cross_entropy'
+weight = 1.0
+config = {}
+
+[transform]
+RESIZE=[224, 224]  # EfficientNet标准输入尺寸
+PIL_TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
+# NORMALIZE=[[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
+
+[dataset]
+name = "MNIST"
+base_dir = "./data/mnist"
+betweens = {train = [0.0, 0.1], valid = [0.0, 0.1], test = [0.0, 0.1]}
+config = {download = true}
+ref = "mnist.yaml"
+
+[dataloader]
+num_workers = 2
+shuffle = true
+
+[train]
+batch_size = 32
+epoch = 3
+save_period = 1.0
+save_metric_period = 1.0
+grad_accumulation_steps = 0
+
+[train.optimizer]
+type = 'adam'
+learning_rate = 1e-3
+weight_decay = 1e-4
+
+# [train.early_stopping]
+# patience = 2
+
+[test]
+batch_size = 32
+
+[predict]
+input = "data/mnist/test"
+
+[predict.config]
+
+[private]
+wandb = false
+mode = 0
+
+[private.log]
+verbose = false # info mode
+debug = false # debug mode
+log_file_format = '%Y-%m-%d %H_%M_%S'
+log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'

@@ -1,0 +1,83 @@
+output_dir = "./output"
+task = "MNIST_Classification"
+entity = "Lab"
+run_id = "" # be Random set by program
+device = "cuda"
+seed = -1
+classes = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+metrics = ['accuracy', 'precision', 'recall', 'f1']
+postprocess = "classification"
+
+[model]
+name = "torchvision"  # 使用torchvision模型
+continue_checkpoint = "" 
+continue_ext_checkpoint = "" 
+pretrained = ""
+
+[model.config]
+arch = "resnet18"        # 模型架构
+n_channels = 1           # MNIST是灰度图像
+n_classes = 10           # 10个数字类别
+pretrained = true        # 使用预训练权重
+
+[[criterion]]
+type = 'cross_entropy'
+weight = 1.0
+config = {}
+
+[transform]
+RESIZE=[224, 224]  # ResNet标准输入尺寸
+HFLIP=[0.1]
+ROTATION=[5]
+PIL_TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
+# NORMALIZE=[[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]  # ImageNet标准归一化
+
+[dataset]
+name = "MNIST"
+base_dir = "./data/mnist"
+betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
+config = {download = true}
+ref = "mnist.yaml"
+
+[dataloader]
+num_workers = 4
+shuffle = true
+
+[train]
+batch_size = 32
+epoch = 20
+save_period = 0.2
+save_metric_period = 0.2
+grad_accumulation_steps = 0
+
+[train.optimizer]
+type = 'adam'
+learning_rate = 1e-3
+weight_decay = 1e-4
+
+# [train.lr_scheduler]
+# type = 'step'
+# warmup = 2
+# warmup_lr = 0.001
+
+# [train.early_stopping]
+# patience = 5
+
+[test]
+batch_size = 32
+
+[predict]
+input = "data/mnist/test"
+
+[predict.config]
+
+[private]
+wandb = false
+mode = 0
+
+[private.log]
+verbose = false # info mode
+debug = false # debug mode
+log_file_format = '%Y-%m-%d %H_%M_%S'
+log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'

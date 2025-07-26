@@ -92,13 +92,14 @@ def parse_args():
     if args.num_workers:
         CONFIG['dataloader']['num_workers'] = args.num_workers
     if args.continue_id:
+        task_dir = os.path.join(CONFIG['output_dir'], CONFIG['task'])
         if args.continue_id.lower() == 'auto':
-            continue_id = os.listdir(CONFIG['output_dir'])[-1] # select the last run_id
+            continue_id = os.listdir(task_dir)[-1] # select the last run_id
         else:
             continue_id = args.continue_id
-        checkpoint_filename = os.path.join(CONFIG['output_dir'], continue_id, 'train', 'weights', 'last.pt')
+        checkpoint_filename = os.path.join(task_dir, continue_id, 'train', 'weights', 'last.pt')
         CONFIG['model']['continue_checkpoint'] = checkpoint_filename
-        ext_checkpoint_filename = os.path.join(CONFIG['output_dir'], continue_id, 'train', 'weights', 'ext.pt')
+        ext_checkpoint_filename = os.path.join(task_dir, continue_id, 'train', 'weights', 'last.ext.pt')
         CONFIG['model']['continue_ext_checkpoint'] = ext_checkpoint_filename
         CONFIG['run_id'] = continue_id
 

@@ -21,7 +21,6 @@ from src.utils import (
     load_model_ext,
     prepare_logger,
     set_seed,
-    summary_model_info,
 )
 
 if __name__ == "__main__":
@@ -46,6 +45,7 @@ if __name__ == "__main__":
     is_continue_mode = False  # use this mode if encountering crash while training
 
     model = get_model(c["model"]["name"], c["model"]["config"])
+    model = model.to(device)
     pretrained_model = c["model"].get("pretrained")
     continue_checkpoint = c["model"].get("continue_checkpoint")
     if pretrained_model and pretrained_model != "":
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     train_loader, valid_loader, test_loader = get_train_valid_test_dataloader()
     if is_train():
-        train_dir.mkdir()
+        train_dir.mkdir(exist_ok=True)
         dump_config(train_dir / "config.json")
         dump_config(train_dir / "config.toml")
         dump_config(train_dir / "config.yaml")
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         )
 
     if is_test():
-        test_dir.mkdir()
+        test_dir.mkdir(exist_ok=True)
         dump_config(test_dir / "config.json")
         dump_config(test_dir / "config.yaml")
         dump_config(test_dir / "config.toml")
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         handler.test(test_dataloader=test_loader)
 
     if is_predict():
-        predict_dir.mkdir()
+        predict_dir.mkdir(exist_ok=True)
         dump_config(predict_dir / "config.json")
         dump_config(predict_dir / "config.toml")
         dump_config(predict_dir / "config.yaml")
@@ -150,5 +150,13 @@ if __name__ == "__main__":
             inputs = [input_path]
             handler.predict(inputs, **c["predict"]["config"])
 
-    from src.config import INPUT_SHAPE
-    summary_model_info(model, input_size=INPUT_SHAPE)
+        # summary model info
+        from torchinfo import summary
+        summary_file = output_dir / 'model_summary.txt'
+        input_size = (1, 1, 512, 512)
+        model_stats = summary(model, input_size=input_size, device=device)
+        with summary_file.open('w', encoding='utf-8') as f:
+            f.write(str(model_stats))
+        print(f"Total params: {model_stats.total_params}")
+        print(f"Trainable params: {model_stats.trainable_params}")
+        print(f"Model size: {model_stats.total_mult_adds}")

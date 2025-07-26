@@ -24,8 +24,6 @@ DATASET_CONFIG_DIR = 'configs/dataset'
 PIPELINE_CONFIG_DIR = 'configs/pipeline'
 SINGLE_CONFIG_DIR = 'configs/single'
 
-INPUT_SHAPE = (1, 512, 512)  # Default input shape for models
-
 class TrainOutputFilenameEnv:
     OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
     OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'

@@ -115,7 +115,7 @@ class DistillationLoss(Loss):
 def get_criterion(c: dict):
     c_type = c['type'].lower()
     weight = c.get('weight', 1)
-    cc = c['config']
+    cc = c.get('config', {})
 
     if 'dice' in c_type:
         return DiceLoss(weight, **cc)

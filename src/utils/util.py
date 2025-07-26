@@ -15,7 +15,6 @@ from torch.amp.grad_scaler import GradScaler
 
 from pathlib import Path
 from PIL import Image
-from torchsummary import summary
 from fvcore.nn import FlopCountAnalysis
 
 from src.config import get_config, get_config_value
@@ -144,9 +143,6 @@ def load_model(path: FilePath, map_location: str = 'cuda'):
     return torch.load(path, map_location)
 def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
     return torch.load(ext_path, map_location)
-
-def summary_model_info(model: torch.nn.Module, input_size: tuple[int, ...], device: str="cuda"):
-    summary(model, input_size=input_size, device=device)
 
 # def disable_torch_init():
 #     """

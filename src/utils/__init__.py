@@ -44,7 +44,6 @@ from .see_cam import ImageHeatMapGenerator
 from .util import (
     prepare_logger,
     set_seed,
-    summary_model_info,
     get_train_tools,
     get_train_criterion,
     save_model,
