@@ -13,14 +13,14 @@ name = "unet"
 continue_checkpoint = "" # use this if encountering crash while training
 continue_ext_checkpoint = "" # use this if encountering crash while training
 pretrained = ""
-input_sizes = [
-    [1, 512, 512]
-]
-dtypes = ["float32"]
 
 [model.config]
 n_channels = 1
 n_classes = 1
+input_sizes = [
+    [1, 1, 512, 512]
+]
+dtypes = ["float32"]
 
 [[criterion]]
 type = 'dice'

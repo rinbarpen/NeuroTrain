@@ -152,12 +152,12 @@ if __name__ == "__main__":
             handler.predict(inputs, **c["predict"]["config"])
 
     # get_input_size
-    input_sizes = c["model"]["input_sizes"] # get a list
-    dtypes = c["model"].get("dtypes")
+    input_sizes = c["model"]["config"]["input_sizes"] # get a list
+    dtypes = c["model"]["config"].get("dtypes")
     if dtypes is not None and len(dtypes) > 0:
         dtypes = [str2dtype(dtype) for dtype in dtypes]
     else:
         dtype = None
 
     model_info(output_dir, model, input_sizes, dtypes=dtypes)
-    model_flops(output_dir, model, input_sizes, device)
+    model_flops(output_dir, model, input_sizes)
