@@ -50,7 +50,9 @@ from .util import (
     load_model,
     load_model_ext,
     save_numpy_data, load_numpy_data,
-    model_gflops,
+    model_info,
+    model_flops,
     freeze_layers,
+    str2dtype,
 )
 from .postprocess import select_postprocess_fn

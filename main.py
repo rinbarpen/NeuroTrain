@@ -9,10 +9,8 @@ warnings.filterwarnings("ignore")
 
 from src.config import get_config, dump_config, is_predict, is_train, is_test
 from src.options import parse_args
-from src.engine.trainer import Trainer
-from src.engine.tester import Tester
-from src.engine.predictor import Predictor
-from src.models.models import get_model
+from src.engine import Trainer, Tester, Predictor
+from src.models import get_model
 from src.dataset import get_train_valid_test_dataloader
 from src.utils import (
     get_train_tools,
@@ -21,6 +19,9 @@ from src.utils import (
     load_model_ext,
     prepare_logger,
     set_seed,
+    model_info,
+    model_flops,
+    str2dtype,
 )
 
 if __name__ == "__main__":
@@ -150,13 +151,13 @@ if __name__ == "__main__":
             inputs = [input_path]
             handler.predict(inputs, **c["predict"]["config"])
 
-        # summary model info
-        from torchinfo import summary
-        summary_file = output_dir / 'model_summary.txt'
-        input_size = (1, 1, 512, 512)
-        model_stats = summary(model, input_size=input_size, device=device)
-        with summary_file.open('w', encoding='utf-8') as f:
-            f.write(str(model_stats))
-        print(f"Total params: {model_stats.total_params}")
-        print(f"Trainable params: {model_stats.trainable_params}")
-        print(f"Model size: {model_stats.total_mult_adds}")
+    # get_input_size
+    input_sizes = c["model"]["input_sizes"] # get a list
+    dtypes = c["model"].get("dtypes")
+    if dtypes is not None and len(dtypes) > 0:
+        dtypes = [str2dtype(dtype) for dtype in dtypes]
+    else:
+        dtype = None
+
+    model_info(output_dir, model, input_sizes, dtypes=dtypes)
+    model_flops(output_dir, model, input_sizes, device)

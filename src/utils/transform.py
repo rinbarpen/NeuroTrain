@@ -4,6 +4,7 @@ from torchvision.transforms import InterpolationMode
 from typing import List, Sequence
 
 from src.config import get_config
+from src.utils.util import str2dtype
 
 # VisionTransformersBuilder may be flawed
 class VisionTransformersBuilder:
@@ -106,34 +107,7 @@ def get_transforms() -> transforms.Compose:
             case 'PIL_TO_TENSOR':
                 builder = builder.PIL_to_tensor()
             case 'CONVERT_IMAGE_DTYPE':
-                match v[0]:
-                    case 'float16' | 'f16':
-                        ttype = torch.float16
-                    case 'float32' | 'f32':
-                        ttype = torch.float32
-                    case 'float64' | 'f64':
-                        ttype = torch.float64
-                    case 'bfloat16' | 'bf16':
-                        ttype = torch.bfloat16
-                    case 'uint8' | 'u8':
-                        ttype = torch.uint8
-                    case 'uint16' | 'u16':
-                        ttype = torch.uint16
-                    case 'uint32' | 'u32':
-                        ttype = torch.uint32
-                    case 'uint64' | 'u64':
-                        ttype = torch.uint64
-                    case 'int8' | 'i8':
-                        ttype = torch.int8
-                    case 'int16' | 'i16':
-                        ttype = torch.int16
-                    case 'int32' | 'i32':
-                        ttype = torch.int32
-                    case 'int64' | 'i64':
-                        ttype = torch.int64
-                    case _:
-                        ttype = torch.get_default_dtype()
-                builder = builder.convert_image_dtype(ttype)
+                builder = builder.convert_image_dtype(str2dtype(v[0]))
     return builder.build()
 
 def build_image_transforms(resize: tuple[int, int]|None=None, 

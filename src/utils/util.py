@@ -11,11 +11,12 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.amp.grad_scaler import GradScaler
-
-
+from torchinfo import summary
+from typing import Sequence, Type
 from pathlib import Path
 from PIL import Image
-from fvcore.nn import FlopCountAnalysis
+from fvcore.nn import flop_count, flop_count_table, FlopCountAnalysis, parameter_count, parameter_count_table
+
 
 from src.config import get_config, get_config_value
 from src.utils.typed import FilePath, ImageInstance
@@ -170,11 +171,6 @@ def load_numpy_data(path: FilePath):
         logging.error(f'File is not found: {e}')
         raise e
 
-def tuple2list(t: tuple):
-    return list(t)
-def list2tuple(l: list):
-    return tuple(l)
-
 def image_to_numpy(img: ImageInstance) -> np.ndarray:
     if isinstance(img, Image.Image):
         img_np = np.array(img) # (H, W, C)
@@ -186,12 +182,46 @@ def image_to_numpy(img: ImageInstance) -> np.ndarray:
     # output shape: (C, H, W) for RGB or (H, W) for gray
     return img_np
 
-def model_gflops(model: nn.Module, input_size: tuple, device: str = 'cuda') -> float:
-    dummy_input = torch.randn(input_size).to(device)
-    flops = FlopCountAnalysis(model, dummy_input)
-    total_flops = flops.total()
-    return total_flops / 1e9  # Convert to GFLOPs
+def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int]], dtypes: Type|Sequence[Type]|None=None, device: str = 'cuda', *, rich_print=True):
+    if isinstance(input_sizes, Sequence[int]):
+        input_sizes = [input_sizes]
+    if dtypes is None:
+        pass
+    elif isinstance(dtypes, Type):
+        dtypes = [dtypes] * len(input_sizes)
+    else:
+        assert len(dtypes) == len(input_sizes), 'dtypes and input_sizes must have the same length'
 
+    model_stats = summary(model, input_size=input_sizes, dtypes=dtypes, device=device, verbose=0)
+
+    summary_file = output_dir / 'model_summary.txt'
+    with summary_file.open('w', encoding='utf-8') as f:
+        f.write(str(model_stats))
+    
+    if rich_print:
+        from rich import print
+        print("Model Summary:")
+        print(f"Total params: {model_stats.total_params}")
+        print(f"Trainable params: {model_stats.trainable_params}")
+        print(f"Model size: {model_stats.total_mult_adds}")
+
+
+def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int], ...], device: str = 'cuda', *, rich_print=True) -> float:
+    if isinstance(input_sizes, Sequence[int]):
+        input_sizes = [input_sizes]
+    input_tensors = [torch.randn(input_size) for input_size in input_sizes]
+    input_tensors = tuple(input_tensors)
+    
+    analysis = FlopCountAnalysis(model, input_tensors)
+    table = flop_count_table(analysis)
+
+    flop_count_file = output_dir / 'model_flop_count.txt'
+    with flop_count_file.open('w', encoding='utf-8') as f:
+        f.write(table)
+
+    if rich_print:
+        from rich import print
+        print(table)
 
 # freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
 # optimizer_filters = [lambda n: "encoder" not in n, lambda n: "encoder" in n and "clip" not in n]
@@ -210,3 +240,32 @@ def freeze_layers(model: nn.Module, freeze_filter, optimizer_filters, **kwargs):
 #     param_dicts = [{'params': [p for n, p in named_params if optimizer_filter(n) and p.requires_grad], 'lr': kwargs['lr'][i]} for i, optimizer_filter in enumerate(optimizer_filters)]
 #     return param_dicts
 
+def str2dtype(dtype: str) -> torch.dtype:
+    match dtype:
+        case 'float16' | 'f16':
+            ttype = torch.float16
+        case 'float32' | 'f32':
+            ttype = torch.float32
+        case 'float64' | 'f64':
+            ttype = torch.float64
+        case 'bfloat16' | 'bf16':
+            ttype = torch.bfloat16
+        case 'uint8' | 'u8':
+            ttype = torch.uint8
+        case 'uint16' | 'u16':
+            ttype = torch.uint16
+        case 'uint32' | 'u32':
+            ttype = torch.uint32
+        case 'uint64' | 'u64':
+            ttype = torch.uint64
+        case 'int8' | 'i8':
+            ttype = torch.int8
+        case 'int16' | 'i16':
+            ttype = torch.int16
+        case 'int32' | 'i32':
+            ttype = torch.int32
+        case 'int64' | 'i64':
+            ttype = torch.int64
+        case _:
+            ttype = torch.get_default_dtype()
+    return ttype

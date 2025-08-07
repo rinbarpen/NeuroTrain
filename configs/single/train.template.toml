@@ -13,6 +13,10 @@ name = "unet"
 continue_checkpoint = "" # use this if encountering crash while training
 continue_ext_checkpoint = "" # use this if encountering crash while training
 pretrained = ""
+input_sizes = [
+    [1, 512, 512]
+]
+dtypes = ["float32"]
 
 [model.config]
 n_channels = 1
@@ -74,6 +78,14 @@ epoch = 200
 save_period = 0.2
 save_metric_period = 0.2
 grad_accumulation_steps = 0 # <= 0 for disabled
+## support info to peek in training pbar:
+# loss: train_loss, valid_loss(if available)
+# metric: metric value if defined
+# epoch: which epoch in current time
+# epoch_time_left: time left for training in current epoch
+## trainer info peek
+# lr: learning rate
+# train_recorder = ['loss', 'auc', 'lr', 'epoch_time_left', 'epoch']
 
 [train.optimizer]
 type = 'adam' # sgd, adam, adamw
