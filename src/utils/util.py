@@ -11,7 +11,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.amp.grad_scaler import GradScaler
-from torchinfo import summary
+import torchinfo
 from typing import Sequence, Type
 from pathlib import Path
 from PIL import Image
@@ -183,7 +183,8 @@ def image_to_numpy(img: ImageInstance) -> np.ndarray:
     return img_np
 
 def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int]], dtypes: Type|Sequence[Type]|None=None, device: str = 'cuda', *, rich_print=True):
-    if isinstance(input_sizes, Sequence[int]):
+    # Check if input_sizes is a sequence of integers (not nested)
+    if isinstance(input_sizes, (list, tuple)) and len(input_sizes) > 0 and isinstance(input_sizes[0], int):
         input_sizes = [input_sizes]
     if dtypes is None:
         pass
@@ -192,7 +193,7 @@ def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Se
     else:
         assert len(dtypes) == len(input_sizes), 'dtypes and input_sizes must have the same length'
 
-    model_stats = summary(model, input_size=input_sizes, dtypes=dtypes, device=device, verbose=0)
+    model_stats = torchinfo.summary(model, input_size=input_sizes, dtypes=dtypes, device=device, verbose=0)
 
     summary_file = output_dir / 'model_summary.txt'
     with summary_file.open('w', encoding='utf-8') as f:
@@ -200,20 +201,27 @@ def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Se
     
     if rich_print:
         from rich import print
-        print("Model Summary:")
-        print(f"Total params: {model_stats.total_params}")
-        print(f"Trainable params: {model_stats.trainable_params}")
-        print(f"Model size: {model_stats.total_mult_adds}")
+        print(str(model_stats))
 
 
-def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int], ...], device: str = 'cuda', *, rich_print=True) -> float:
-    if isinstance(input_sizes, Sequence[int]):
+def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int]], dtypes: Type|Sequence[Type]|None=None, device: str='cuda', *, rich_print=True) -> float:
+    # Check if input_sizes is a sequence of integers (not nested)
+    if isinstance(input_sizes, (list, tuple)) and len(input_sizes) > 0 and isinstance(input_sizes[0], int):
         input_sizes = [input_sizes]
-    input_tensors = [torch.randn(input_size) for input_size in input_sizes]
+    if dtypes is None:
+        pass
+    elif isinstance(dtypes, Type):
+        dtypes = [dtypes] * len(input_sizes)
+    else:
+        assert len(dtypes) == len(input_sizes), 'dtypes and input_sizes must have the same length'
+
+    input_tensors = [torch.randn(input_size).to(device) for input_size in input_sizes]
     input_tensors = tuple(input_tensors)
-    
+    model = model.to(device)
+
     analysis = FlopCountAnalysis(model, input_tensors)
     table = flop_count_table(analysis)
+    total_flops = analysis.total()
 
     flop_count_file = output_dir / 'model_flop_count.txt'
     with flop_count_file.open('w', encoding='utf-8') as f:
@@ -222,6 +230,8 @@ def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|S
     if rich_print:
         from rich import print
         print(table)
+    
+    return total_flops
 
 # freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
 # optimizer_filters = [lambda n: "encoder" not in n, lambda n: "encoder" in n and "clip" not in n]
