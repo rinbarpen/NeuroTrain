@@ -12,7 +12,6 @@ from torchvision import transforms
 import logging
 from typing import Sequence
 
-from src.engine.model_operation import Predictor
 from src.config import get_config
 from src.utils import get_transforms, to_path, FilePath, build_image_transforms, VisionTransformersBuilder, Timer
 

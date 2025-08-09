@@ -703,7 +703,6 @@ class Subplot:
         return self
 
     def figsize(self, figsize: tuple[float, float]):
-        # 修复：ax没有set_figsize方法
         fig = self._ax.get_figure()
         fig.set_size_inches(figsize)
         return self
@@ -789,43 +788,66 @@ class Subplot:
     @buildin(desc="loss by epoch")
     def epoch_loss(
         self,
-        num_epoch: int,
+        epoch: int,
+        num_epochs: int,
         losses: np.ndarray,
         label: str = "Loss",
         title="Epoch-Loss",
     ):
-        epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
+        epochs = np.arange(1, epoch + 1, dtype=np.int32)
         self._ax.plot(epochs, losses, label=label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel("Epoch")
         self._ax.set_ylabel("Loss")
-        self._ax.set_xlim(1, num_epoch)
+        self._ax.set_xlim(1, num_epochs)
+        self._ax.legend()
+        return self
+
+    @buildin(desc="loss by epoch with tasks")
+    def many_epoch_loss(
+        self,
+        epoch: int,
+        num_epochs: int,
+        losses: list[np.ndarray],
+        labels: list[str] = ["Loss"],
+        title="Epoch-Loss",
+    ):
+        epochs = np.arange(1, epoch + 1, dtype=np.int32)
+
+        for i, label in enumerate(labels):
+            self._ax.plot(epochs, losses[i], label=label)
+
+        self._ax.set_title(title)
+        self._ax.set_xlabel("Epoch")
+        self._ax.set_ylabel("Loss")
+        self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
         return self
 
     @buildin(desc="metrics by epoch with one class")
     def epoch_metrics(
         self,
-        num_epoch: int,
+        epoch: int,
+        num_epochs: int,
         metrics: np.ndarray,
         class_label: str,
         title: str = "Epoch-Label-Metric",
     ):
-        epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
-        self._ax.plot(epochs, metrics, label=class_label)
+        self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=class_label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel("Epoch")
         self._ax.set_ylabel("Metric Score")
-        self._ax.set_xlim(1, num_epoch)
+        self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
         return self
 
     @buildin(desc="metrics by epoch with many classes")
     def many_epoch_metrics_by_class(
         self,
-        num_epoch: int,
+        epoch: int,
+        num_epochs: int,
         class_metrics: ClassLabelManyScoreDict,
         class_labels: list[str],
         title: str = "Epoch-Label-Metric",
@@ -835,18 +857,18 @@ class Subplot:
             if isinstance(metrics, list) or isinstance(metrics, tuple):
                 metrics = np.array(metrics, dtype=np.float64)
 
-            epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
-            self._ax.plot(epochs, metrics, label=label)
+            self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=label)
 
         self._ax.set_title(title)
-        self._ax.set_xlim(1, num_epoch)
+        self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
         return self
 
     @buildin(desc="metrics by epoch with many classes")
     def many_epoch_metrics(
         self,
-        num_epoch: int,
+        epoch: int,
+        num_epochs: int,
         metrics_scores: MetricLabelManyScoreDict,
         metric_labels: list[str],
         title: str = "Epoch-Metrics",
@@ -855,32 +877,10 @@ class Subplot:
             metrics = metrics_scores[metric]
             if isinstance(metrics, list) or isinstance(metrics, tuple):
                 metrics = np.array(metrics, dtype=np.float64)
-
-            epochs = np.arange(1, num_epoch + 1, dtype=np.int32)
-            self._ax.plot(epochs, metrics, label=metric)
+            self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=metric)
 
         self._ax.set_title(title)
-        self._ax.set_xlim(1, num_epoch)
-        self._ax.legend()
-        return self
-
-    @buildin(desc="loss by epoch with tasks")
-    def many_epoch_loss(
-        self,
-        num_epoch: int,
-        losses: list[np.ndarray],
-        labels: list[str] = ["Loss"],
-        title="Epoch-Loss",
-    ):
-        epoches = np.arange(1, num_epoch + 1, dtype=np.int32)
-
-        for i, label in enumerate(labels):
-            self._ax.plot(epoches, losses[i], label=label)
-
-        self._ax.set_title(title)
-        self._ax.set_xlabel("Epoch")
-        self._ax.set_ylabel("Loss")
-        self._ax.set_xlim(1, num_epoch)
+        self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
         return self
 
@@ -930,7 +930,7 @@ class Subplot:
                 for bar, score in zip(bars, scores):
                     width = bar.get_width()
                     self._ax.text(
-                        width + 0.01,  # 修复：位置偏移
+                        width + 0.01, 
                         bar.get_y() + bar.get_height() / 2,
                         f"{score:.3f}",
                         ha="left",
@@ -948,15 +948,15 @@ class Subplot:
                     height = bar.get_height()
                     self._ax.text(
                         bar.get_x() + bar.get_width() / 2,
-                        height + 0.01,  # 修复：位置偏移
+                        height + 0.01,
                         f"{score:.3f}",
                         ha="center",
-                        va="bottom",  # 修复：va="center" -> va="bottom"
+                        va="bottom", 
                     )
 
         if title:
             self._ax.set_title(title)
-        return self  # 修复：移除不必要的legend调用
+        return self
 
     @buildin(desc="many metrics")
     def many_metrics(
@@ -1081,7 +1081,7 @@ class Subplot:
     ):
         colors = sns.color_palette("husl", len(labels))
         for precision, recall, label, color in zip(precisions, recalls, labels, colors):
-            self._ax.plot(recall, precision, label=label, color=color)  # 修复：参数顺序
+            self._ax.plot(recall, precision, label=label, color=color)
         self._ax.set_title(title)
         self._ax.set_xlabel("Recall")
         self._ax.set_ylabel("Precision")

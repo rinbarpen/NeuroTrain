@@ -27,7 +27,12 @@ from src.utils import (
 if __name__ == "__main__":
     parse_args()
     c = get_config()
-    prepare_logger()
+    output_dir = Path(c["output_dir"]) / c["task"] / c["run_id"]
+    train_dir = output_dir / "train"
+    test_dir = output_dir / "test"
+    predict_dir = output_dir / "predict"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prepare_logger(output_dir, ('train', 'test', 'predict'))
 
     if c["seed"] >= 0:
         set_seed(c["seed"])
@@ -36,12 +41,6 @@ if __name__ == "__main__":
     is_multigpu = "," in device
     if is_multigpu:
         dist.barrier()
-
-    output_dir = Path(c["output_dir"]) / c["task"] / c["run_id"]
-    train_dir = output_dir / "train"
-    test_dir = output_dir / "test"
-    predict_dir = output_dir / "predict"
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     is_continue_mode = False  # use this mode if encountering crash while training
 

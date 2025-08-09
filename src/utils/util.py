@@ -16,25 +16,27 @@ from typing import Sequence, Type
 from pathlib import Path
 from PIL import Image
 from fvcore.nn import flop_count, flop_count_table, FlopCountAnalysis, parameter_count, parameter_count_table
-
+import sys
 
 from src.config import get_config, get_config_value
 from src.utils.typed import FilePath, ImageInstance
 from src.utils.criterion import CombineCriterion, get_criterion
 
-def prepare_logger():
+def prepare_logger(output_dir: Path, names: Sequence[str]|None=None):
     c = get_config_value('private.log', default={
         'debug': False,
-        'verbose': False,
+        'verbose': True,
         'log_file_format': '%Y-%m-%d %H_%M_%S',
         'log_format': '%(asctime)s %(levelname)s | %(name)s | %(message)s',
     })
     assert c is not None
 
-    os.makedirs('logs', exist_ok=True)
-    filename = os.path.join('logs', time.strftime(c['log_file_format'], time.localtime()) + '.log')
+    filename = output_dir / f'{time.strftime(c["log_file_format"], time.localtime())}.log'
     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
     file_handler.setFormatter(logging.Formatter(c['log_format']))
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setLevel(logging.ERROR)
+    console_handler.setFormatter(logging.Formatter(c['log_format']))
 
     def get_log_level():
         if c['debug']:
@@ -44,10 +46,17 @@ def prepare_logger():
         else:
             return logging.WARNING
 
-    logging.basicConfig(filename=filename, 
-                        level=get_log_level(), 
-                        format=c['log_format'], 
-                        handlers=[file_handler])
+    logging.basicConfig(level=get_log_level(),
+                        format=c['log_format'],
+                        handlers=[file_handler, console_handler],
+                        force=True)
+    if names is not None:
+        level = get_log_level()
+        for name in names:
+            logger = logging.getLogger(name)
+            logger.addHandler(file_handler)
+            logger.addHandler(console_handler)
+            logger.setLevel(level)
 
 def set_seed(seed: int):
     torch.manual_seed(seed)

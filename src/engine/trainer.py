@@ -5,7 +5,6 @@ import torch
 from torch import nn
 from torch.amp.grad_scaler import GradScaler
 from torch.amp.autocast_mode import autocast
-from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 import logging
@@ -14,7 +13,7 @@ from rich.console import Console
 import json
 
 from src.config import get_config, ALL_STYLES
-from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, Timer, MetricRecorder, Plot, CombineCriterion, select_postprocess_fn
+from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, MetricRecorder, Plot, select_postprocess_fn
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module, is_continue_mode: bool=False):
@@ -163,10 +162,21 @@ class Trainer:
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
         device = torch.device(c['device'])
-        save_every_n_epoch = c["train"]["save_period"] if c["train"]["save_period"] >= 1 else c["train"]["save_period"] * num_epochs
-        save_every_n_epoch = int(save_every_n_epoch)
-        save_metric_period = c["train"]["save_metric_period"] if c["train"]["save_metric_period"] >= 1 else c["train"]["save_metric_period"] * num_epochs
-        save_metric_period = int(save_metric_period)
+        save_period = c["train"]["save_period"] 
+        if save_period >= 1:
+            save_period = int(save_period)
+        elif save_period <= 0:
+            save_period = num_epochs
+        else:
+            save_period = int(save_period * num_epochs)
+
+        save_recovery_period = c["train"]["save_recovery_period"] 
+        if save_recovery_period >= 1:
+            save_recovery_period = int(save_recovery_period)
+        elif save_recovery_period <= 0:
+            save_recovery_period = num_epochs
+        else:
+            save_recovery_period = int(save_recovery_period * num_epochs)
 
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
@@ -212,23 +222,27 @@ class Trainer:
                 else:
                     valid_loss = None
 
-                # medium info and recovery
-                if save_metric_period > 0 and epoch % save_metric_period == 0:
-                    self._save_train_info(epoch, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
+                # recovery info
+                if save_recovery_period > 0 and epoch % save_recovery_period == 0:
+                    self.logger.info(f'save temporary recovery info when {epoch}/{num_epochs}')
                     with open(self.recovery_dir / 'train_metrics.json', 'w') as f:
                         json.dump(self.train_metric_recorder.epoch_metric_label_scores, f)
                     with open(self.recovery_dir / 'valid_metrics.json', 'w') as f:
                         json.dump(self.valid_metric_recorder.epoch_metric_label_scores, f)
-
-                # save every n epoch
-                if save_every_n_epoch > 0 and epoch % save_every_n_epoch == 0:
+                # checkpoint info
+                if save_period > 0 and epoch % save_period == 0:
+                    self.logger.info(f'save temporary checkpoint info when {epoch}/{num_epochs}')
                     save_model_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.pt'
-                    save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}-ext.pt'
+                    save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.ext.pt'
                     save_model(save_model_filename, self.model,             
                             ext_path=save_model_ext_filename, optimizer=optimizer,        
                             scaler=scaler, lr_scheduler=lr_scheduler,
                             epoch=epoch, version=c['run_id'], loss=best_loss)
                     self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
+                # metrics info
+                if save_period > 0 and epoch % save_period == 0:
+                    self.logger.info(f'save temporary losses and metrics info when {epoch}/{num_epochs}')
+                    self._save_train_info(epoch, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
 
                 # save best model
                 if valid_dataloader:
@@ -272,9 +286,9 @@ class Trainer:
                     epoch=num_epochs, version=c['run_id'], loss=best_loss)
             self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
-        self.train_metric_recorder.record_epochs(n_epochs=num_epochs)
-        if valid_dataloader:
-            self.valid_metric_recorder.record_epochs(n_epochs=num_epochs)
+        # self.train_metric_recorder.record_epochs(n_epochs=num_epochs)
+        # if valid_dataloader:
+        #     self.valid_metric_recorder.record_epochs(n_epochs=num_epochs)
 
         self._print_table(valid_dataloader is not None)
 
@@ -325,17 +339,19 @@ class Trainer:
         self.data_saver.save_train_loss(train_losses)
 
         plot = Plot(1, 1)
-        plot = plot.subplot().epoch_loss(epochs, train_losses, 'train', title='Train/Epoch-Loss')
-        plot = plot.xlim(1, num_epochs)
+        plot = plot.subplot().epoch_loss(epochs, num_epochs, train_losses, 'train', title='Train/Epoch-Loss')
         if valid_losses is not None:
             self.data_saver.save_valid_loss(valid_losses)
-            plot = plot.epoch_loss(epochs, valid_losses, 'valid', title='Valid/Epoch-Loss')
-            plot = plot.xlim(1, num_epochs).complete()
+            plot = plot.epoch_loss(epochs, num_epochs, valid_losses, 'valid', title='Valid/Epoch-Loss')
             self.logger.info(f'Save train & valid loss info under the {self.output_dir}')
         else:
-            plot = plot.complete()
             self.logger.info(f'Save train loss info under the {self.output_dir}')
+        plot = plot.complete()
         plot.save(self.train_loss_image_path)
+
+        self.train_metric_recorder.record_epochs(epochs, n_epochs=num_epochs)
+        if valid_losses:
+            self.valid_metric_recorder.record_epochs(epochs, n_epochs=num_epochs)
 
         self.logger.info(f'Save train/epoch_loss graph to {self.train_loss_image_path}')
 

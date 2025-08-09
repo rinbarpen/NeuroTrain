@@ -75,8 +75,14 @@ shuffle = true
 [train]
 batch_size = 2
 epoch = 200
-save_period = 0.2
-save_metric_period = 0.2
+# if 0 < save_period < 1, then save temporary checkpoint and metrics per (num_epochs * save_period) epochs
+# if save_period >= 1, then save temporary checkpoint and metrics per save_period epochs
+# if save_period <= 0, then will only save the last one
+save_period = 0.2 # the period of saving temporary checkpoint and metrics
+# if 0 < save_recovery_period < 1, then save recovery info per (num_epochs * save_recovery_period) epochs
+# if save_recovery_period >= 1, then save recovery info per save_recovery_period epochs
+# if save_recovery_period <= 0, then will only save the last one
+save_recovery_period = 0.2 # the period of saving recovery info
 grad_accumulation_steps = 0 # <= 0 for disabled
 ## support info to peek in training pbar:
 # loss: train_loss, valid_loss(if available)
@@ -116,7 +122,7 @@ wandb = false
 mode = 0
 
 [private.log]
-verbose = false # info mode
+verbose = true # info mode
 debug = false # debug mode
 log_file_format = '%Y-%m-%d %H_%M_%S'
 log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'

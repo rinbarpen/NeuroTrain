@@ -1,134 +1,90 @@
-from typing import Literal
-from PIL import Image, ImageDraw
-import logging
-from pathlib import Path
+from typing import Literal, Sequence
+from PIL import Image
+import cv2
 import numpy as np
 
-class ImageUtils:
+class ImageDrawer:
+    def __init__(self, image: Image.Image|cv2.Mat|np.ndarray):
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        self.image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-    @staticmethod
-    def draw_bounding_boxes(
-        image: Image.Image, boxes: list, color: str = "red", thickness: int = 2
-    ) -> Image.Image:
+    def draw_box(self, box: tuple[int, int, int, int], color: str = 'red', thickness: int = 2):
         """
-        Draw bounding boxes on the image.
+        Draw a box on the image.
 
-        :param image: The input image.
-        :param boxes: List of bounding boxes in the format [x1, y1, x2, y2].
-        :param color: Color of the bounding box.
-        :param thickness: Thickness of the bounding box lines.
-        :return: Image with bounding boxes drawn.
+        :param box: The box coordinates (x1, y1, x2, y2).
+        :param color: The color of the box.
+        :param thickness: The thickness of the box.
+        :return: The image with the drawn box.
         """
-        draw = ImageDraw.Draw(image)
-        for box in boxes:
-            draw.rectangle(box, outline=color, width=thickness)
-        return image
+        cv2.rectangle(self.image, (box[0], box[1]), (box[2], box[3]), color, thickness)
+        return self
 
-    @staticmethod
-    def split(
-        image: Image.Image,
-        n_rows: int = 1,
-        n_cols: int = 1,
-        *,
-        output_dir: Path | None = None,
-    ) -> list[Image.Image]:
+    def draw_text(self, text: str, position: tuple[int, int], color: str = 'red', font_scale: float = 1, font_thickness: int = 2):
         """
-        将图像分割成小块并保存到指定目录。
+        Draw text on the image.
 
-        Args:
-            image (Image.Image): 图像文件实例。
-            n_rows (int): 一行图像块的数量。
-            n_cols (int): 一列图像块的数量。
-            output_dir (Path): 保存小块图像的目录。
+        :param text: The text to draw.
+        :param position: The position to draw the text (x, y).
+        :param color: The color of the text.
+        :param font_scale: The font scale.
+        :param font_thickness: The font thickness.
+        :return: The image with the drawn text.
         """
+        cv2.putText(self.image, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thickness)
+        return self
 
-        width, height = image.size
-        tile_width, tile_height = width // n_cols, height // n_rows
-
-        tile_images = []
-        for i in range(0, height, tile_height):
-            for j in range(0, width, tile_width):
-                # 定义当前小块的边界
-                box = (j, i, j + tile_height, i + tile_width)
-
-                # 避免超出图像边界
-                if box[2] > width:
-                    box = (box[0], box[1], width, box[3])  # Adjust right boundary
-                if box[3] > height:
-                    box = (box[0], box[1], box[2], height)  # Adjust bottom boundary
-
-                # 提取小块
-                try:
-                    tile_image = image.crop(box)
-                except Exception as e:
-                    logging.error(f"切除图像失败。边界：{box}，错误：{e}")
-                    raise e
-
-                tile_images.append(tile_image)
-
-        if output_dir:
-            for i, tile_image in enumerate(tile_images):
-                output_filename = output_dir / f"tile_{i:04d}.png"
-                tile_image.save(output_filename)
-
-        return tile_images
-
-    @staticmethod
-    def region_upsample(
-        image: Image.Image,
-        region: tuple[int, int, int, int],
-        resize: tuple[int, int] | None = None,
-        region_shape: Literal['rectangle', 'circle']='rectangle',
-        *,
-        outline: str='red',
-        width: int=2,
-        output_dir: Path | None = None,
-    ) -> tuple[Image.Image, Image.Image]:
+    def draw_circle(self, center: tuple[int, int], radius: int, color: str = 'red', thickness: int = 2):
         """
-        Image region upsampling.
-        :param image: The input image.
-        :param region: The region to crop, defined as (x1, y1, x2, y2).
-        :param resize: The size to resize the cropped region to.
-        :param region_shape: The shape of the region to draw ("rectangle" or "circle").
-        :param outline: The color of the outline.
-        :param width: The width of the outline.
-        :param output_dir: The directory to save the output images.
-        :return: A tuple containing the cropped image and the image with the drawn region.
+        Draw a circle on the image.
+
+        :param center: The center coordinates (x, y).
+        :param radius: The radius of the circle.
+        :param color: The color of the circle.
+        :param thickness: The thickness of the circle.
+        :return: The image with the drawn circle.
         """
-        region_image = image.copy()
-        draw = ImageDraw.Draw(region_image)
-        if region_shape == "circle":
-            if region[2] - region[0] != region[3] - region[1]:
-                raise ValueError("For circle, the width and height of the region must be equal.")
-            center_xy = region[0] + (region[2] - region[0]) // 2, region[1] + (region[3] - region[1]) // 2
-            radius = (region[2] - region[0]) // 2
-            draw.circle(center_xy, radius, outline=outline, width=width)
+        cv2.circle(self.image, center, radius, color, thickness)
+        return self
 
-            crop_image = image.crop(region)
-            mask = Image.new('L', crop_image.size, 0)
-            draw = ImageDraw.Draw(mask)
-            draw.ellipse((0, 0, *(crop_image.size)), fill=255)
-            crop_image.putalpha(mask)
-        else:
-            draw.rectangle(region, outline=outline, width=width)
-            crop_image = image.crop(region)
-
-        if resize:
-            crop_image = crop_image.resize(resize)
-        if output_dir:
-            crop_image.save(output_dir / "crop_image.png", "PNG")
-            region_image.save(output_dir / "region_image.png", "PNG")
-
-        return crop_image, region_image
-
-
-    @staticmethod
-    def to_numpy(image: Image.Image, dtype: np.dtype = np.float32):
+    def draw_point(self, point: tuple[int, int], color: str = 'red', thickness: int = 2):
         """
-        Convert a PIL Image to a NumPy array.
+        Draw a point on the image.
 
-        :param image: The input image.
-        :param dtype: The desired NumPy data type.
-        :return: NumPy array representation of the image.
+        :param point: The point coordinates (x, y).
+        :param color: The color of the point.
+        :param thickness: The thickness of the point.
+        :return: The image with the drawn point.
         """
-        return np.array(image, dtype=dtype)
+        cv2.drawMarker(self.image, point, color, cv2.MARKER_CROSS, thickness)
+        return self
+
+    
+    def finish_as_PIL(self) -> Image.Image:
+        """
+        Finish drawing and return the image.
+
+        :return: The final image with drawn elements.
+        """
+        return Image.fromarray(self.image, mode='RGB')
+    
+    def finish_as_opencv(self) -> cv2.Mat:
+        """
+        Finish drawing and return the image.
+
+        :return: The final image with drawn elements.
+        """
+        return self.image
+
+    def finish(self, format: Literal['PIL', 'opencv'] = 'PIL') -> Image.Image|cv2.Mat:
+        """
+        Finish drawing and return the image.
+
+        :return: The final image with drawn elements.
+        """
+        match format:
+            case 'PIL':
+                return self.finish_as_PIL()
+            case 'opencv':
+                return self.finish_as_opencv()

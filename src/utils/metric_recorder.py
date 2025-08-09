@@ -173,7 +173,6 @@ class ScoreAggregator:
         """
         result: MetricLabelManyScoreDict = {}
         n = len(next(iter(next(iter(self._mcm_scores.values())).values())))
-        print(f'{n=}')
         for metric, class_scores_dict in self._mcm_scores.items():
             result[metric] = []
             for i in range(n):
@@ -232,7 +231,7 @@ class MetricRecorder:
     def record_batches(self):
         self._record(self.all_metric_label_scores)
 
-    def record_epochs(self, n_epochs: int):
+    def record_epochs(self, epoch: int, n_epochs: int):
         self._record(self.epoch_metric_label_scores)
 
         epoch_metrics_image = self.output_dir / "epoch_metrics_curve_per_classes.png"
@@ -248,6 +247,7 @@ class MetricRecorder:
         plot = Plot(nrows, ncols)
         for metric in self.metric_labels:
             plot.subplot().many_epoch_metrics_by_class(
+                epoch, 
                 n_epochs,
                 self.epoch_metric_label_scores[metric],
                 self.class_labels,
@@ -258,14 +258,18 @@ class MetricRecorder:
         epoch_metrics_image = self.output_dir / "epoch_metrics_curve.png"
         plot = Plot(1, 1)
         plot.subplot().many_epoch_metrics(
-            n_epochs, scores_agg.m2_mean, metric_labels=self.metric_labels, title="All Metrics"
+            epoch, 
+            n_epochs, 
+            scores_agg.m2_mean, 
+            metric_labels=self.metric_labels, 
+            title="All Metrics"
         ).complete()
         plot.save(epoch_metrics_image)
         # 每个类别
         for label in self.class_labels:
             epoch_metric_image = self.output_dir / label / "metrics.png"
             plot = Plot(1, 1)
-            plot.subplot().many_epoch_metrics(n_epochs, scores_agg.cmm[label], metric_labels=self.metric_labels, title=label).complete()
+            plot.subplot().many_epoch_metrics(epoch, n_epochs, scores_agg.cmm[label], metric_labels=self.metric_labels, title=label).complete()
             plot.save(epoch_metric_image)
         # 每个类别每个metric
         for metric in self.metric_labels:
@@ -278,7 +282,11 @@ class MetricRecorder:
                 plot = (
                     plot.subplot()
                     .epoch_metrics(
-                        n_epochs, m_scores, label, title=f"Epoch-{label}-{metric}"
+                        epoch, 
+                        n_epochs, 
+                        m_scores, 
+                        label, 
+                        title=f"Epoch-{label}-{metric}"
                     )
                     .complete()
                 )

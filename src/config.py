@@ -24,18 +24,18 @@ DATASET_CONFIG_DIR = 'configs/dataset'
 PIPELINE_CONFIG_DIR = 'configs/pipeline'
 SINGLE_CONFIG_DIR = 'configs/single'
 
-class TrainOutputFilenameEnv:
-    OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
-    OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'
-    OUTPUT_LAST_MODEL_FILENAME = '{train_dir}/weights/last.pt'
-    OUTPUT_BEST_MODEL_FILENAME = '{train_dir}/weights/best.pt'
-    OUTPUT_LAST_EXT_MODEL_FILENAME = '{train_dir}/weights/last.ext.pt'
-    OUTPUT_BEST_EXT_MODEL_FILENAME = '{train_dir}/weights/best.ext.pt'
-    OUTPUT_TRAIN_LOSS_DETAILS_FILENAME = '{train_dir}/train_epoch_loss.csv'
-    OUTPUT_VALID_LOSS_DETAILS_FILENAME = '{train_dir}/valid_epoch_loss.csv'
+# class TrainOutputFilenameEnv:
+#     OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
+#     OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'
+#     OUTPUT_LAST_MODEL_FILENAME = '{train_dir}/weights/last.pt'
+#     OUTPUT_BEST_MODEL_FILENAME = '{train_dir}/weights/best.pt'
+#     OUTPUT_LAST_EXT_MODEL_FILENAME = '{train_dir}/weights/last.ext.pt'
+#     OUTPUT_BEST_EXT_MODEL_FILENAME = '{train_dir}/weights/best.ext.pt'
+#     OUTPUT_TRAIN_LOSS_DETAILS_FILENAME = '{train_dir}/train_epoch_loss.csv'
+#     OUTPUT_VALID_LOSS_DETAILS_FILENAME = '{train_dir}/valid_epoch_loss.csv'
 
-class InferenceOutputFilenameEnv:
-    OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}.{input_file_ext}'
+# class InferenceOutputFilenameEnv:
+#     OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}.{input_file_ext}'
 
 
 CONFIG: dict = {}
