@@ -27,7 +27,7 @@ from .typed import (
     MetricLabelsList,
 )
 from .timer import Timer
-from .annotation import time_cost, deprecated, buildin, timer
+from .annotation import time_cost, deprecated, buildin, timer, singleton
 from .painter import Plot, plt, CMAP, LINE_STYLE, THEME, CmapPresets, ThemePresets, Font
 from .scores import (
     scores,
@@ -37,7 +37,6 @@ from .scores import (
     iou_score,
     recall_score,
     precision_score,
-    dsc_score,
 )
 from .criterion import dice_loss, kl_divergence_loss, get_criterion
 from .see_cam import ImageHeatMapGenerator

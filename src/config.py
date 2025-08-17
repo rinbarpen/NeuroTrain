@@ -24,19 +24,68 @@ DATASET_CONFIG_DIR = 'configs/dataset'
 PIPELINE_CONFIG_DIR = 'configs/pipeline'
 SINGLE_CONFIG_DIR = 'configs/single'
 
-# class TrainOutputFilenameEnv:
-#     OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
-#     OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'
-#     OUTPUT_LAST_MODEL_FILENAME = '{train_dir}/weights/last.pt'
-#     OUTPUT_BEST_MODEL_FILENAME = '{train_dir}/weights/best.pt'
-#     OUTPUT_LAST_EXT_MODEL_FILENAME = '{train_dir}/weights/last.ext.pt'
-#     OUTPUT_BEST_EXT_MODEL_FILENAME = '{train_dir}/weights/best.ext.pt'
-#     OUTPUT_TRAIN_LOSS_DETAILS_FILENAME = '{train_dir}/train_epoch_loss.csv'
-#     OUTPUT_VALID_LOSS_DETAILS_FILENAME = '{train_dir}/valid_epoch_loss.csv'
+class TrainOutputFilenameEnv:
+    def __new__(cls):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super().__new__(cls)
+        return cls.instance
 
-# class InferenceOutputFilenameEnv:
-#     OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}.{input_file_ext}'
+    # image
+    OUTPUT_TRAIN_LOSS_FILENAME = '{train_dir}/train_epoch_loss.png'
+    OUTPUT_VALID_LOSS_FILENAME = '{train_dir}/valid_epoch_loss.png'
+    # checkpoint
+    OUTPUT_LAST_MODEL_FILENAME = '{train_dir}/weights/last.pt'
+    OUTPUT_BEST_MODEL_FILENAME = '{train_dir}/weights/best.pt'
+    OUTPUT_LAST_EXT_MODEL_FILENAME = '{train_dir}/weights/last.ext.pt'
+    OUTPUT_BEST_EXT_MODEL_FILENAME = '{train_dir}/weights/best.ext.pt'
+    OUTPUT_TEMP_MODEL_FILENAME = '{train_dir}/weights/{model}-{epoch}of{num_epochs}.pt'
+    OUTPUT_TEMP_EXT_MODEL_FILENAME = '{train_dir}/weights/{model}-{epoch}of{num_epochs}.ext.pt'
+    # csv
+    OUTPUT_TRAIN_LOSS_DETAILS_FILENAME = '{train_dir}/train_epoch_loss.csv'
+    OUTPUT_VALID_LOSS_DETAILS_FILENAME = '{train_dir}/valid_epoch_loss.csv'
 
+    @property
+    def output_train_loss_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_TRAIN_LOSS_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_valid_loss_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_VALID_LOSS_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_last_model_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_LAST_MODEL_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_best_model_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_BEST_MODEL_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_last_ext_model_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_LAST_EXT_MODEL_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_best_ext_model_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_BEST_EXT_MODEL_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_temp_model_filename(self, train_dir: Path, model: str, epoch: int, num_epochs: int) -> Path:
+        return Path(self.OUTPUT_TEMP_MODEL_FILENAME.format(train_dir=train_dir, model=model, epoch=epoch, num_epochs=num_epochs))
+    @property
+    def output_temp_ext_model_filename(self, train_dir: Path, model: str, epoch: int, num_epochs: int) -> Path:
+        return Path(self.OUTPUT_TEMP_EXT_MODEL_FILENAME.format(train_dir=train_dir, model=model, epoch=epoch, num_epochs=num_epochs))
+    @property
+    def output_train_loss_details_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_TRAIN_LOSS_DETAILS_FILENAME.format(train_dir=train_dir))
+    @property
+    def output_valid_loss_details_filename(self, train_dir: Path) -> Path:
+        return Path(self.OUTPUT_VALID_LOSS_DETAILS_FILENAME.format(train_dir=train_dir))
+
+class InferenceOutputFilenameEnv:
+    def __new__(cls):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super().__new__(cls)
+        return cls.instance
+
+    OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}'
+    
+    @property
+    def output_result_filename(self, infer_dir: Path, input_filename: str) -> Path:
+        return Path(self.OUTPUT_RESULT_FILENAME.format(infer_dir=infer_dir, input_filename=input_filename))
 
 CONFIG: dict = {}
 

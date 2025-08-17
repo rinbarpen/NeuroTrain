@@ -23,4 +23,4 @@ class SEModule(nn.Module):
         scale = self.fc(avg_x)
         scale = F.sigmoid(scale)
 
-        return x * scale
+        return x * scale.expand_as(x)

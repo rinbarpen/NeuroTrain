@@ -3,7 +3,6 @@ from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 from typing import List, Sequence
 
-from src.config import get_config
 from src.utils.util import str2dtype
 
 # VisionTransformersBuilder may be flawed
@@ -76,6 +75,7 @@ class VisionTransformersBuilder:
         return transforms.Compose(self._transforms)
 
 def get_transforms() -> transforms.Compose:
+    from src.config import get_config
     c = get_config()
     builder = VisionTransformersBuilder()
     for k, v in c['transform'].items():

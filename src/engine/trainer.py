@@ -295,7 +295,6 @@ class Trainer:
         self._save_train_info(num_epochs, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
         self._wandb_save(train_losses, valid_losses, optimizer, scaler, lr_scheduler)
 
-
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
         class_labels  = c['classes']

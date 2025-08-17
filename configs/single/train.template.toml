@@ -55,18 +55,20 @@ name = "DRIVE"
 base_dir = "./data/DRIVE"
 betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
 config = {}
+# [dataset.split]
+# type = "train_valid_test_split" 
+# train = 0.8
+# valid = 0.1  
+# test = 0.1
+# shuffle = true
+# random_state = 42
+
+# type = "kfold" 
+# n_splits = 5
+# include_test = false
+# test_ratio = 0.0
 # scan from configs/dataset by default. if lacked, retry to scan from the default.yaml. None means directly to scan from the default.yaml
 # ref = amos2022.yaml 
-
-# [dataset]
-# name = "STARE"
-# base_dir = "./data/STARE"
-# betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
-
-# [dataset]
-# name = "CHASEDB1"
-# base_dir = "./data/CHASEDB1"
-# betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
 
 [dataloader]
 num_workers = 4

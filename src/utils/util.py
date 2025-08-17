@@ -180,17 +180,6 @@ def load_numpy_data(path: FilePath):
         logging.error(f'File is not found: {e}')
         raise e
 
-def image_to_numpy(img: ImageInstance) -> np.ndarray:
-    if isinstance(img, Image.Image):
-        img_np = np.array(img) # (H, W, C)
-        if img_np.ndim == 3:
-            img_np = img_np.transpose(2, 0, 1)  # (C, H, W)
-    elif isinstance(img, cv2.Mat):
-        img_np = np.array(img)
-    
-    # output shape: (C, H, W) for RGB or (H, W) for gray
-    return img_np
-
 def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int]], dtypes: Type|Sequence[Type]|None=None, device: str = 'cuda', *, rich_print=True):
     # Check if input_sizes is a sequence of integers (not nested)
     if isinstance(input_sizes, (list, tuple)) and len(input_sizes) > 0 and isinstance(input_sizes[0], int):

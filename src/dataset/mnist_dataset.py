@@ -1,6 +1,5 @@
 import torch
 from pathlib import Path
-from PIL import Image
 import numpy as np
 import yaml
 from typing import Literal
@@ -10,7 +9,10 @@ from torch.utils.data import Subset
 from .custom_dataset import CustomDataset, Betweens
 
 class MNISTDataset(CustomDataset):
-    """MNIST数据集实现，用于验证框架是否可以正确运行"""
+    """MNIST数据集实现
+    
+    用于验证框架是否可以正确运行，提供基础的图像分割任务示例。
+    """
     
     mapping = {
         "train": ("train", "train"), 
@@ -19,11 +21,18 @@ class MNISTDataset(CustomDataset):
     }
     
     def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], 
-                 between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, 
-                 use_numpy=False, download=True, **kwargs):
-        super(MNISTDataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
+                 download=True, **kwargs):
+        """
+        初始化MNIST数据集
         
-        self.transforms = transforms
+        Args:
+            base_dir: 数据集根目录  
+            dataset_type: 数据集类型
+            download: 是否下载数据集
+            **kwargs: 其他配置参数
+        """
+        super(MNISTDataset, self).__init__(base_dir, dataset_type, **kwargs)
+        
         self.download = download
         
         # 加载MNIST数据集
@@ -40,61 +49,42 @@ class MNISTDataset(CustomDataset):
             self.dataset = Subset(mnist_dataset, indices)
         else:  # test
             self.dataset = datasets.MNIST(root=str(base_dir), train=False, download=download, transform=None)
-        
-        # 应用between参数进行进一步分割
-        total_len = len(self.dataset)
-        slice_obj = self.get_slice(total_len)
-        
-        if isinstance(self.dataset, Subset):
-            # 如果是Subset，需要重新计算indices
-            original_indices = self.dataset.indices[slice_obj]
-            self.dataset = Subset(self.dataset.dataset, original_indices)
-        else:
-            # 如果是完整数据集，直接创建Subset
-            indices = list(range(total_len))[slice_obj]
-            self.dataset = Subset(self.dataset, indices)
             
         self.n = len(self.dataset)
         
     def __getitem__(self, index):
-        if self.use_numpy:
-            # 如果使用numpy格式
-            image, label = self.dataset[index]
-            image = np.array(image, dtype=np.float32) / 255.0
-            # 为了兼容分割任务，将标签转换为mask格式
-            label_mask = np.zeros((28, 28), dtype=np.float32)
-            label_mask[image > 0.5] = float(label) / 9.0  # 归一化到[0,1]
-            return torch.from_numpy(image).unsqueeze(0), torch.from_numpy(label_mask).unsqueeze(0)
-        
+        """获取指定索引的数据样本"""
         image, label = self.dataset[index]
         
-        # 转换为PIL图像以便应用transforms
-        if not isinstance(image, Image.Image):
-            image = Image.fromarray(np.array(image))
-            
-        # 创建简单的分割mask（用于验证分割任务）
-        label_mask = Image.fromarray(np.array(image))
+        # 转换为numpy数组并归一化
+        image = np.array(image, dtype=np.float32) / 255.0
         
-        if self.transforms:
-            image = self.transforms(image)
-            label_mask = self.transforms(label_mask)
-        else:
-            # 默认转换
-            to_tensor = transforms.ToTensor()
-            image = to_tensor(image)
-            label_mask = to_tensor(label_mask)
-            
-        return image, label_mask
+        # 为了兼容分割任务，将标签转换为mask格式
+        label_mask = np.zeros((28, 28), dtype=np.float32)
+        label_mask[image > 0.5] = float(label) / 9.0  # 归一化到[0,1]
+        
+        # 转换为tensor并增加通道维度
+        image_tensor = torch.from_numpy(image).unsqueeze(0)
+        mask_tensor = torch.from_numpy(label_mask).unsqueeze(0)
+        
+        return image_tensor, mask_tensor
     
     @staticmethod
     def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
-        """将数据集转换为numpy格式保存"""
+        """将数据集转换为numpy格式保存
+        
+        Args:
+            save_dir: 保存目录
+            base_dir: 数据集根目录
+            betweens: 兼容性参数，实际不再使用
+            **kwargs: 其他配置参数
+        """
         save_dir = save_dir / MNISTDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
         
-        train_dataset = MNISTDataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
-        valid_dataset = MNISTDataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
-        test_dataset = MNISTDataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
+        train_dataset = MNISTDataset.get_train_dataset(base_dir, **kwargs)
+        valid_dataset = MNISTDataset.get_valid_dataset(base_dir, **kwargs)
+        test_dataset = MNISTDataset.get_test_dataset(base_dir, **kwargs)
         
         from torch.utils.data import DataLoader
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
@@ -118,20 +108,23 @@ class MNISTDataset(CustomDataset):
         # 保存配置文件
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({"betweens": betweens, **kwargs}, f)
+            yaml.dump({**kwargs}, f)
     
     @staticmethod
     def name():
         return "MNIST"
     
     @staticmethod
-    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return MNISTDataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
+    def get_train_dataset(base_dir: Path, **kwargs):
+        """获取训练数据集"""
+        return MNISTDataset(base_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return MNISTDataset(base_dir, 'valid', between, use_numpy=use_numpy, **kwargs)
+    def get_valid_dataset(base_dir: Path, **kwargs):
+        """获取验证数据集"""
+        return MNISTDataset(base_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return MNISTDataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)
+    def get_test_dataset(base_dir: Path, **kwargs):
+        """获取测试数据集"""
+        return MNISTDataset(base_dir, 'test', **kwargs)

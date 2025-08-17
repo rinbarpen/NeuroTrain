@@ -10,52 +10,67 @@ from .custom_dataset import CustomDataset, Betweens
 
 # Instance Segmentation Dataset
 class BOWL2018Dataset(CustomDataset):
-    mapping = {'train': ('*/images/*.png', '*/masks/*.png'), 
-               'valid': ('*/images/*.png', '*/masks/*.png'),
-               'test':  ('*/images/*.png', '*/masks/*.png')}
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], between: tuple[float, float]=(0.0, 1.0), transforms: transforms.Compose|None=None, use_numpy=False, is_rgb=False, **kwargs):
-        super(BOWL2018Dataset, self).__init__(base_dir, dataset_type, between, use_numpy=use_numpy)
+    mapping = {
+        'train': ('*/images/*.png', '*/masks/*.png'),
+        'valid': ('*/images/*.png', '*/masks/*.png'),
+        'test':  ('*/images/*.png', '*/masks/*.png'),
+    }
 
-        if 'source' in kwargs.keys() and 'target' in kwargs.keys():
+    def _get_transforms(self):
+        """
+        获取预处理/增强变换；默认仅 ToTensor。
+        说明：
+            - transforms 在具体数据集类内实现，避免在 CustomDataset 中耦合。
+        """
+        return transforms.ToTensor()
+
+    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
+        """
+        BOWL2018 实例分割数据集
+        
+        Args:
+            base_dir: 数据集根目录
+            dataset_type: 'train' | 'valid' | 'test'
+            is_rgb: 是否以RGB方式读取图像（默认灰度）
+            **kwargs: 预留参数，支持传入 source/target 和 n_instance
+        """
+        super(BOWL2018Dataset, self).__init__(base_dir, dataset_type, **kwargs)
+
+        if 'source' in kwargs and 'target' in kwargs:
             image_glob, label_glob = kwargs['source'], kwargs['target']
         else:
             image_glob, label_glob = self.mapping[dataset_type]
 
-        self.transforms = transforms
+        # 默认变换：仅张量化，通过 _get_transforms() 提供
+        self.transforms = self._get_transforms()
         self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
-        if kwargs.__contains__("n_instance"):
+        if "n_instance" in kwargs:
             self.config["n_instance"] = kwargs["n_instance"]
         else:
             from src.config import get_config
             c = get_config()
-            self.config["n_instance"] = len(c["classes"])
-
-        if use_numpy:
-            image_glob = image_glob.replace('*.png', '*.npy')
-            label_glob = label_glob.replace('*.png', '*.npy')
+            self.config["n_instance"] = len(c["classes"])  # 类别数即实例掩码数量
 
         images = [p for p in base_dir.glob(image_glob)]
         masks = [p for p in base_dir.glob(label_glob)]
-        masks = [masks[i:i+self.config["n_instance"]] for i in range(0, len(masks), self.config["n_instance"])]
+        # 将掩码按每个样本的实例数进行分组
+        masks = [masks[i:i + self.config["n_instance"]] for i in range(0, len(masks), self.config["n_instance"])]
 
-        self.n = len(images)
-        bw = (int(self.between[0] * self.n), int(self.between[1] * self.n))
-        self.images, self.masks = images[bw[0]:bw[1]], masks[bw[0]:bw[1]]
+        # 不再切片，完整使用
+        self.images = images
+        self.masks = masks
+        self.n = len(self.images)
 
-    def __getitem__(self, index):
-        image, masks = self.images[index], self.masks[index]
-        if self.use_numpy:
-            image = torch.from_numpy(np.load(image))
-            masks = [torch.from_numpy(np.load(masks[j])) for j in range(self.config['n_instance'])]
-            masks = torch.concat(masks, dim=1)
-            return image, masks
+    def __getitem__(self, index: int):
+        """返回图像张量和拼接后的多实例掩码张量"""
+        image_path, masks_paths = self.images[index], self.masks[index]
 
         if self.config['is_rgb']:
-            image = Image.open(image).convert('RGB')
-            masks = [Image.open(masks[j]).convert('RGB') for j in range(self.config['n_instance'])]
+            image = Image.open(image_path).convert('RGB')
+            masks = [Image.open(masks_paths[j]).convert('RGB') for j in range(self.config['n_instance'])]
         else:
-            image = Image.open(image).convert('L')
-            masks = [Image.open(masks[j]).convert('L') for j in range(self.config['n_instance'])]
+            image = Image.open(image_path).convert('L')
+            masks = [Image.open(masks_paths[j]).convert('L') for j in range(self.config['n_instance'])]
 
         image = self.transforms(image)
         masks = [self.transforms(mask) for mask in masks]
@@ -64,21 +79,26 @@ class BOWL2018Dataset(CustomDataset):
 
     @staticmethod
     def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
+        """
+        导出为numpy文件
+        - 兼容保留 betweens 形参，但内部不再进行切片
+        - 保持原有保存结构：save_dir/<dataset>/<index>/{images,masks}
+        """
         save_dir = save_dir / BOWL2018Dataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        train_dataset = BOWL2018Dataset.get_train_dataset(base_dir, between=betweens['train'], **kwargs)
-        valid_dataset = BOWL2018Dataset.get_valid_dataset(base_dir, between=betweens['valid'], **kwargs)
-        test_dataset  = BOWL2018Dataset.get_test_dataset(base_dir, between=betweens['test'], **kwargs)
+        train_dataset = BOWL2018Dataset.get_train_dataset(base_dir, **kwargs)
+        valid_dataset = BOWL2018Dataset.get_valid_dataset(base_dir, **kwargs)
+        test_dataset = BOWL2018Dataset.get_test_dataset(base_dir, **kwargs)
 
         from torch.utils.data import DataLoader
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
         valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
         test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
-        for dataloader, data_dir in zip((train_dataloader, valid_dataloader, test_dataloader), (save_dir, save_dir, save_dir)):
+        for dataloader in (train_dataloader, valid_dataloader, test_dataloader):
             for i, (image, masks) in enumerate(dataloader):
-                image_dir, mask_dir = data_dir / f'{i}' / "images", data_dir / f'{i}' / "masks"
+                image_dir, mask_dir = save_dir / f'{i}' / "images", save_dir / f'{i}' / "masks"
                 image_dir.mkdir(parents=True, exist_ok=True)
                 mask_dir.mkdir(parents=True, exist_ok=True)
                 image_path = image_dir / f'{i}.npy'
@@ -87,26 +107,33 @@ class BOWL2018Dataset(CustomDataset):
                     mask_path = mask_dir / f'{i}_{j}.npy'
                     np.save(mask_path, mask.numpy())
 
-        if "n_instance" in kwargs.keys():
+        # 配置文件不再写 betweens
+        if "n_instance" in kwargs:
             n_instance = kwargs["n_instance"]
         else:
             from src.config import get_config
             c = get_config()
-            n_instance = len(c["classes"])
+            n_instance = len(c["classes"])  # 冗余写入，便于读取
 
         config_file = save_dir / "config.yaml"
         with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({"betweens": betweens, "n_instance": n_instance, **kwargs}, f)
+            yaml.dump({"n_instance": n_instance, **kwargs}, f, sort_keys=False)
 
     @staticmethod
     def name():
         return "BOWL2018"
+
     @staticmethod
-    def get_train_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return BOWL2018Dataset(base_dir, 'train', between, use_numpy=use_numpy, **kwargs)
+    def get_train_dataset(base_dir: Path, **kwargs):
+        """获取训练集实例"""
+        return BOWL2018Dataset(base_dir, 'train', **kwargs)
+
     @staticmethod
-    def get_valid_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return BOWL2018Dataset(base_dir, 'valid', between, use_numpy=use_numpy, **kwargs)
+    def get_valid_dataset(base_dir: Path, **kwargs):
+        """获取验证集实例"""
+        return BOWL2018Dataset(base_dir, 'valid', **kwargs)
+
     @staticmethod
-    def get_test_dataset(base_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
-        return BOWL2018Dataset(base_dir, 'test', between, use_numpy=use_numpy, **kwargs)
+    def get_test_dataset(base_dir: Path, **kwargs):
+        """获取测试集实例"""
+        return BOWL2018Dataset(base_dir, 'test', **kwargs)

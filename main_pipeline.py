@@ -6,41 +6,7 @@ from pathlib import Path
 import toml
 import yaml
 
-from src.utils import prepare_logger
-
-# def prepare_logger():
-#     log_colors = {
-#         'DEBUG': 'cyan',
-#         'INFO': 'green',
-#         'WARNING': 'yellow',
-#         'ERROR': 'red',
-#         'FATAL': 'bold_red',
-#     }
-#     formatter = colorlog.ColoredFormatter(
-#         '%(log_color)s %(asctime)s %(levelname)s | %(name)s | %(message)s',
-#         log_colors=log_colors
-#     )
-
-#     console_handler = logging.StreamHandler()
-#     console_handler.setFormatter(formatter)
-
-#     os.makedirs('logs', exist_ok=True)
-#     filename = os.path.join('logs', time.strftime('%Y-%m-%d %H_%M_%S.log', time.localtime()))
-#     file_handler = logging.FileHandler(filename, encoding='utf-8', delay=True)
-#     file_handler.setFormatter(logging.Formatter(
-#         '%(asctime)s %(levelname)s | %(name)s | %(message)s'
-#     ))
-
-#     log_level = logging.DEBUG
-#     root_logger = logging.getLogger()
-#     root_logger.setLevel(log_level)
-#     root_logger.addHandler(console_handler)
-#     root_logger.addHandler(file_handler)
-
-
 if __name__ == '__main__':
-    prepare_logger()
-
     parser = ArgumentParser("Train Pipeline")
     parser.add_argument('-c', '--config', required=True, help="pipeline config file")
 

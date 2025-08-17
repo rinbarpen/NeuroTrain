@@ -3,7 +3,6 @@ from torch import nn
 import torch.nn.functional as F
 from typing import Literal
 from einops import rearrange, einsum
-
 from ..position_encoding import Rotator
 
 AttentionType = Literal['mha', 'gqa', 'mqa']
@@ -56,16 +55,20 @@ class _MultiHeadAttention(nn.Module):
 
         q = rearrange(q, 'b (g h_per_g) n d -> b g h_per_g n d', g=self.num_groups)
 
-        attn_scores = einsum(q, k, 'b g h q d, b g n d -> b g h q n') * self.scale
-        if mask is not None:
-            attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
-        attn_weights = F.softmax(attn_scores, dim=-1)
-        attn_weights = self.attn_dropout(attn_weights)
-        o = einsum(attn_weights, v, 'b g h q n, b g n d -> b g h q d')
-        o = rearrange(o, 'b g h n d -> b n (g h d)')
-
-        o = self.out_proj(o)
-        return o, attn_weights.sum(dim=(1, 2))
+        if self.training:
+            attn_scores = einsum(q, k, 'b g h q d, b g n d -> b g h q n') * self.scale
+            if mask is not None:
+                attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
+            attn_weights = F.softmax(attn_scores, dim=-1)
+            attn_weights = self.attn_dropout(attn_weights)
+            o = einsum(attn_weights, v, 'b g h q n, b g n d -> b g h q d')
+            o = rearrange(o, 'b g h n d -> b n (g h d)')
+            o = self.out_proj(o)
+            return o, attn_weights.sum(dim=(1, 2))
+        else:
+            o = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=self.attn_dropout.p, is_causal=False, enable_gqa=True)
+            o = self.out_proj(o)
+            return o, None
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int, num_groups: int|None=None, attn_type: AttentionType='mha', qkv_bias=True, attn_dropout=0.2, *, share_kv=False, rope=False):
