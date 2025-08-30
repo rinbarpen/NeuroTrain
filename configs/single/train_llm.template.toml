@@ -1,0 +1,149 @@
+output_dir = "./output"
+task = "Test"
+entity = "Lab"
+run_id = "" # be Random set by program
+device = "cuda"
+seed = -1
+classes = ["Retina"]
+metrics = ['iou', 'precision', 'recall', 'f1', 'dice', 'mAP@0.5', 'mAP@0.75']
+postprocess = "reasoning_segmentation" # binary_segmentation, instance_segmentation, ...
+
+[model]
+name = "unet"
+continue_checkpoint = "" # use this if encountering crash while training
+continue_ext_checkpoint = "" # use this if encountering crash while training
+pretrained = ""
+
+[model.lora.llm]
+enable = true
+r = 8
+lora_alpha = 16
+lora_dropout = 0.1
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+bias = "none"
+
+[model.lora.sam]
+enable = true
+r = 8
+lora_alpha = 16
+lora_dropout = 0.1
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+bias = "none"
+
+[model.config]
+n_channels = 3
+k = 3
+extra_tokens = ['<SEG>']
+llm_model = "llava-hf/llava-1.5-7b-hf" # llava-hf/llava-1.5-7b-hf, llava-hf/llava-1.5-13b-hf
+sam_model = "facebook/sam-vit-base" # facebook/sam-vit-base, facebook/sam-vit-large
+cache_dir = "cache"
+dtypes = ["float16"]
+
+# Calculate model loss in model file
+# [[criterion]]
+# type = 'dice'
+# weight = 1.0 # default is 1.0
+# config = {}
+
+# [[criterion]]
+# type = 'bce'
+# weight = 0.3
+# config = {}
+
+[transform]
+# (RESIZE, resize)
+# (ROTATION, degree)
+# (HFLIP, p)
+# (VFLOP, p)
+# (INVERT, p)
+# (TO_TENSOR)
+# (PIL_TO_TENSOR)
+# (NORMALIZE, is_rgb)
+RESIZE=[1024, 1024]
+# ROTATION=[10]
+# HFLIP=[0.1]
+# VFLIP=[0.1]
+# INVERT=[0.1]
+PIL_TO_TENSOR=[]
+CONVERT_IMAGE_DTYPE=['float32']
+# TO_TENSOR=[]
+
+[dataset]
+name = "DRIVE"
+base_dir = "./data/DRIVE"
+config = {}
+# [dataset.split]
+# type = "train_valid_test_split" 
+# train = 0.8
+# valid = 0.1  
+# test = 0.1
+# shuffle = true
+# random_state = 42
+
+# type = "kfold" 
+# n_splits = 5
+# include_test = false
+# test_ratio = 0.0
+# scan from configs/dataset by default. if lacked, retry to scan from the default.yaml. None means directly to scan from the default.yaml
+# ref = amos2022.yaml 
+
+[dataloader]
+num_workers = 4
+shuffle = true
+pin_memory = true
+drop_last = true
+
+[train]
+batch_size = 1
+epoch = 10
+# if 0 < save_period < 1, then save temporary checkpoint and metrics per (num_epochs * save_period) epochs
+# if save_period >= 1, then save temporary checkpoint and metrics per save_period epochs
+# if save_period <= 0, then will only save the last one
+save_period = 0.2 # the period of saving temporary checkpoint and metrics
+# if 0 < save_recovery_period < 1, then save recovery info per (num_epochs * save_recovery_period) epochs
+# if save_recovery_period >= 1, then save recovery info per save_recovery_period epochs
+# if save_recovery_period <= 0, then will only save the last one
+save_recovery_period = 0.2 # the period of saving recovery info
+grad_accumulation_steps = 10 # <= 0 for disabled
+## support info to peek in training pbar:
+# loss: train_loss, valid_loss(if available)
+# metric: metric value if defined
+# epoch: which epoch in current time
+# epoch_time_left: time left for training in current epoch
+## trainer info peek
+# lr: learning rate
+# train_recorder = ['loss', 'auc', 'lr', 'epoch_time_left', 'epoch']
+
+[train.optimizer]
+type = 'adam' # sgd, adam, adamw
+learning_rate = 2e-4
+weight_decay = 1e-8
+
+# [train.lr_scheduler]
+# type = 'step'
+# warmup = 50
+# warmup_lr = 0.03
+
+# [train.scaler]
+# compute_type = 'float16'
+
+# [train.early_stopping]
+# patience = 3
+
+[test]
+batch_size = 1
+
+[predict]
+input = "data/DRIVE/test/images"
+
+[predict.config]
+
+[private]
+wandb = false
+mode = 0
+
+[private.log]
+verbose = true # info mode
+debug = false # debug mode
+log_file_format = '%Y-%m-%d %H_%M_%S'
+log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'

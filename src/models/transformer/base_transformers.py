@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from ..attention.MultiHeadAttention import MultiHeadAttention, MultiHeadCrossAttention, AttentionType
 
+from ..attention.MultiHeadAttention import MultiHeadAttention, MultiHeadCrossAttention, AttentionType
 from ..attention.attention_mask import get_attn_mask
 from ..norm.RMSNorm import RMSNorm
 

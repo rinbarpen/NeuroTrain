@@ -41,6 +41,14 @@ def parse_args():
     # Predict
     predict_parser = parser.add_argument_group(title='Predict Options', description='Predict options')
     predict_parser.add_argument('-i', '--input', type=str, help='input')
+    # Lora, TODO: Support it!
+    lora_parser = parser.add_argument_group(title='Lora Options', description='Lora options')
+    lora_parser.add_argument('--lora', action='store_true', help='use lora')
+    lora_parser.add_argument('--lora_r', type=int, default=8, help='lora_r')
+    lora_parser.add_argument('--lora_alpha', type=int, default=16, help='lora_alpha')
+    lora_parser.add_argument('--lora_dropout', type=float, default=0.05, help='lora_dropout')
+    # target module lora finetuned default
+    lora_parser.add_argument('--target_modules', type=str, nargs='+', default=['q_proj', 'k_proj', 'v_proj', 'o_proj'], help='target_modules for lora finetuned') 
     # Common
     parser.add_argument('--wandb', action='store_true', help='setup wandb')
     parser.add_argument('--verbose', action='store_true', help='setup verbose mode')

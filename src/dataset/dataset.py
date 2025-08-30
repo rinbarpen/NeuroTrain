@@ -21,6 +21,9 @@ def _get_dataset_by_case(dataset_name: str):
     elif name == 'stare':
         from .stare_dataset import StareDataset
         return StareDataset
+    elif name == 'isic2016':
+        from .isic2016_dataset import ISIC2016Dataset
+        return ISIC2016Dataset
     elif name == 'isic2017':
         from .isic2017_dataset import ISIC2017Dataset
         return ISIC2017Dataset
@@ -36,6 +39,15 @@ def _get_dataset_by_case(dataset_name: str):
     elif name == 'mnist':
         from .mnist_dataset import MNISTDataset
         return MNISTDataset
+    elif name == 'vqarad':
+        from .vqa_rad_dataset import VQARADDataset
+        return VQARADDataset
+    elif name == 'pathvqa':
+        from .pathvqa_dataset import PathVQADataset
+        return PathVQADataset
+    elif name == 'isic2016_reasoning_seg':
+        from .isic2016_reasoning_seg_dataset import ISIC2016ReasoningSegDataset
+        return ISIC2016ReasoningSegDataset
     else:
         logging.warning(f'No target dataset: {dataset_name}')
         return None

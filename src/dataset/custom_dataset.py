@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, Subset
 from pathlib import Path
 from abc import abstractmethod
-from typing import Literal, TypedDict, Tuple, Optional, List
+from typing import Literal, TypedDict, Tuple, Optional, List, Sequence
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler
@@ -213,3 +213,37 @@ class CustomDataset(Dataset):
     def dataloader(self, batch_size: int, shuffle: bool = True, num_workers: int = 0, pin_memory: bool=True, drop_last: bool=False, collate_fn=None) -> DataLoader:
         return DataLoader(self, batch_size=batch_size, shuffle=shuffle,  num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last, collate_fn=collate_fn)
 
+    def get_dataset(self, dataset_type: str|Sequence[str], **kwargs):
+        if isinstance(dataset_type, str):
+            dataset_type = [dataset_type]
+        if 'train' in dataset_type:
+            train_dataset = self.get_train_dataset(**kwargs['train'])
+        else:
+            train_dataset = None
+        if 'valid' in dataset_type:
+            valid_dataset = self.get_valid_dataset(**kwargs['valid'])
+        else:
+            valid_dataset = None
+        if 'test' in dataset_type:
+            test_dataset = self.get_test_dataset(**kwargs['test'])
+        else:
+            test_dataset = None
+        
+        output_dataset = []
+        for dt in dataset_type:
+            if dt == 'train':
+                output_dataset.append(train_dataset)
+            elif dt == 'valid':
+                output_dataset.append(valid_dataset)
+            elif dt == 'test':
+                output_dataset.append(test_dataset)
+        return tuple(output_dataset)
+    
+    def get_train_valid_test_dataset(self, **kwargs):
+        return self.get_dataset(['train', 'valid', 'test'], **kwargs)
+    
+    def get_train_valid_dataset(self, **kwargs):
+        return self.get_dataset(['train', 'valid'], **kwargs)
+    
+    def get_train_test_dataset(self, **kwargs):
+        return self.get_dataset(['train', 'test'], **kwargs)

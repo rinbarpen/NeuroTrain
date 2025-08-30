@@ -8,10 +8,9 @@
  - [ ] manage paths from any modules
 
 Trainer:
- - [ ] Record and Show the inference time in one batch and one turn and GLOPS, Parameters after training
+ - [x] Record and Show the inference time in one batch and one turn and GLOPS, Parameters after training
  - [x] Support custom Metrics to record and draw and infinite color styles 
  - [x] Support Painter (nrows, ncols) to be assigned automatically
- - [ ] Support Transforms config for every Dataset
  - [x] Save all info while training 
  - [x] Optimize the train of Trainer
  - [ ] Support recovery(full) from any last task 
