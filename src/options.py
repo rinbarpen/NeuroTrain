@@ -70,6 +70,13 @@ def parse_args():
 
     parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     
+    # ONNX Export Options
+    onnx_parser = parser.add_argument_group(title='ONNX Export Options', description='ONNX export options')
+    onnx_parser.add_argument('--export-onnx', action='store_true', help='export model to ONNX format after training/testing')
+    onnx_parser.add_argument('--onnx-path', type=str, help='path for ONNX model export')
+    onnx_parser.add_argument('--onnx-opset', type=int, default=11, help='ONNX opset version')
+    onnx_parser.add_argument('--onnx-verbose', action='store_true', help='verbose ONNX export')
+    
     args = parser.parse_args()
     if args.data_cacher:
         from tools.data_cacher import data_cacher
@@ -177,6 +184,16 @@ def parse_args():
         except Exception:
             CONFIG['private']['wandb'] = False
             print("wandb isn't installed, disable to launch wandb")
+    
+    # ONNX Export configuration
+    if args.export_onnx:
+        CONFIG['private']['export_onnx'] = True
+        if args.onnx_path:
+            CONFIG['private']['onnx_path'] = args.onnx_path
+        if args.onnx_opset:
+            CONFIG['private']['onnx_opset'] = args.onnx_opset
+        if args.onnx_verbose:
+            CONFIG['private']['onnx_verbose'] = True
 
     console = Console()
     json_data = JSON(json.dumps(CONFIG, indent=2))

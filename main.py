@@ -23,6 +23,7 @@ from src.utils import (
     model_flops,
     str2dtype,
 )
+from tools.onnx_export import export_model_to_onnx
 
 if __name__ == "__main__":
     parse_args()
@@ -160,3 +161,32 @@ if __name__ == "__main__":
 
     model_info(output_dir, model, input_sizes, dtypes=dtypes)
     model_flops(output_dir, model, input_sizes)
+    
+    # ONNX Export
+    if c["private"].get("export_onnx", False):
+        logger = logging.getLogger("onnx_export")
+        logger.info("开始导出ONNX模型...")
+        
+        # 确定ONNX文件路径
+        if c["private"].get("onnx_path"):
+            onnx_path = Path(c["private"]["onnx_path"])
+        else:
+            onnx_path = output_dir / "model.onnx"
+        
+        # 获取ONNX配置
+        opset_version = c["private"].get("onnx_opset", 11)
+        verbose = c["private"].get("onnx_verbose", False)
+        
+        # 导出模型
+        success = export_model_to_onnx(
+            model=model,
+            input_sizes=input_sizes,
+            output_path=onnx_path,
+            opset_version=opset_version,
+            verbose=verbose
+        )
+        
+        if success:
+            logger.info(f"ONNX模型导出成功: {onnx_path}")
+        else:
+            logger.error("ONNX模型导出失败")
