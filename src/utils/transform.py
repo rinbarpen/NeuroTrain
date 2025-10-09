@@ -151,3 +151,4 @@ def build_image_transforms(resize: tuple[int, int]|None=None,
         builder = builder.normalize(is_rgb)
 
     return builder.build()
+

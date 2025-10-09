@@ -20,35 +20,35 @@ class MNISTDataset(CustomDataset):
         "test": ("test", "test")
     }
     
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], 
+    def __init__(self, root_dir: Path, split: Literal['train', 'test', 'valid'], 
                  download=True, **kwargs):
         """
         初始化MNIST数据集
         
         Args:
-            base_dir: 数据集根目录  
-            dataset_type: 数据集类型
+            root_dir: 数据集根目录  
+            split: 数据集类型
             download: 是否下载数据集
             **kwargs: 其他配置参数
         """
-        super(MNISTDataset, self).__init__(base_dir, dataset_type, **kwargs)
+        super(MNISTDataset, self).__init__(root_dir, split, **kwargs)
         
         self.download = download
         
         # 加载MNIST数据集
-        if dataset_type in ['train', 'valid']:
+        if split in ['train', 'valid']:
             # 训练集和验证集都从MNIST训练数据中分割
-            mnist_dataset = datasets.MNIST(root=str(base_dir), train=True, download=download, transform=None)
+            mnist_dataset = datasets.MNIST(root=str(root_dir), train=True, download=download, transform=None)
             
             # 分割训练集和验证集 (50000 train, 10000 valid)
-            if dataset_type == 'train':
+            if split == 'train':
                 indices = list(range(0, 50000))
             else:  # valid
                 indices = list(range(50000, 60000))
                 
             self.dataset = Subset(mnist_dataset, indices)
         else:  # test
-            self.dataset = datasets.MNIST(root=str(base_dir), train=False, download=download, transform=None)
+            self.dataset = datasets.MNIST(root=str(root_dir), train=False, download=download, transform=None)
             
         self.n = len(self.dataset)
         
@@ -67,24 +67,32 @@ class MNISTDataset(CustomDataset):
         image_tensor = torch.from_numpy(image).unsqueeze(0)
         mask_tensor = torch.from_numpy(label_mask).unsqueeze(0)
         
-        return image_tensor, mask_tensor
+        return {
+            'image': image_tensor,  # 图像张量 (1, 28, 28)
+            'mask': mask_tensor,    # 掩码张量 (1, 28, 28)
+            'metadata': {
+                'label': int(label),  # 原始数字标签
+                'split': self.dataset_type,
+                'download': self.download
+            }
+        }
     
     @staticmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
+    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
         """将数据集转换为numpy格式保存
         
         Args:
             save_dir: 保存目录
-            base_dir: 数据集根目录
+            root_dir: 数据集根目录
             betweens: 兼容性参数，实际不再使用
             **kwargs: 其他配置参数
         """
         save_dir = save_dir / MNISTDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
         
-        train_dataset = MNISTDataset.get_train_dataset(base_dir, **kwargs)
-        valid_dataset = MNISTDataset.get_valid_dataset(base_dir, **kwargs)
-        test_dataset = MNISTDataset.get_test_dataset(base_dir, **kwargs)
+        train_dataset = MNISTDataset.get_train_dataset(root_dir, **kwargs)
+        valid_dataset = MNISTDataset.get_valid_dataset(root_dir, **kwargs)
+        test_dataset = MNISTDataset.get_test_dataset(root_dir, **kwargs)
         
         from torch.utils.data import DataLoader
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
@@ -115,16 +123,16 @@ class MNISTDataset(CustomDataset):
         return "MNIST"
     
     @staticmethod
-    def get_train_dataset(base_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Path, **kwargs):
         """获取训练数据集"""
-        return MNISTDataset(base_dir, 'train', **kwargs)
+        return MNISTDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(base_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Path, **kwargs):
         """获取验证数据集"""
-        return MNISTDataset(base_dir, 'valid', **kwargs)
+        return MNISTDataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(base_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Path, **kwargs):
         """获取测试数据集"""
-        return MNISTDataset(base_dir, 'test', **kwargs)
+        return MNISTDataset(root_dir, 'test', **kwargs)

@@ -4,7 +4,7 @@ from typing import Literal
 
 from .custom_dataset import CustomDataset, Betweens
 
-import json
+import json5
 # nnU-Net Style
 """
 |-imageTr
@@ -14,18 +14,20 @@ import json
 """
 class NNUNetDataset(CustomDataset):
 
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=None, use_numpy=False, config_filename: str='dataset.json', **kwargs):
-        super(NNUNetDataset, self).__init__(base_dir=base_dir, dataset_type=dataset_type, use_numpy=use_numpy)
+    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=None, use_numpy=False, config_filename: str='dataset.json', **kwargs):
+        # 将参数映射到父类期望的参数名
+        super(NNUNetDataset, self).__init__(root_dir, split, **kwargs)
 
-        config_file = base_dir / config_filename
-        uunet_config = json.load(config_file.open("r"))
+        config_file = root_dir / config_filename
+        
+        uunet_config = json5.load(config_file.open("r"))
         
         self.labels = uunet_config['labels']
-        if dataset_type == 'train':
+        if split == 'train':
             self.config = uunet_config['training']
-        elif dataset_type == 'test':
+        elif split == 'test':
             self.config = uunet_config['test']
-        elif dataset_type == 'valid':
+        elif split == 'valid':
             self.config = uunet_config['validation']
 
         self.transforms = transforms

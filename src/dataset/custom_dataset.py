@@ -4,7 +4,7 @@ from abc import abstractmethod
 from typing import Literal, TypedDict, Tuple, Optional, List, Sequence
 import numpy as np
 from torch.utils.data import DataLoader
-from torch.utils.data.sampler import RandomSampler
+from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 # 保留Betweens类型定义，因为其他地方可能还在使用
 class Betweens(TypedDict):
@@ -16,21 +16,26 @@ class CustomDataset(Dataset):
     """数据集基类，提供标准化的数据集接口"""
     mapping = ... # {'train': (), 'valid': (), 'test': ()}
     
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test', 'valid'], desired_n: int = 0, **kwargs):
+    def __init__(self, root_dir: Path, split: str, desired_n: int = 0, **kwargs):
         """
         初始化数据集基类
         
         Args:
-            base_dir: 数据集根目录
-            dataset_type: 数据集类型 ('train', 'test', 'valid')
+            root_dir: 数据集根目录
+            split: 数据集类型 ('train', 'test', 'valid', 'val', 'xx')
             desired_n: 期望的样本数量，默认0
             **kwargs: 其他扩展参数
         """
         super(Dataset, self).__init__()
 
-        self.dataset_type = dataset_type
-        self.base_dir = base_dir
+        self.split = split
+        self.root_dir = root_dir
         self.n = desired_n  # 数据集样本数量
+
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+        
+        self.samples = []
 
     def __len__(self):
         """返回数据集样本数量"""
@@ -43,7 +48,7 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @abstractmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
+    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
         """将数据集转换为numpy格式保存"""
         ...
 
@@ -55,19 +60,19 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @abstractmethod
-    def get_train_dataset(base_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Path, **kwargs):
         """获取训练数据集"""
         ...
     
     @staticmethod
     @abstractmethod
-    def get_valid_dataset(base_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Path, **kwargs):
         """获取验证数据集"""
         ...
     
     @staticmethod
     @abstractmethod
-    def get_test_dataset(base_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Path, **kwargs):
         """获取测试数据集"""
         ...
 
@@ -198,47 +203,55 @@ class CustomDataset(Dataset):
 
         return results
 
-    # def mininalize(self, dataset_size: float|None = 0.1, random_sample: bool = True):
-    #     """将数据集转换为最小化形式，移除所有元数据"""
-    #     if dataset_size is None or dataset_size <= 1.0:
-    #         dataset_size = int(dataset_size * len(self))
-    #     else:
-    #         # dataset_size > 1.0
-    #         dataset_size = int(dataset_size)
-
-    #     if random_sample:
-    #         self._data = RandomSampler(self, num_samples=dataset_size)
-    #     else:
-    #         self._data = self._data[:dataset_size]
-    def dataloader(self, batch_size: int, shuffle: bool = True, num_workers: int = 0, pin_memory: bool=True, drop_last: bool=False, collate_fn=None) -> DataLoader:
-        return DataLoader(self, batch_size=batch_size, shuffle=shuffle,  num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last, collate_fn=collate_fn)
-
-    def get_dataset(self, dataset_type: str|Sequence[str], **kwargs):
-        if isinstance(dataset_type, str):
-            dataset_type = [dataset_type]
-        if 'train' in dataset_type:
-            train_dataset = self.get_train_dataset(**kwargs['train'])
-        else:
-            train_dataset = None
-        if 'valid' in dataset_type:
-            valid_dataset = self.get_valid_dataset(**kwargs['valid'])
-        else:
-            valid_dataset = None
-        if 'test' in dataset_type:
-            test_dataset = self.get_test_dataset(**kwargs['test'])
-        else:
-            test_dataset = None
+    def mininalize(self, dataset_size: float|None = 0.1, random_sample: bool = True):
+        """将数据集转换为最小化形式，移除所有元数据
         
-        output_dataset = []
-        for dt in dataset_type:
+        修复说明：
+        - 非随机采样不再尝试对 SequentialSampler 进行切片（该对象不可下标）。
+        - 改为使用顺序采样前 dataset_size 个样本的索引，并更新 self.n。
+        """
+        # 计算目标样本数
+        if dataset_size is None or dataset_size <= 1.0:
+            dataset_size = int(dataset_size * len(self))
+        else:
+            dataset_size = int(dataset_size)
+        # 边界保护
+        dataset_size = max(0, min(dataset_size, len(self)))
+        # 更新当前数据集的可见长度
+        self.n = dataset_size
+
+        if random_sample:
+            # 随机采样指定数量样本
+            self.sampler = RandomSampler(self, num_samples=dataset_size)
+        else:
+            # 顺序采样前 dataset_size 个样本（0..dataset_size-1）
+            # 注意：SequentialSampler 会按 data_source 的长度生成 0..len-1 的索引，
+            # 这里使用 range(dataset_size) 即得到前 N 个样本的顺序索引。
+            self.sampler = SequentialSampler(range(dataset_size))
+        return self
+
+    def dataloader(self, batch_size: int, shuffle: bool = True, num_workers: int = 0, pin_memory: bool=True, drop_last: bool=False, collate_fn=None) -> DataLoader:
+        # 当提供 sampler 时，必须禁用 shuffle 以避免冲突
+        sampler = getattr(self, 'sampler', None)
+        if sampler is not None and shuffle:
+            shuffle = False
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, sampler=sampler, num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last, collate_fn=collate_fn)
+
+    def get_dataset(self, splits: str|Sequence[str], **kwargs):
+        if isinstance(splits, str):
+            splits = [splits]
+        
+        datasets = []
+        for dt in splits:
             if dt == 'train':
-                output_dataset.append(train_dataset)
-            elif dt == 'valid':
-                output_dataset.append(valid_dataset)
+                dataset = self.get_train_dataset(**kwargs['train'])
+            elif dt == 'valid' or dt == 'val':
+                dataset = self.get_valid_dataset(**kwargs['valid'])
             elif dt == 'test':
-                output_dataset.append(test_dataset)
-        return tuple(output_dataset)
-    
+                dataset = self.get_test_dataset(**kwargs['test'])
+            datasets.append(dataset)
+        return datasets
+
     def get_train_valid_test_dataset(self, **kwargs):
         return self.get_dataset(['train', 'valid', 'test'], **kwargs)
     
@@ -247,3 +260,26 @@ class CustomDataset(Dataset):
     
     def get_train_test_dataset(self, **kwargs):
         return self.get_dataset(['train', 'test'], **kwargs)
+
+class TransformersDataset(CustomDataset):
+    def __init__(self, root_dir: Path, split: str, desired_n: int=0, processor=None, tokenizer=None, **kwargs):
+        self.tokenizer = tokenizer
+        self.processor = processor
+        self.tokenizer_args = kwargs.pop('tokenizer', {})
+        self.processor_args = kwargs.pop('processor', {})
+        super().__init__(root_dir, split, desired_n=desired_n, **kwargs)
+    
+    def get_dataset(self, splits: str|Sequence[str], processor=None, tokenizer=None, **kwargs):
+        if isinstance(splits, str):
+            splits = [splits]
+        
+        datasets = []
+        for dt in splits:
+            if dt == 'train':
+                dataset = self.get_train_dataset(**kwargs['train'], tokenizer=tokenizer, processor=processor)
+            elif dt == 'valid' or dt == 'val':
+                dataset = self.get_valid_dataset(**kwargs['valid'], tokenizer=tokenizer, processor=processor)
+            elif dt == 'test':
+                dataset = self.get_test_dataset(**kwargs['test'], tokenizer=tokenizer, processor=processor)
+            datasets.append(dataset)
+        return datasets

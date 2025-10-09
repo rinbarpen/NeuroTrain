@@ -6,109 +6,117 @@ from torch.utils.data import DataLoader, Subset
 
 from src.config import get_config_value, get_config
 # from src.utils.transform import get_transforms
-from .custom_dataset import Betweens, CustomDataset
+from .custom_dataset import CustomDataset
+from .enhanced_hybrid_dataset import EnhancedHybridDataset, create_enhanced_hybrid_dataset_from_config
 
 
 def _get_dataset_by_case(dataset_name: str):
     """根据数据集名称返回对应的数据集类"""
     name = dataset_name.lower()
-    if name == 'btcv':
-        from .btcv_dataset import BTCVDataset
+    if name == 'medical/mri_brain_clip':
+        from .medical.mri_brain_clip_dataset import MriBrainClipDataset
+        return MriBrainClipDataset
+    elif name == 'medical/btcv':
+        from .medical.btcv_dataset import BTCVDataset
         return BTCVDataset
     elif name == 'drive':
         from .drive_dataset import DriveDataset
         return DriveDataset
-    elif name == 'stare':
-        from .stare_dataset import StareDataset
+    elif name == 'medical/stare':
+        from .medical.stare_dataset import StareDataset
         return StareDataset
-    elif name == 'isic2016':
-        from .isic2016_dataset import ISIC2016Dataset
+    elif name == 'medical/isic2016':
+        from .medical.isic2016_dataset import ISIC2016Dataset
         return ISIC2016Dataset
-    elif name == 'isic2017':
-        from .isic2017_dataset import ISIC2017Dataset
+    elif name == 'medical/isic2017':
+        from .medical.isic2017_dataset import ISIC2017Dataset
         return ISIC2017Dataset
-    elif name == 'isic2018':
-        from .isic2018_dataset import ISIC2018Dataset
+    elif name == 'medical/isic2018':
+        from .medical.isic2018_dataset import ISIC2018Dataset
         return ISIC2018Dataset
-    elif name == 'bowl2018':
-        from .bowl2018_dataset import BOWL2018Dataset
+    elif name == 'medical/bowl2018':
+        from .medical.bowl2018_dataset import BOWL2018Dataset
         return BOWL2018Dataset
-    elif name == 'chasedb1':
-        from .chasedb1_dataset import ChaseDB1Dataset
+    elif name == 'medical/chasedb1':
+        from .medical.chasedb1_dataset import ChaseDB1Dataset
         return ChaseDB1Dataset
     elif name == 'mnist':
         from .mnist_dataset import MNISTDataset
         return MNISTDataset
-    elif name == 'vqarad':
-        from .vqa_rad_dataset import VQARADDataset
+    elif name == 'medical/vqarad':
+        from .medical.vqa_rad_dataset import VQARADDataset
         return VQARADDataset
-    elif name == 'pathvqa':
-        from .pathvqa_dataset import PathVQADataset
+    elif name == 'medical/pathvqa':
+        from .medical.pathvqa_dataset import PathVQADataset
         return PathVQADataset
-    elif name == 'isic2016_reasoning_seg':
-        from .isic2016_reasoning_seg_dataset import ISIC2016ReasoningSegDataset
+    elif name == 'medical/isic2016_reasoning_seg':
+        from .medical.isic2016_reasoning_seg_dataset import ISIC2016ReasoningSegDataset
         return ISIC2016ReasoningSegDataset
+    elif name == 'brainmri_clip':
+        from .medical.brain_mri_clip_dataset import BrainMRIClipDataset
+        return BrainMRIClipDataset
     else:
         logging.warning(f'No target dataset: {dataset_name}')
         return None
 
 
-def get_train_dataset(dataset_name: str, base_dir: Path, **kwargs):
-    """获取训练数据集
-    
-    说明：不再接收between、use_numpy和transforms参数，仅透传config中的定制参数。
-    """
+def get_train_dataset(dataset_name: str, root_dir: Path, **kwargs):
+    """获取训练数据集"""
     if dataset_name.lower() == 'cholect50':
         return
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_train_dataset(base_dir, **kwargs)
+    return DatasetClass.get_train_dataset(root_dir, **kwargs)
 
 
-def get_valid_dataset(dataset_name: str, base_dir: Path, **kwargs):
-    """获取验证数据集（若存在）"""
+def get_valid_dataset(dataset_name: str, root_dir: Path, **kwargs):
+    """获取验证数据集"""
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_valid_dataset(base_dir, **kwargs)
+    return DatasetClass.get_valid_dataset(root_dir, **kwargs)
 
 
-def get_test_dataset(dataset_name: str, base_dir: Path, **kwargs):
+def get_test_dataset(dataset_name: str, root_dir: Path, **kwargs):
     """获取测试数据集"""
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_test_dataset(base_dir, **kwargs)
+    return DatasetClass.get_test_dataset(root_dir, **kwargs)
 
-
-def to_numpy(dataset_name: str, save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
-    """将数据集转换为numpy缓存格式
-    
-    注意：本函数保留betweens参数以兼容外部调用，但底层实现将不再使用between逻辑切分数据集。
-    """
-    DatasetClass = _get_dataset_by_case(dataset_name)
-    if DatasetClass is None:
-        return None
-    return DatasetClass.to_numpy(save_dir, base_dir, betweens, **kwargs)
-
-
-def get_dataset(mode: Literal['train', 'test', 'valid']):
-    """根据配置获取指定模式的数据集实例
-    
-    说明：不再使用betweens进行数据集切片，直接返回完整数据集。
-    """
+def get_dataset(mode: str):
     c_dataset = get_config_value('dataset')
     assert c_dataset is not None, "Dataset configuration is not defined in the config file."
 
+    # 检查是否为增强版混合数据集配置
+    if c_dataset.get('type') == 'enhanced_hybrid':
+        logging.info(f"检测到增强版混合数据集配置，创建EnhancedHybridDataset for mode: {mode}")
+        # 传递完整的配置给 create_enhanced_hybrid_dataset_from_config
+        full_config = get_config()
+        return create_enhanced_hybrid_dataset_from_config(c_dataset, mode, full_config)
+    
+    # 检查是否为混合数据集配置
+    if 'hybrid' in c_dataset and c_dataset['hybrid'].get('enabled', False):
+        logging.info(f"检测到混合数据集配置，创建EnhancedHybridDataset for mode: {mode}")
+        # 传递完整的配置给 create_enhanced_hybrid_dataset_from_config
+        full_config = get_config()
+        return create_enhanced_hybrid_dataset_from_config(c_dataset, mode, full_config)
+
+    # 传统单数据集模式
     config = c_dataset.get('config', {})
     match mode:
         case 'train':
-            dataset0 = get_train_dataset(c_dataset['name'], Path(c_dataset['base_dir']), **config)
+            dataset0 = get_train_dataset(c_dataset['name'], Path(c_dataset['root_dir']), **config)
         case 'test':
-            dataset0 = get_test_dataset(c_dataset['name'], Path(c_dataset['base_dir']), **config)
-        case 'valid':
-            dataset0 = get_valid_dataset(c_dataset['name'], Path(c_dataset['base_dir']), **config)
+            dataset0 = get_test_dataset(c_dataset['name'], Path(c_dataset['root_dir']), **config)
+        case 'valid' | 'val':
+            dataset0 = get_valid_dataset(c_dataset['name'], Path(c_dataset['root_dir']), **config)
+        case _:
+            DatasetClass = _get_dataset_by_case(c_dataset['name'])
+            if DatasetClass is None:
+                return None
+            dataset0 = DatasetClass.get_dataset(Path(c_dataset['root_dir']), **config)
 
     if not dataset0:
         logging.error(f"{c_dataset['name']} is empty!")
@@ -116,10 +124,13 @@ def get_dataset(mode: Literal['train', 'test', 'valid']):
     return dataset0
 
 
-def random_sample(dataset: CustomDataset, sample_ratio: float = 0.1, generator=None, output_dataloader: bool = True, batch_size: int = 1):
+def random_sample(dataset: CustomDataset, sample_ratio: float = 0.1, num_samples: int=0, *, generator=None, output_dataloader: bool = True, batch_size: int = 1):
     """随机采样数据集的一部分样本索引"""
     from torch.utils.data import RandomSampler
-    num_samples = int(sample_ratio * len(dataset))
+    if num_samples <= 0:
+        num_samples = int(sample_ratio * len(dataset))
+    elif num_samples > len(dataset):
+        num_samples = len(dataset)
     sampler = RandomSampler(dataset, num_samples=num_samples, generator=generator)
     if output_dataloader:
         c = get_config()

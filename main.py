@@ -23,6 +23,7 @@ from src.utils import (
     model_flops,
     str2dtype,
 )
+from src.constants import TrainOutputFilenameEnv, ProjectFilenameEnv
 
 if __name__ == "__main__":
     parse_args()
@@ -95,13 +96,11 @@ if __name__ == "__main__":
                 logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
 
         handler = Trainer(train_dir, model, is_continue_mode=is_continue_mode)
+        handler.setup_trainer(criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler, scaler=scaler)
         handler.train(
             num_epochs=c["train"]["epoch"],
-            criterion=criterion,
-            optimizer=optimizer,
             train_dataloader=train_loader,
             valid_dataloader=valid_loader,
-            lr_scheduler=lr_scheduler,
             early_stop="early_stopping" in c["train"],
             last_epoch=finished_epoch,
         )
@@ -117,10 +116,15 @@ if __name__ == "__main__":
         )
 
         if is_train() and not is_continue_mode:
-            model_path = train_dir / "weights" / "best.pt"
-            model_params = load_model(model_path, device)
-            logger.info(f"Load model: {model_path}")
-            model.load_state_dict(model_params)
+            env = TrainOutputFilenameEnv().register(train_dir=train_dir)
+            model_path = env.output_best_model_filename
+            if not model_path.exists():
+                model_path = env.output_last_model_filename
+            
+            if model_path.exists():
+                model_params = load_model(model_path, device)
+                logger.info(f"Load model: {model_path}")
+                model.load_state_dict(model_params)
 
         handler = Tester(test_dir, model)
         handler.test(test_dataloader=test_loader)
@@ -136,10 +140,15 @@ if __name__ == "__main__":
         )
 
         if is_train() and not is_continue_mode:
-            model_path = train_dir / "weights" / "best.pt"
-            model_params = load_model(model_path, device)
-            logger.info(f"Load model: {model_path}")
-            model.load_state_dict(model_params)
+            env = TrainOutputFilenameEnv().register(train_dir=train_dir)
+            model_path = env.output_best_model_filename
+            if not model_path.exists():
+                model_path = env.output_last_model_filename
+            
+            if model_path.exists():
+                model_params = load_model(model_path, device)
+                logger.info(f"Load model: {model_path}")
+                model.load_state_dict(model_params)
 
         handler = Predictor(predict_dir, model)
         input_path = Path(c["predict"]["input"])

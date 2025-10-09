@@ -1,4 +1,4 @@
-import os.path
+import os.path as osp
 import json
 import toml
 import yaml
@@ -13,7 +13,7 @@ class FileType(Enum):
 
 
 def get_file_type(filename: str):
-    ext = os.path.splitext(os.path.basename(filename))[1]
+    ext = osp.splitext(osp.basename(filename))[1]
     match ext:
         case '.json':
             return FileType.JSON

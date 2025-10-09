@@ -1,4 +1,4 @@
-output_dir = "./output"
+output_dir = "./runs"
 task = "Test"
 entity = "Lab"
 run_id = "" # be Random set by program
@@ -52,8 +52,7 @@ CONVERT_IMAGE_DTYPE=['float32']
 
 [dataset]
 name = "DRIVE"
-base_dir = "./data/DRIVE"
-betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
+root_dir = "./data/DRIVE"
 config = {}
 # [dataset.split]
 # type = "train_valid_test_split" 
@@ -71,8 +70,9 @@ config = {}
 # ref = amos2022.yaml 
 
 [dataloader]
-num_workers = 4
+num_workers = 4 # 0 to disable multiprocessing, or set to a positive integer for the number of worker processes
 shuffle = true
+pin_memory = true
 
 [train]
 batch_size = 2
@@ -104,15 +104,16 @@ weight_decay = 1e-8
 # type = 'step'
 # warmup = 50
 # warmup_lr = 0.03
+# update_policy = 'epoch' # 'step'
 
-# [train.scaler]
-# compute_type = 'float16'
+[train.scaler]
+compute_type = 'float16'
 
 # [train.early_stopping]
 # patience = 3
 
 [test]
-batch_size = 1
+batch_size = 2
 
 [predict]
 input = "data/DRIVE/test/images"

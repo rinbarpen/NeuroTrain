@@ -11,30 +11,39 @@ import logging
 from rich.table import Table
 from rich.console import Console
 import json
+from functools import partial
 
 from src.config import get_config, ALL_STYLES
-from src.utils import EarlyStopping, DataSaver, ScoreAggregator, save_model, MetricRecorder, Plot, select_postprocess_fn
+from src.utils import EarlyStopping, DataSaver, save_model, select_postprocess_fn
+from src.recorder.metric_recorder import MetricRecorder, ScoreAggregator
+from src.visualizer.painter import Plot
+from src.constants import TrainOutputFilenameEnv
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module, is_continue_mode: bool=False):
         self.output_dir = output_dir
-        self.train_loss_image_path = output_dir / "train_epoch_loss.png"
-        self.valid_loss_image_path = output_dir / "valid_epoch_loss.png"
-        self.save_model_dir = output_dir / "weights"
-        self.last_model_file_path = self.save_model_dir / "last.pt"
-        self.best_model_file_path = self.save_model_dir / "best.pt"
-        self.last_model_ext_file_path = self.save_model_dir / "last.ext.pt"
-        self.best_model_ext_file_path = self.save_model_dir / "best.ext.pt"
-        self.recovery_dir = self.output_dir / 'recovery'
-        
+
+        c = get_config()
+        self.filename_env = TrainOutputFilenameEnv()
+        self.filename_env.register(train_dir=self.output_dir, model=c["model"]["name"])
+        self.filename_env.register(epoch=0, num_epochs=0)
+
+        self.train_loss_image_path = self.filename_env.output_train_loss_filename
+        self.valid_loss_image_path = self.filename_env.output_valid_loss_filename
+        self.last_model_file_path = self.filename_env.output_last_model_filename
+        self.best_model_file_path = self.filename_env.output_best_model_filename
+        self.last_model_ext_file_path = self.filename_env.output_last_ext_model_filename
+        self.best_model_ext_file_path = self.filename_env.output_best_ext_model_filename
+        self.recovery_dir = self.filename_env.recovery_dir
+
         self.model = model
 
-        self.save_model_dir.mkdir(exist_ok=True)
+        self.filename_env.output_temp_model_filename.parent.mkdir(exist_ok=True, parents=True)
+
         self.recovery_dir.mkdir(exist_ok=True)
         self.logger = logging.getLogger('train')
         self.data_saver = DataSaver(output_dir)
 
-        c = get_config()
         class_labels = c['classes']
         metric_labels = c['metrics']
         self.train_metric_recorder = MetricRecorder(output_dir, class_labels, metric_labels, logger=self.logger, saver=self.data_saver)
@@ -53,58 +62,76 @@ class Trainer:
         with open(self.recovery_dir / 'valid_metrics.json', 'r') as f:
             self.valid_metric_recorder.epoch_metric_label_scores = json.load(f)
 
-    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, optimizer: Optimizer, criterion, scaler: GradScaler | None, pbar: tqdm):
+    def setup_trainer(self, criterion=None, optimizer=None, scaler: GradScaler | None=None, lr_scheduler=None, buildin_loss_calcuation: bool=False):
+        self.criterion = criterion if not buildin_loss_calcuation else None
+        self.optimizer = optimizer
+        self.scaler = scaler
+        self.lr_scheduler = lr_scheduler
+
+    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, pbar: tqdm):
         c = get_config()
         device = torch.device(c['device'])
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
+        if c['train'].get('lr_scheduler'):
+            lr_scheduler_update_policy = c['train']['lr_scheduler'].get('update_policy', 'epoch')
 
-        self.model.train()
         train_loss = 0.0
+        self.model.train()
 
         if not enable_accumulation_step:
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
 
-        for i, (inputs, targets) in enumerate(train_dataloader, 1):
-            inputs, targets = inputs.to(device), targets.to(device)
+        # Discard the last batch
+        for batch, batch_inputs in enumerate(train_dataloader, 1):
+            inputs, targets = batch_inputs['image'].to(device), batch_inputs['mask'].to(device)
 
             sum_loss = 0.0
-            if scaler:
+            if self.scaler:
                 device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
                 compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
                 with autocast(device_type, dtype=compute_type):
-                    outputs = self.model(inputs)
+                    if self.criterion:
+                        outputs = self.model(inputs)
+                        loss = self.criterion(targets, outputs)
+                    else:
+                        outputs, loss = self.model(inputs)
 
                     if not enable_accumulation_step:
-                        loss = criterion(targets, outputs)
-                        scaler.scale(loss).backward()
+                        self.scaler.scale(loss).backward()
                         sum_loss += loss.item()
-                        scaler.step(optimizer)
-                        scaler.update()
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
                     else:
-                        loss = criterion(targets, outputs)
                         loss /= accumulation_steps
-                        scaler.scale(loss).backward()
+                        self.scaler.scale(loss).backward()
                         sum_loss += loss.item()
-                        if i % accumulation_steps == 0:
-                            scaler.step(optimizer)
-                            scaler.update()
-                            optimizer.zero_grad()
+                        if batch % accumulation_steps == 0:
+                            self.scaler.step(self.optimizer)
+                            self.scaler.update()
+                            self.optimizer.zero_grad()
             else:
-                outputs = self.model(inputs)
+                if self.criterion:
+                    outputs = self.model(inputs)
+                    loss = self.criterion(targets, outputs)
+                else:
+                    outputs, loss = self.model(inputs)
+                
                 if not enable_accumulation_step:
-                    loss = criterion(targets, outputs)
                     loss.backward()
                     sum_loss += loss.item()
-                    optimizer.step()
+                    self.optimizer.step()
                 else:
-                    loss = criterion(targets, outputs)
                     loss /= accumulation_steps
                     loss.backward()
                     sum_loss += loss.item()
-                    if i % accumulation_steps == 0:
-                        optimizer.step()
-                        optimizer.zero_grad()
+                    if batch % accumulation_steps == 0:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+
+            # Add batch-wise scheduler update
+            if self.lr_scheduler and lr_scheduler_update_policy == 'step':
+                self.lr_scheduler.step()
 
             batch_loss = sum_loss
             train_loss += batch_loss
@@ -115,28 +142,41 @@ class Trainer:
             self.train_metric_recorder.finish_one_batch(
                 targets.detach().cpu().numpy(), 
                 outputs.detach().cpu().numpy())
-        
+
         train_loss /= len(train_dataloader)
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
         self.train_metric_recorder.finish_one_epoch()
         return train_loss
 
-    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, criterion, pbar: tqdm):
+    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, pbar: tqdm):
         c = get_config()
         device = torch.device(c['device'])
         self.model.eval()
         valid_loss = 0.0
 
         with torch.no_grad():
-            for inputs, targets in valid_dataloader:
-                inputs, targets = inputs.to(device), targets.to(device)
+            for batch_inputs in valid_dataloader:
+                inputs, targets = batch_inputs['image'].to(device), batch_inputs['mask'].to(device)
 
-                outputs = self.model(inputs)
-                losses = criterion(targets, outputs)
-                valid_sum_loss = 0.0
-                for loss in losses:
-                    valid_sum_loss += loss.item()
+                if self.scaler:
+                    device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
+                    compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
+                    with autocast(device_type, dtype=compute_type):
+                        if self.criterion:
+                            outputs = self.model(inputs)
+                            losses = self.criterion(targets, outputs)
+                        else:
+                            # buildin loss
+                            outputs, losses = self.model(inputs)
+                else:
+                    if self.criterion:
+                        outputs = self.model(inputs)
+                        losses = self.criterion(targets, outputs)
+                    else:
+                        # buildin loss
+                        outputs, losses = self.model(inputs)
 
+                valid_sum_loss = losses.sum().item()
                 batch_loss = valid_sum_loss
                 valid_loss += batch_loss
                 pbar.update(1)
@@ -153,12 +193,8 @@ class Trainer:
         return valid_loss
 
     def train(self, num_epochs: int, 
-              criterion, 
-              optimizer,
               train_dataloader,
               valid_dataloader = None, 
-              scaler = None, 
-              lr_scheduler = None,
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
         device = torch.device(c['device'])
@@ -183,6 +219,8 @@ class Trainer:
 
         self.model = self.model.to(device)
 
+        save_model_preset = partial(save_model, model=self.model, optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler, version=c['run_id'])
+
         if early_stop and valid_dataloader is None:
             self.logger.warning("Validate isn't launched, early_stop will be cancelled")
             early_stopper = None
@@ -197,30 +235,15 @@ class Trainer:
 
         with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
-                train_loss = self._train_epoch(epoch, num_epochs, train_dataloader, optimizer, criterion, scaler, pbar)
+                train_loss = self._train_epoch(epoch, num_epochs, train_dataloader, pbar)
                 train_losses.append(train_loss)
                 pbar.update(0)
                 pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
 
                 # 调整 lr per one epoch
-                if lr_scheduler:
-                    lr_scheduler.step()
-
-                # validate
-                if valid_dataloader:
-                    valid_loss = self._valid_epoch(epoch, num_epochs, valid_dataloader, criterion, pbar)
-                    valid_losses.append(valid_loss)
-
-                    pbar.update(0)
-                    pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
-
-                    if early_stopper:
-                        early_stopper(valid_loss)
-                        if early_stopper.is_stopped():
-                            self.logger.info("Early stopping")
-                            break
-                else:
-                    valid_loss = None
+                if self.lr_scheduler:
+                    # self.optimizer.step()
+                    self.lr_scheduler.step()
 
                 # recovery info
                 if save_recovery_period > 0 and epoch % save_recovery_period == 0:
@@ -232,69 +255,75 @@ class Trainer:
                 # checkpoint info
                 if save_period > 0 and epoch % save_period == 0:
                     self.logger.info(f'save temporary checkpoint info when {epoch}/{num_epochs}')
-                    save_model_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.pt'
-                    save_model_ext_filename = self.save_model_dir / f'{c["model"]["name"]}-{epoch}of{num_epochs}.ext.pt'
-                    save_model(save_model_filename, self.model,             
-                            ext_path=save_model_ext_filename, optimizer=optimizer,        
-                            scaler=scaler, lr_scheduler=lr_scheduler,
-                            epoch=epoch, version=c['run_id'], loss=best_loss)
+                    self.filename_env.register(epoch=epoch, num_epochs=num_epochs)
+                    save_model_filename = self.filename_env.output_temp_model_filename
+                    save_model_ext_filename = self.filename_env.output_temp_ext_model_filename
+                    save_model_preset(save_model_filename,             
+                            ext_path=save_model_ext_filename,        
+                            epoch=epoch, loss=train_loss)
                     self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
                 # metrics info
                 if save_period > 0 and epoch % save_period == 0:
                     self.logger.info(f'save temporary losses and metrics info when {epoch}/{num_epochs}')
                     self._save_train_info(epoch, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
 
-                # save best model
+                # validate
                 if valid_dataloader:
-                    assert valid_loss
+                    valid_loss = self._valid_epoch(epoch, num_epochs, valid_dataloader, pbar)
+                    valid_losses.append(valid_loss)
+
+                    pbar.update(0)
+                    pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
+                    
+                    # save best model
                     target_loss = valid_loss
                     if target_loss < best_loss:
                         best_loss = target_loss
-                        save_model(self.best_model_file_path, self.model, 
+                        save_model_preset(self.best_model_file_path, 
                                     ext_path=self.best_model_ext_file_path,
-                                    optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                                    epoch=epoch, version=c['run_id'], loss=best_loss)
+                                    epoch=epoch, loss=best_loss)
                         self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
-                else:
-                    best_loss = train_loss
-                    save_model(self.best_model_file_path, self.model, 
-                                ext_path=self.best_model_ext_file_path,
-                                optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler,
-                                epoch=epoch, version=c['run_id'], loss=best_loss)
-                    self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
 
+                    if early_stopper:
+                        early_stopper(valid_loss)
+                        if early_stopper.is_stopped():
+                            self.logger.info("Early stopping")
+                            break
+                # else:
+                #     best_loss = train_loss
+                #     save_model(self.best_model_file_path, self.model, 
+                #                 ext_path=self.best_model_ext_file_path,
+                #                 optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler,
+                #                 epoch=epoch, version=c['run_id'], loss=best_loss)
+                #     self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
 
-                save_model(self.last_model_file_path, self.model,
+                save_model_preset(self.last_model_file_path, 
                         ext_path=self.last_model_ext_file_path,
-                        optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                        epoch=num_epochs, version=c['run_id'], loss=train_loss)
+                        epoch=num_epochs, loss=train_loss)
 
             # accumulation_step
-            if enable_accumulation_step:
-                if (len(train_dataloader) * num_epochs) % accumulation_steps != 0:
-                    if scaler:
-                        scaler.step(optimizer)
-                        scaler.update()
-                        optimizer.zero_grad()
-                    else:
-                        optimizer.step()
-                        optimizer.zero_grad()
+            # if policy is to use the remain batch grad, it is accumulation_policy == 'remain leave'
+            # if enable_accumulation_step:
+            #     if (len(train_dataloader) * num_epochs) % accumulation_steps != 0:
+            #         if self.scaler:
+            #             self.scaler.step(self.optimizer)
+            #             self.scaler.update()
+            #             self.optimizer.zero_grad()
+            #         else:
+            #             self.optimizer.step()
+            #             self.optimizer.zero_grad()
 
-            save_model(self.last_model_file_path, self.model,
-                    ext_path=self.last_model_ext_file_path,
-                    optimizer=optimizer, scaler=scaler, lr_scheduler=lr_scheduler, 
-                    epoch=num_epochs, version=c['run_id'], loss=best_loss)
-            self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
-
-        # self.train_metric_recorder.record_epochs(n_epochs=num_epochs)
-        # if valid_dataloader:
-        #     self.valid_metric_recorder.record_epochs(n_epochs=num_epochs)
+            #         save_model(self.last_model_file_path, **model_args,
+            #                 ext_path=self.last_model_ext_file_path, **ext_model_args,
+            #                 epoch=num_epochs, loss=best_loss)
+            #         self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
 
         self._print_table(valid_dataloader is not None)
 
         self._save_train_info(num_epochs, num_epochs, np.array(train_losses, dtype=np.float64), np.array(valid_losses, dtype=np.float64) if valid_dataloader else None)
-        self._wandb_save(train_losses, valid_losses, optimizer, scaler, lr_scheduler)
+        self._wandb_save(train_losses, valid_losses, self.optimizer, self.scaler, self.lr_scheduler)
 
+    # TODO: Need to optimize 
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
         class_labels  = c['classes']
@@ -334,6 +363,7 @@ class Trainer:
             table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
         console.print(table)
 
+    # TODO: Need to optimize 
     def _save_train_info(self, epochs: int, num_epochs: int, train_losses, valid_losses=None):
         self.data_saver.save_train_loss(train_losses)
 

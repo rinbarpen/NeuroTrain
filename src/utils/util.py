@@ -1,22 +1,22 @@
 import logging
-import os.path
+import os.path as osp
 import os
+import sys
+import io
 import time
 import math
 import random
-import cv2
+import subprocess
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.amp.grad_scaler import GradScaler
+import torch.distributed as dist
 import torchinfo
-from typing import Sequence, Type
+from typing import Sequence, Type, Optional, Dict, Any, Union, List, Tuple, Callable, TypeVar
 from pathlib import Path
-from PIL import Image
 from fvcore.nn import flop_count, flop_count_table, FlopCountAnalysis, parameter_count, parameter_count_table
-import sys
 
 from src.config import get_config, get_config_value
 from src.utils.typed import FilePath, ImageInstance
@@ -85,7 +85,7 @@ def get_train_tools(model: nn.Module):
     if 'lr_scheduler' not in train_c:
         scheduler = None
     else:
-        scheduler_c = c['lr_scheduler']
+        scheduler_c = train_c['lr_scheduler']
         match scheduler_c['type'].lower():
             case 'step':
                 step_size = scheduler_c['step_size']
@@ -97,7 +97,7 @@ def get_train_tools(model: nn.Module):
                     milestones = [milestones]
                 gamma = scheduler_c.get('gamma', 0.1)
                 scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-            case 'cos':
+            case 'cos' | 'cosine_annealing':
                 T_max = scheduler_c.get('T_max', train_c['epoch'])  # 周期
                 eta_min = scheduler_c.get('eta_min', 0)  # 最小学习率
                 scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
@@ -107,7 +107,7 @@ def get_train_tools(model: nn.Module):
                 eta_min = scheduler_c.get('eta_min', 0.001)  # 最小学习率
                 scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=T_0, T_mult=T_mult, eta_min=eta_min)
             case _:
-                scheduler = LRScheduler(optimizer)
+                scheduler = None
 
     return {
         'optimizer': optimizer,
@@ -117,11 +117,13 @@ def get_train_tools(model: nn.Module):
 
 def get_train_criterion():
     c = get_config()
-    return CombineCriterion(*[get_criterion(cc) for cc in c['criterion']])
+    return CombineCriterion(*[get_criterion(cc) for cc in c['criterion']]) if 'criterion' in c else None
 
 def save_model(path: FilePath, model: nn.Module, *, 
                ext_path: FilePath|None=None,
                optimizer=None, lr_scheduler=None, scaler=None, **kwargs):
+    if not is_main_process():
+        return
     model_cp = model.state_dict()
     path = Path(path)
 
@@ -153,13 +155,6 @@ def load_model(path: FilePath, map_location: str = 'cuda'):
     return torch.load(path, map_location)
 def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
     return torch.load(ext_path, map_location)
-
-# def disable_torch_init():
-#     """
-#     Disable the redundant torch default initialization to accelerate model creation.
-#     """
-#     setattr(torch.nn.Linear, "reset_parameters", lambda self: None)
-#     setattr(torch.nn.LayerNorm, "reset_parameters", lambda self: None)
 
 def save_numpy_data(path: FilePath, data: np.ndarray | torch.Tensor):
     if isinstance(data, torch.Tensor):
@@ -201,7 +196,6 @@ def model_info(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Se
         from rich import print
         print(str(model_stats))
 
-
 def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|Sequence[Sequence[int]], dtypes: Type|Sequence[Type]|None=None, device: str='cuda', *, rich_print=True) -> float:
     # Check if input_sizes is a sequence of integers (not nested)
     if isinstance(input_sizes, (list, tuple)) and len(input_sizes) > 0 and isinstance(input_sizes[0], int):
@@ -232,21 +226,17 @@ def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|S
     return total_flops
 
 # freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
-# optimizer_filters = [lambda n: "encoder" not in n, lambda n: "encoder" in n and "clip" not in n]
 # c = {"lr": [None, 0.01]}
 
-# freeze_layers(model, freeze_filter, optimizer_filters, **c)
+# freeze_layers(model, freeze_filter, **c)
 # layer_filter: 
 #  layer_name: str [input]
 #  result: bool [output]
-def freeze_layers(model: nn.Module, freeze_filter, optimizer_filters, **kwargs):
+def freeze_layers(model: nn.Module, freeze_filter=lambda n: True, **kwargs):
     named_params = model.named_parameters()
     for n, p in named_params:
-        if freeze_filter(n) and p.requires_grad:
+        if freeze_filter(n):
             p.requires_grad = False
-
-#     param_dicts = [{'params': [p for n, p in named_params if optimizer_filter(n) and p.requires_grad], 'lr': kwargs['lr'][i]} for i, optimizer_filter in enumerate(optimizer_filters)]
-#     return param_dicts
 
 def str2dtype(dtype: str) -> torch.dtype:
     match dtype:
@@ -277,3 +267,188 @@ def str2dtype(dtype: str) -> torch.dtype:
         case _:
             ttype = torch.get_default_dtype()
     return ttype
+
+def tensor_print(tensor: torch.Tensor, name: str=''):
+    print(f'{name}: {tensor.shape} {tensor.dtype} {tensor.device} | {tensor}')
+    print()
+
+def is_dist_avail_and_initialized():
+    if not dist.is_available():
+        return False
+    if not dist.is_initialized():
+        return False
+    return True
+def get_world_size():
+    if not is_dist_avail_and_initialized():
+        return 1
+    return dist.get_world_size()
+def get_rank():
+    if not is_dist_avail_and_initialized():
+        return 0
+    return dist.get_rank()
+def is_main_process():
+    return get_rank() == 0
+
+def all_gather(data, world_size: int|None=None, device: str='cuda'):
+    """
+    Run all_gather on arbitrary picklable data (not necessarily tensors)
+    Args:
+        data: any picklable object
+        world_size: int, default None. If None, use the world size from distributed training.
+        device: str, default 'cuda'. The device to use for the gather operation.
+    Returns:
+        list[data]: list of data gathered from each rank
+    """
+    world_size = world_size or get_world_size()
+    if world_size == 1:
+        return [data]
+
+    cpu_group = None
+    if os.getenv("MDETR_CPU_REDUCE") == "1":
+        from functools import lru_cache
+        @lru_cache()
+        def _get_global_gloo_group():
+            """
+            Return a process group based on gloo backend, containing all the ranks
+            The result is cached.
+            """
+
+            if dist.get_backend() == "nccl":
+                return dist.new_group(backend="gloo")
+
+            return dist.group.WORLD
+
+        cpu_group = _get_global_gloo_group()
+
+    buffer = io.BytesIO()
+    torch.save(data, buffer)
+    data_view = buffer.getbuffer()
+    device = "cuda" if cpu_group is None else "cpu"
+    tensor = torch.ByteTensor(data_view).to(device)
+
+    # obtain Tensor size of each rank
+    local_size = torch.tensor([tensor.numel()], device=device, dtype=torch.long)
+    size_list = [torch.tensor([0], device=device, dtype=torch.long) for _ in range(world_size)]
+    if cpu_group is None:
+        dist.all_gather(size_list, local_size)
+    else:
+        print("gathering on cpu")
+        dist.all_gather(size_list, local_size, group=cpu_group)
+    size_list = [int(size.item()) for size in size_list]
+    max_size = max(size_list)
+    assert isinstance(local_size.item(), int)
+    local_size = int(local_size.item())
+
+    # receiving Tensor from all ranks
+    # we pad the tensor because torch all_gather does not support
+    # gathering tensors of different shapes
+    tensor_list = []
+    for _ in size_list:
+        tensor_list.append(torch.empty((max_size,), dtype=torch.uint8, device=device))
+    if local_size != max_size:
+        padding = torch.empty(size=(max_size - local_size,), dtype=torch.uint8, device=device)
+        tensor = torch.cat((tensor, padding), dim=0)
+    if cpu_group is None:
+        dist.all_gather(tensor_list, tensor)
+    else:
+        dist.all_gather(tensor_list, tensor, group=cpu_group)
+
+    data_list = []
+    for size, tensor in zip(size_list, tensor_list):
+        tensor = torch.split(tensor, [size, max_size - size], dim=0)[0]
+        buffer = io.BytesIO(tensor.cpu().numpy().tobytes())
+        obj = torch.load(buffer)
+        data_list.append(obj)
+
+    return data_list
+
+def reduce_dict(input_dict, world_size: int|None=None, average=True):
+    """
+    Args:
+        input_dict (dict): all the values will be reduced
+        world_size: int, default None. If None, use the world size from distributed training.
+        average (bool): whether to do average or sum
+    Reduce the values in the dictionary from all processes so that all processes
+    have the averaged results. Returns a dict with the same fields as
+    input_dict, after reduction.
+    """
+    # check if world_size is greater than 1
+    world_size = world_size or get_world_size()
+    if world_size < 2:
+        return input_dict
+    with torch.no_grad():
+        names = []
+        values = []
+        # sort the keys so that they are consistent across processes
+        for k in sorted(input_dict.keys()):
+            names.append(k)
+            values.append(input_dict[k])
+        values = torch.stack(values, dim=0)
+        dist.all_reduce(values)
+        if average:
+            values /= world_size
+        reduced_dict = {k: v for k, v in zip(names, values)}
+    return reduced_dict
+
+def setup_for_distributed(is_master):
+    """
+    This function disables printing when not in master process
+    """
+    import builtins as __builtin__
+    builtin_print = __builtin__.print
+
+    def print(*args, **kwargs):
+        force = kwargs.pop('force', False)
+        if is_master or force:
+            builtin_print(*args, **kwargs)
+
+    __builtin__.print = print
+
+def init_distributed_mode():
+    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ['WORLD_SIZE'])
+        gpu = int(os.environ['LOCAL_RANK'])
+        dist_url = 'env://'
+        os.environ['LOCAL_SIZE'] = str(torch.cuda.device_count())
+    elif 'SLURM_PROCID' in os.environ:
+        proc_id = int(os.environ['SLURM_PROCID'])
+        ntasks = int(os.environ['SLURM_NTASKS'])
+        node_list = os.environ['SLURM_NODELIST']
+        num_gpus = torch.cuda.device_count()
+        addr = subprocess.getoutput(
+            'scontrol show hostname {} | head -n1'.format(node_list))
+        os.environ['MASTER_PORT'] = os.environ.get('MASTER_PORT', '29500')
+        os.environ['MASTER_ADDR'] = addr
+        os.environ['WORLD_SIZE'] = str(ntasks)
+        os.environ['RANK'] = str(proc_id)
+        os.environ['LOCAL_RANK'] = str(proc_id % num_gpus)
+        os.environ['LOCAL_SIZE'] = str(num_gpus)
+        rank = proc_id
+        world_size = ntasks
+        gpu = proc_id % num_gpus
+        dist_url = 'env://'
+    else:
+        print('Not using distributed mode')
+        distributed = False
+        return
+
+    distributed = True
+
+    torch.cuda.set_device(gpu)
+    dist_backend = 'nccl'
+    print('| distributed init (rank {}): {}'.format(
+        rank, dist_url), flush=True)
+    dist.init_process_group(backend=dist_backend, init_method=dist_url,
+                            world_size=world_size, rank=rank)
+    dist.barrier()
+    setup_for_distributed(rank == 0)
+
+    return {
+        'distributed': distributed,
+        'dist_backend': dist_backend,
+        'dist_url': dist_url,
+        'world_size': world_size,
+        'rank': rank,
+        'gpu': gpu,
+    }

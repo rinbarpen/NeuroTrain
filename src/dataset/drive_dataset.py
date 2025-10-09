@@ -14,33 +14,32 @@ class DriveDataset(CustomDataset):
         "test": ("test/images/*.png", "test/1st_manual/*.png"),
     }
 
-    def __init__(self, base_dir: Path, dataset_type: Literal['train', 'test'], is_rgb: bool = False, **kwargs):
+    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
         """
         DRIVE 数据集实现
         
         Args:
-            base_dir: 数据集根目录
-            dataset_type: 数据集类型 ('train' 或 'test')
+            root_dir: 数据集根目录
+            split: 数据集类型 ('train', 'valid' 或 'test')
             is_rgb: 是否以RGB方式读取图像（默认灰度）
             **kwargs: 预留扩展参数
         """
-        super(DriveDataset, self).__init__(base_dir, dataset_type, **kwargs)
+        super(DriveDataset, self).__init__(root_dir, split, **kwargs)
 
         if 'source' in kwargs and 'target' in kwargs:
             image_glob, label_glob = kwargs['source'], kwargs['target']
         else:
-            image_glob, label_glob = self.mapping[dataset_type]
+            image_glob, label_glob = self.mapping[split]
 
         # 默认的图像变换，仅进行张量化
         self.transforms = self._get_transforms()
         self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
 
-        images = [p for p in base_dir.glob(image_glob)]
-        masks = [p for p in base_dir.glob(label_glob)]
+        images = [p for p in root_dir.glob(image_glob)]
+        masks = [p for p in root_dir.glob(label_glob)]
 
-        # 不再进行between切片，直接使用完整数据集
-        self.images = images
-        self.masks = masks
+        self.images = sorted(images)
+        self.masks = sorted(masks)
         self.n = len(self.images)
 
     def __getitem__(self, index: int):
@@ -56,16 +55,25 @@ class DriveDataset(CustomDataset):
             mask = Image.open(mask_path).convert('L')
 
         image, mask = self.transforms(image), self.transforms(mask)
-        return image, mask
+        return {
+            'image': image,  # 图像张量
+            'mask': mask,    # 掩码张量
+            'metadata': {
+                'image_path': str(image_path),
+                'mask_path': str(mask_path),
+                'is_rgb': self.config['is_rgb'],
+                'split': self.split  # 使用 self.split 而不是 self.dataset_type
+            }
+        }
 
     @staticmethod
-    def to_numpy(save_dir: Path, base_dir: Path, betweens: Betweens, **kwargs):
+    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
         """将数据集转换为numpy格式保存（兼容保留betweens参数，但内部不再使用切片）"""
         save_dir = save_dir / DriveDataset.name()
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        train_dataset = DriveDataset.get_train_dataset(base_dir, **kwargs)
-        test_dataset = DriveDataset.get_test_dataset(base_dir, **kwargs)
+        train_dataset = DriveDataset.get_train_dataset(root_dir, **kwargs)
+        test_dataset = DriveDataset.get_test_dataset(root_dir, **kwargs)
 
         from torch.utils.data import DataLoader
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
@@ -94,21 +102,18 @@ class DriveDataset(CustomDataset):
         return "DRIVE"
 
     @staticmethod
-    def get_train_dataset(base_dir: Path, **kwargs):
-        """获取训练集实例"""
-        return DriveDataset(base_dir, 'train', **kwargs)
+    def get_train_dataset(root_dir: Path, **kwargs):
+        return DriveDataset(root_dir, 'train', **kwargs)
 
     @staticmethod
-    def get_valid_dataset(base_dir: Path, **kwargs):
-        """DRIVE无单独验证集，返回None"""
-        return None
+    def get_valid_dataset(root_dir: Path, **kwargs):
+        return DriveDataset(root_dir, 'test', **kwargs)
 
     @staticmethod
-    def get_test_dataset(base_dir: Path, **kwargs):
-        """获取测试集实例"""
-        return DriveDataset(base_dir, 'test', **kwargs)
+    def get_test_dataset(root_dir: Path, **kwargs):
+        return DriveDataset(root_dir, 'test', **kwargs)
 
     def _get_transforms(self):
         """获取数据集的变换"""
-        from utils.transform import get_transforms
+        from src.utils.transform import get_transforms
         return get_transforms()

@@ -212,7 +212,6 @@ class ImageDrawer:
             self.draw_mask(mask, color, alpha)
         return self
 
-
     def finish_as_PIL(self) -> Image.Image:
         """
         Finish drawing and return the image.
@@ -248,3 +247,51 @@ class ImageDrawer:
         :param output_filename: The filename to save the image.
         """
         cv2.imwrite(output_filename, self.finish_as_opencv())
+
+# bbox(x,y,w,h) to bbox(x1,y1,x2,y2)
+def bbox_xywh_to_xyxy(bbox: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """
+    Convert a bounding box (x, y, w, h) to (x1, y1, x2, y2).
+
+    :param bbox: The bounding box coordinates (x, y, w, h).
+    :return: The bounding box coordinates (x1, y1, x2, y2).
+    """
+    x, y, w, h = bbox
+    return x, y, x + w - 1, y + h - 1
+# bbox(x1,y1,x2,y2) to bbox(x,y,w,h)
+def bbox_xyxy_to_xywh(bbox: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """
+    Convert a bounding box (x1, y1, x2, y2) to (x, y, w, h).
+
+    :param bbox: The bounding box coordinates (x1, y1, x2, y2).
+    :return: The bounding box coordinates (x, y, w, h).
+    """
+    x1, y1, x2, y2 = bbox
+    return x1, y1, x2 - x1 + 1, y2 - y1 + 1
+
+# mask to bbox
+def mask_to_bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
+    """
+    Convert a binary mask to a bounding box.
+
+    :param mask: The binary mask. (H, W)
+    :return: The bounding box coordinates (x, y, w, h).
+    """
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    return cmin, rmin, cmax - cmin + 1, rmax - rmin + 1
+
+def mask_to_center_point(mask: np.ndarray) -> tuple[int, int]:
+    """
+    Convert a binary mask to a center point.
+
+    :param mask: The binary mask. (H, W)
+    :return: The center point (x, y).
+    """
+    points = np.argwhere(mask == 255)
+    if len(points) == 0:
+        return None
+    center = np.mean(points, axis=0)
+    return (int(center[1]), int(center[0]))

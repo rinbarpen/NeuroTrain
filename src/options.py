@@ -68,13 +68,11 @@ def parse_args():
     parser.add_argument('--task', type=str, help='task name')
     parser.add_argument('--run_id', type=str, help='run id')
 
-    parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
+    # parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
+    # TODO: support for future!
+    parser.add_argument('--metrics', nargs='+', default=[], help='metrics, support iou-family dice accuracy f1 recall auc mAP@[threshold] mF1@[threshold]')
     
     args = parser.parse_args()
-    if args.data_cacher:
-        from tools.data_cacher import data_cacher
-        data_cacher(args.config)
-        sys.exit(0)
 
     config_file = Path(args.config)
     if not config_file.exists():
@@ -96,7 +94,7 @@ def parse_args():
         CONFIG['private']['log']['debug'] = args.debug
 
     if args.data:
-        CONFIG['dataset'] = {"name": args.data, "base_dir": args.data_dir}
+        CONFIG['dataset'] = {"name": args.data, "root_dir": args.data_dir}
     if args.num_workers:
         CONFIG['dataloader']['num_workers'] = args.num_workers
     if args.continue_id:
@@ -177,7 +175,7 @@ def parse_args():
         except Exception:
             CONFIG['private']['wandb'] = False
             print("wandb isn't installed, disable to launch wandb")
-
+    
     console = Console()
     json_data = JSON(json.dumps(CONFIG, indent=2))
     console.print(json_data)

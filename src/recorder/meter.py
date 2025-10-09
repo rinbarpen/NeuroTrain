@@ -1,8 +1,11 @@
 import pandas as pd
 import numpy as np
 import torch
-from typing import Literal, List, Sequence, TextIO, Iterator
+from typing import Literal, List, Sequence, TextIO, Iterator, Union, Optional
 from pathlib import Path
+import torch.distributed as dist
+
+from .data_saver import DataSaver
 
 class MiniMeter:
     def __init__(self, name: str, fmt: str=':4f'):
@@ -16,7 +19,7 @@ class MiniMeter:
         self.sum = 0.0
         self.count = 0
 
-    def update(self, val: float|np.ndarray|torch.Tensor, n: int=1):
+    def update(self, val: Union[float, np.ndarray, torch.Tensor], n: int=1):
         if isinstance(val, torch.Tensor):
             val = val.item()
         elif isinstance(val, np.ndarray):
@@ -33,47 +36,61 @@ class MiniMeter:
     def __repr__(self):
         return self.__str__()
     
-    def all_reduce(self):
-        if torch.distributed.is_initialized():
-            torch.distributed.all_reduce(torch.Tensor([self.sum]))
-            torch.distributed.all_reduce(torch.Tensor([self.count]))
-            self.avg = (self.sum / self.count).item()
-            self.sum = self.sum.item()
-            self.count = self.count.item()
-            self.name = self.name + f'_{torch.distributed.get_rank()}'
+    def sync(self):
+        if not dist.is_available() or not dist.is_initialized():
+            return
+
+        t = torch.Tensor([self.sum, self.count], dtype=torch.float32, device='cuda')
+        dist.barrier()
+        dist.all_reduce(t)
+        self.sum, self.count = t.tolist()
+        self.avg = (self.sum / self.count).item()
+        self.sum = self.sum.item()
+        self.count = self.count.item()
+        self.name = self.name + f'_{dist.get_rank()}'
 
     def complete(self):
-        self.all_reduce()
+        self.sync()
         return self.avg, self.sum, self.count
 
-
+_meter_manager: dict[str, 'Meter'] = {}
 class Meter:
     def __init__(self, name: str, fmt: str=':4f'):
         self.name = name
         self.fmt = fmt
         self.reset()
 
+        _meter_manager.update({name: self})
+
     def reset(self):
-        self.vals = []
+        self._vals = []
     
     @property
-    def avg(self):
-        return np.mean(self.vals)
+    def val(self) -> np.float64:
+        return np.float64(self._vals[-1])
     
     @property
-    def sum(self):
-        return np.sum(self.vals)
+    def vals(self) -> np.ndarray:
+        return np.array(self._vals, dtype=np.float64)
+
+    @property
+    def avg(self) -> np.float64:
+        return np.float64(np.mean(self._vals))
     
     @property
-    def count(self):
-        return len(self.vals)
+    def sum(self) -> np.float64:
+        return np.float64(np.sum(self._vals))
     
-    def update(self, val: float|np.ndarray|torch.Tensor, n: int=1):
+    @property
+    def count(self) -> int:
+        return len(self._vals)
+    
+    def update(self, val: Union[float, np.ndarray, torch.Tensor], n: int=1):
         if isinstance(val, torch.Tensor):
             val = val.item()
         elif isinstance(val, np.ndarray):
             val = val.item()
-        self.vals.extend([val] * n)
+        self._vals.extend([val] * n)
 
     def __str__(self):
         fmtstr = '{name} {avg' + self.fmt + '} ({sum' + self.fmt + '})'
@@ -81,8 +98,32 @@ class Meter:
     
     def __repr__(self):
         return self.__str__()
-
-    def paint(self, filename: Path, title: str|None=None, xlabel: str|None=None, ylabel: str|None=None, xlim: tuple[int, int]|None=None, ylim: tuple[int, int]|None=None):
+    
+    def sync(self):
+        if not torch.distributed.is_available() or not torch.distributed.is_initialized():
+            return
+        t = torch.Tensor([self.sum, self.count], dtype=torch.float32, device='cuda')
+        dist.barrier()
+        dist.all_reduce(t)
+        self.sum, self.count = t.tolist()
+        self.avg = (self.sum / self.count).item()
+        self.sum = self.sum.item()
+        self.count = self.count.item()
+        self.name = self.name + f'_{dist.get_rank()}'
+    
+    def complete(self):
+        self.sync()
+        return {'avg': self.avg, 'sum': self.sum, 'count': self.count}
+    
+    @staticmethod
+    def instance(name: str) -> Optional['Meter']:
+        return _meter_manager.get(name, None)
+    
+    @staticmethod
+    def available_instances() -> list[str]:
+        return list(_meter_manager.keys())
+    
+    def paint(self, filename: Path, title: Optional[str]=None, xlabel: Optional[str]=None, ylabel: Optional[str]=None, xlim: Optional[tuple[int, int]]=None, ylim: Optional[tuple[int, int]]=None):
         from utils.painter import Plot
         if title is None: 
             title = self.name
@@ -107,59 +148,24 @@ class Meter:
         plot.save(filename)
 
     # filename: {name}.csv, {name}.parquet
-    def save(self, filename: Path, name: str|None=None):
+    def save(self, filename: Path, name: Optional[str]=None, to_csv=True, to_parquet=True):
         if name is None:
             name = self.name
         df = pd.DataFrame({name: self.vals})
-        df.to_csv(filename.with_suffix('.csv'), index=False)
-        df.to_parquet(filename.with_suffix('.parquet'), index=False)
+        if to_csv:
+            df.to_csv(filename.with_suffix('.csv'), index=False)
+        if to_parquet:
+            df.to_parquet(filename.with_suffix('.parquet'), index=False)
+    
+    def save_to_db(self, db_name: str):
+        from utils.db import DB
+        with DB(db_name) as db:
+            db.update(self.name, self.vals)
 
-    def save_as(self, filename: Path, name: str|None=None):
+    def save_as(self, filename: Path, name: Optional[str]=None):
         if name is None:
             name = self.name
         # send to DataSaver 
         DataSaver.save(filename, name, self.vals)
 
 
-import queue
-import threading
-class DataSaver:
-    def __new__(cls, *args, **kwargs):
-        if not hasattr(cls, '_instance'):
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def __init__(self):
-        self._queue = queue.Queue()
-
-        self._mapping: dict[str, pd.DataFrame] = {}
-
-        self._thread = threading.Thread(target=self._run)
-        self._running = True
-        self._thread.start()
-
-    def _run(self):
-        while self._running:
-            try:
-                filename, df = self._queue.get()
-                self._mapping[filename] = pd.concat([self._mapping.get(filename, pd.DataFrame()), df], axis=1, inplace=True, ignore_index=True, sort=False)
-            except queue.Empty:
-                pass
-
-    @staticmethod
-    def complete():
-        DataSaver._instance._running = False
-        DataSaver._instance._queue.join()
-        DataSaver._instance._thread.join()
-    
-    @staticmethod
-    def save_to_local():
-        for filename, df in DataSaver._instance._mapping.items():
-            df.to_csv(filename.with_suffix('.csv'), index=False)
-            df.to_parquet(filename.with_suffix('.parquet'), index=False)
-        DataSaver._instance._mapping.clear()
-
-    @staticmethod
-    def save(filename: Path, name: str, vals: Sequence[float]):
-        df = pd.DataFrame({name: vals})
-        DataSaver._queue.put((filename, df))

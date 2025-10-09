@@ -8,7 +8,10 @@ from rich.table import Table
 from rich.console import Console
 
 from src.config import get_config, ALL_STYLES
-from src.utils import DataSaver, ScoreAggregator, MetricRecorder, Plot, select_postprocess_fn
+from src.utils import DataSaver, select_postprocess_fn
+from src.recorder.metric_recorder import ScoreAggregator
+from src.recorder.metric_recorder import MetricRecorder
+from src.visualizer.painter import Plot
 
 class Tester:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -34,8 +37,8 @@ class Tester:
         device = torch.device(c['device'])
         self.model = self.model.to(device)
 
-        for inputs, targets in tqdm(test_dataloader, desc="Testing..."):
-            inputs, targets = inputs.to(device), targets.to(device)
+        for batch_inputs in tqdm(test_dataloader, desc="Testing..."):
+            inputs, targets = batch_inputs['image'].to(device), batch_inputs['mask'].to(device)
             outputs = self.model(inputs)
             targets, outputs = self.postprocess(targets, outputs)
             self.calculator.finish_one_batch(

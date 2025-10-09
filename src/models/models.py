@@ -1,6 +1,19 @@
+import torch
 
 def get_model(model_name: str, config: dict):
-    match model_name:
+    # 预先定义默认的torch数据类型
+    default_dtype = torch.float16
+    
+    match model_name.lower():
+        case "clip":
+            from .llm.clip import CLIP
+            model = CLIP(
+                model_name=config.get('model_name', 'openai/clip-vit-base-patch32'), 
+                cache_dir=config.get('cache_dir', None),
+                device=config.get('device', 'cuda'), 
+                dtype=config.get('dtype', default_dtype)
+            )
+            return model
         case 'unet_neck':
             from .like.unet_neck import UNet
             model = UNet(config['n_channels'], config['n_classes'], bilinear=False)
@@ -93,7 +106,6 @@ def get_model(model_name: str, config: dict):
             
         case 'huggingface' | 'hf':
             from transformers import AutoTokenizer, AutoModelForCausalLM
-            import torch
             
             tokenizer_c = config['tokenizer']
             tokenizer = AutoTokenizer.from_pretrained(

@@ -3,13 +3,13 @@ from typing import Literal
 from .utils import metric
 
 @metric
-def iou_seg(pred: np.ndarray, target: np.ndarray):
+def iou_seg(target: np.ndarray, pred: np.ndarray, class_split: bool=False):
     intersection = np.logical_and(pred, target).sum()
     union = np.logical_or(pred, target).sum()
     return intersection / union if union > 0 else 0.0
 
 @metric
-def iou_bbox(pred: np.ndarray, target: np.ndarray):
+def iou_bbox(target: np.ndarray, pred: np.ndarray, class_split: bool=False):
     # Ensure coordinates are floats for correct arithmetic
     pred = pred.astype(float)
     target = target.astype(float)
