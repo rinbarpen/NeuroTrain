@@ -62,7 +62,12 @@ if __name__ == "__main__":
         model.load_state_dict(model_params)
         is_continue_mode = True
 
-    train_loader, valid_loader, test_loader = get_train_valid_test_dataloader()
+    train_loader, valid_loader, test_loader = get_train_valid_test_dataloader(use_valid=True)
+    
+    # 如果没有单独的验证集，使用测试集作为验证集
+    if valid_loader is None and test_loader is not None:
+        valid_loader = test_loader
+        logging.info("使用测试集作为验证集进行训练")
     if is_train():
         train_dir.mkdir(exist_ok=True)
         dump_config(train_dir / "config.json")

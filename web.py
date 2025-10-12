@@ -253,7 +253,7 @@ class TrainingMonitor:
         
         # 读取图片
         loss_image = None
-        loss_image_file = self.output_dir / "train_epoch_loss.png"
+        loss_image_file = self.output_dir / "epoch_loss.png"
         if loss_image_file.exists():
             try:
                 loss_image = str(loss_image_file)
@@ -363,12 +363,12 @@ def create_loss_chart(loss_data):
     plt.figure(figsize=(10, 6))
     
     if 'train_loss' in loss_data and loss_data['train_loss']:
-        epochs = range(1, len(loss_data['train_loss']) + 1)
-        plt.plot(epochs, loss_data['train_loss'], 'b-', label='训练损失', linewidth=2)
+        train_epochs = range(1, len(loss_data['train_loss']) + 1)
+        plt.plot(train_epochs, loss_data['train_loss'], 'b-', label='训练损失', linewidth=2)
     
     if 'valid_loss' in loss_data and loss_data['valid_loss']:
-        epochs = range(1, len(loss_data['valid_loss']) + 1)
-        plt.plot(epochs, loss_data['valid_loss'], 'r-', label='验证损失', linewidth=2)
+        valid_epochs = range(1, len(loss_data['valid_loss']) + 1)
+        plt.plot(valid_epochs, loss_data['valid_loss'], 'r-', label='验证损失', linewidth=2)
     
     plt.title('训练损失曲线', fontsize=14)
     plt.xlabel('Epoch')

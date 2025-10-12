@@ -1,6 +1,5 @@
 from .transform import get_transforms, build_image_transforms, VisionTransformersBuilder
 from .criterion import CombineCriterion, DiceLoss, Loss, KLLoss
-from .data_saver import DataSaver
 from .early_stopping import EarlyStopping
 from .image_utils import ImageDrawer
 # 移除循环导入 - 这些类应该从 src.recorder 直接导入

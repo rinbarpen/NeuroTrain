@@ -319,8 +319,11 @@ class DatasetAnalyzer:
                     if label is None:
                         continue
                     
-                    # 记录标签形状
-                    label_shapes.append(label.shape)
+                    # 记录标签形状（对于标量标签记录为 (1,)）
+                    if label.ndim == 0:
+                        label_shapes.append((1,))  # 标量标签记录为 (1,)
+                    else:
+                        label_shapes.append(label.shape)
                     
                     # 使用自定义标签处理函数
                     processed_labels = self.label_processor(label)

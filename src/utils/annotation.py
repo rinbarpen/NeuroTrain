@@ -80,7 +80,7 @@ def buildin(desc: str=""):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            print(f"Using buildin function {f.__name__}")
+            # print(f"Using buildin function {f.__name__}")
             return f(*args, **kwargs)
         return wrapper
     return decorator

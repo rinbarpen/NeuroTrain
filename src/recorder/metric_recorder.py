@@ -103,13 +103,7 @@ class ScoreAggregator:
         for metric, class_scores_dict in self._mcm_scores.items():
             result[metric] = {}
             for class_label, scores_list in class_scores_dict.items():
-                # Handle potential empty lists gracefully (np.mean/std return NaN)
-                if scores_list:
-                    result[metric][class_label] = FLOAT(func(scores_list))
-                else:
-                    # Or handle as required, e.g., 0.0 or raise error
-                    result[metric][class_label] = FLOAT(np.nan)  # Using NaN is standard
-
+                result[metric][class_label] = FLOAT(func(scores_list))
         return result
 
     def _compute_cmm(self) -> ClassMetricManyScoreDict:
@@ -138,10 +132,7 @@ class ScoreAggregator:
         for class_label, metric_scores_dict in cmm_scores.items():
             result[class_label] = {}
             for metric, scores_list in metric_scores_dict.items():
-                if scores_list:
-                    result[class_label][metric] = FLOAT(func(scores_list))
-                else:
-                    result[class_label][metric] = FLOAT(np.nan)
+                result[class_label][metric] = FLOAT(func(scores_list))
         return result
 
     def _compute_ml1(
@@ -159,10 +150,7 @@ class ScoreAggregator:
                     scores_list
                 )  # Concatenate all scores for this metric
 
-            if all_scores_for_metric:
-                result[metric] = FLOAT(func(all_scores_for_metric))
-            else:
-                result[metric] = FLOAT(np.nan)
+            result[metric] = FLOAT(func(all_scores_for_metric))
         return result
 
     def _compute_m2(self) -> MetricLabelManyScoreDict:

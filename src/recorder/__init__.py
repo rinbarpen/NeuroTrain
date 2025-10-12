@@ -20,7 +20,7 @@ from .meter import MiniMeter, Meter
 from .metric_manager import MetricManager
 
 # 指标记录相关
-from .metric_recorder import MetricRecorder, ScoreAggregator
+from .meter_recorder import MeterRecorder
 
 # 导出所有主要类
 __all__ = [
@@ -35,6 +35,5 @@ __all__ = [
     'MetricManager',
     
     # 指标记录
-    'MetricRecorder',
-    'ScoreAggregator',
+    'MeterRecorder',
 ]

@@ -818,7 +818,9 @@ class Subplot:
         label: str = "Loss",
         title="Epoch-Loss",
     ):
-        epochs = np.arange(1, epoch + 1, dtype=np.int32)
+        # 确保epochs数组长度与losses数组长度匹配
+        actual_epochs = len(losses)
+        epochs = np.arange(1, actual_epochs + 1, dtype=np.int32)
         self._ax.plot(epochs, losses, label=label)
 
         self._ax.set_title(title)
@@ -826,6 +828,64 @@ class Subplot:
         self._ax.set_ylabel("Loss")
         self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
+        self._ax.grid(True, alpha=0.3)
+        return self
+
+    @buildin(desc="loss by step")
+    def step_loss(
+        self,
+        step_losses: np.ndarray,
+        label: str = "Loss",
+        title: str = "Step-Loss",
+    ):
+        """绘制step级别的损失图"""
+        steps = np.arange(1, len(step_losses) + 1, dtype=np.int32)
+        self._ax.plot(steps, step_losses, label=label)
+        
+        self._ax.set_title(title)
+        self._ax.set_xlabel("Step")
+        self._ax.set_ylabel("Loss")
+        self._ax.legend()
+        self._ax.grid(True, alpha=0.3)
+        return self
+
+    @buildin(desc="learning rate by step")
+    def step_lr(
+        self,
+        step_lrs: np.ndarray,
+        label: str = "Learning Rate",
+        title: str = "Step-LR",
+    ):
+        """绘制step级别的学习率图"""
+        steps = np.arange(1, len(step_lrs) + 1, dtype=np.int32)
+        self._ax.plot(steps, step_lrs, label=label)
+        
+        self._ax.set_title(title)
+        self._ax.set_xlabel("Step")
+        self._ax.set_ylabel("Learning Rate")
+        self._ax.legend()
+        self._ax.grid(True, alpha=0.3)
+        return self
+
+    @buildin(desc="learning rate by epoch")
+    def epoch_lr(
+        self,
+        epoch: int,
+        num_epochs: int,
+        epoch_lrs: np.ndarray,
+        label: str = "Learning Rate",
+        title: str = "Epoch-LR",
+    ):
+        """绘制epoch级别的学习率图"""
+        epochs = np.arange(1, len(epoch_lrs) + 1, dtype=np.int32)
+        self._ax.plot(epochs, epoch_lrs, label=label)
+        
+        self._ax.set_title(title)
+        self._ax.set_xlabel("Epoch")
+        self._ax.set_ylabel("Learning Rate")
+        self._ax.set_xlim(1, num_epochs)
+        self._ax.legend()
+        self._ax.grid(True, alpha=0.3)
         return self
 
     @buildin(desc="loss by epoch with tasks")
@@ -837,10 +897,16 @@ class Subplot:
         labels: list[str] = ["Loss"],
         title="Epoch-Loss",
     ):
-        epochs = np.arange(1, epoch + 1, dtype=np.int32)
+        # 使用第一个损失数组的长度来确定epochs数组长度
+        if losses and len(losses) > 0:
+            actual_epochs = len(losses[0])
+            epochs = np.arange(1, actual_epochs + 1, dtype=np.int32)
+        else:
+            epochs = np.arange(1, epoch + 1, dtype=np.int32)
 
         for i, label in enumerate(labels):
-            self._ax.plot(epochs, losses[i], label=label)
+            if i < len(losses):
+                self._ax.plot(epochs[:len(losses[i])], losses[i], label=label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel("Epoch")
@@ -858,7 +924,10 @@ class Subplot:
         class_label: str,
         title: str = "Epoch-Label-Metric",
     ):
-        self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=class_label)
+        # 确保epochs数组长度与metrics数组长度匹配
+        actual_epochs = len(metrics)
+        epochs = np.arange(1, actual_epochs + 1, dtype=np.int32)
+        self._ax.plot(epochs, metrics, label=class_label)
 
         self._ax.set_title(title)
         self._ax.set_xlabel("Epoch")
@@ -881,7 +950,10 @@ class Subplot:
             if isinstance(metrics, list) or isinstance(metrics, tuple):
                 metrics = np.array(metrics, dtype=np.float64)
 
-            self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=label)
+            # 确保epochs数组长度与metrics数组长度匹配
+            actual_epochs = len(metrics)
+            epochs = np.arange(1, actual_epochs + 1, dtype=np.int32)
+            self._ax.plot(epochs, metrics, label=label)
 
         self._ax.set_title(title)
         self._ax.set_xlim(1, num_epochs)
@@ -896,16 +968,37 @@ class Subplot:
         metrics_scores: MetricLabelManyScoreDict,
         metric_labels: list[str],
         title: str = "Epoch-Metrics",
+        std_scores: MetricLabelManyScoreDict = None,
     ):
         for metric in metric_labels:
             metrics = metrics_scores[metric]
             if isinstance(metrics, list) or isinstance(metrics, tuple):
                 metrics = np.array(metrics, dtype=np.float64)
-            self._ax.plot(np.arange(1, epoch + 1, dtype=np.int32), metrics, label=metric)
+            
+            # 确保epochs数组长度与metrics数组长度匹配
+            actual_epochs = len(metrics)
+            epochs = np.arange(1, actual_epochs + 1, dtype=np.int32)
+            
+            # 绘制均值曲线
+            self._ax.plot(epochs, metrics, label=metric, marker='o', markersize=4)
+            
+            # 如果有标准差数据，添加误差带
+            if std_scores and metric in std_scores:
+                std = std_scores[metric]
+                if isinstance(std, (list, tuple)):
+                    std = np.array(std, dtype=np.float64)
+                if len(std) == len(metrics):
+                    self._ax.fill_between(
+                        epochs, 
+                        metrics - std, 
+                        metrics + std, 
+                        alpha=0.2
+                    )
 
         self._ax.set_title(title)
         self._ax.set_xlim(1, num_epochs)
         self._ax.legend()
+        self._ax.grid(True, alpha=0.3)
         return self
 
     @buildin(desc="confusion matrix")
@@ -1185,7 +1278,7 @@ class Plot:
             plt.show()
         return self
     
-    def save(self, filename: str, **kwargs):
+    def save(self, filename: str|Path, **kwargs):
         """保存图形"""
         if self._fig is not None:
             self._fig.savefig(filename, **kwargs)

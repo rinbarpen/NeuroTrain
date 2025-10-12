@@ -197,7 +197,7 @@ def _get_dataloader_traditional_mode(use_valid: bool):
         num_workers=num_workers,
         shuffle=shuffle,
     )
-    if use_valid:
+    if use_valid and "valid" in c:
         valid_dataset = get_dataset('valid')
         valid_loader = DataLoader(
             valid_dataset,
