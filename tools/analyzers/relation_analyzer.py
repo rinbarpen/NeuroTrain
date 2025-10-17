@@ -25,9 +25,18 @@ import logging
 import json
 from datetime import datetime
 from collections import defaultdict
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    # 创建占位符
+    go = None
+    px = None
+    make_subplots = None
 
 class RelationAnalyzer:
     """

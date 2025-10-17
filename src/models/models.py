@@ -1,7 +1,8 @@
 import torch
 
+from constants import PRETRAINED_MODEL_DIR
+
 def get_model(model_name: str, config: dict):
-    # 预先定义默认的torch数据类型
     default_dtype = torch.float16
     
     match model_name.lower():
@@ -9,14 +10,10 @@ def get_model(model_name: str, config: dict):
             from .llm.clip import CLIP
             model = CLIP(
                 model_name=config.get('model_name', 'openai/clip-vit-base-patch32'), 
-                cache_dir=config.get('cache_dir', None),
+                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
                 device=config.get('device', 'cuda'), 
                 dtype=config.get('dtype', default_dtype)
             )
-            return model
-        case 'unet_neck':
-            from .like.unet_neck import UNet
-            model = UNet(config['n_channels'], config['n_classes'], bilinear=False)
             return model
         case 'unet':
             from .sample.unet import UNet
@@ -110,8 +107,9 @@ def get_model(model_name: str, config: dict):
             tokenizer_c = config['tokenizer']
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_c['model'],
-                cache_dir=tokenizer_c['cache_dir'],
-                use_fast=tokenizer_c['use_fast'],
+                trust_remote_code=tokenizer_c.get('trust_remote_code', False),
+                cache_dir=tokenizer_c.get('cache_dir', PRETRAINED_MODEL_DIR),
+                use_fast=tokenizer_c.get('use_fast', False),
             )
             model_c = config['model']
             torch_dtype = {
@@ -121,10 +119,10 @@ def get_model(model_name: str, config: dict):
             }[model_c.get('torch_dtype', "bfloat16")]
             model = AutoModelForCausalLM.from_pretrained(
                 model_c['model'],
-                cache_dir=model_c['cache_dir'],
-                trust_remote_code=model_c['trust_remote_code'],
+                cache_dir=model_c.get('cache_dir', PRETRAINED_MODEL_DIR),
+                trust_remote_code=model_c.get('trust_remote_code', False),
                 torch_dtype=torch_dtype,
-                device_map=model_c['device_map'],
+                device_map=model_c.get('device_map', 'auto'),
             )
             return {
                 "tokenizer": tokenizer,

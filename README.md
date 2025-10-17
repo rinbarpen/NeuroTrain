@@ -9,6 +9,7 @@
 - **智能采样策略**: 权重采样、平衡采样、优先级采样
 - **丰富的数据增强**: 旋转、翻转、亮度调整、弹性变换等
 - **混合精度训练**: 支持bfloat16混合精度训练，提升训练效率
+- **模型量化支持**: 支持动态量化、静态量化、QAT、GPTQ、AWQ、BitsAndBytes等多种量化方法
 - **模块化设计**: 易于扩展和自定义
 - **完整的实验管理**: 自动保存训练日志、模型检查点和结果分析
 - **配置驱动**: 使用 TOML 配置文件管理实验参数
@@ -231,6 +232,61 @@ python tools/analyzers/metrics_analyzer.py --run_id {run_id}
 ```
 
 ### 可视化训练过程
+
+## 🚀 模型量化
+
+NeuroTrain支持多种模型量化方法，帮助减少模型大小和推理时间：
+
+### 支持的量化方法
+- **动态量化**: PyTorch内置，无需校准数据
+- **静态量化**: PyTorch内置，需要校准数据集
+- **量化感知训练(QAT)**: 训练时考虑量化影响
+- **GPTQ量化**: 适用于大语言模型
+- **AWQ量化**: 保持激活精度
+- **BitsAndBytes量化**: 4bit/8bit量化
+
+### 快速开始量化
+
+```python
+from src.utils.quantization import QuantizationConfig, QuantizationManager
+
+# 创建量化配置
+config = QuantizationConfig(method="dynamic", dtype="qint8")
+
+# 量化模型
+manager = QuantizationManager(config)
+quantized_model = manager.quantize_model(your_model)
+
+# 获取模型信息
+size_info = manager.get_model_size_info(quantized_model)
+print(f"模型大小: {size_info['model_size_mb']:.2f}MB")
+```
+
+### 命令行量化工具
+
+```bash
+# 量化模型
+python tools/quantization_cli.py quantize model.pt output/ --method dynamic
+
+# 分析量化效果
+python tools/quantization_cli.py analyze original.pt quantized.pt analysis/
+
+# 运行示例
+python tools/quantization_cli.py example --method dynamic
+```
+
+### 配置文件量化
+
+```yaml
+# config.yaml
+quantization:
+  enabled: true
+  method: "dynamic"
+  dtype: "qint8"
+```
+
+详细使用说明请参考 [量化模块文档](src/quantization/README.md)。
+
 ## 🧪 测试
 
 运行测试以确保框架正常工作：

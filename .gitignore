@@ -1,7 +1,8 @@
 .vscode/*
 .idea/*
 results/*
-output/*
+**/outputs/**
+**/output/**
 runs/*
 data/*
 logs/*

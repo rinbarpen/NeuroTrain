@@ -1,9 +1,12 @@
 """NeuroTrain Analyzers Package
 
-该包提供了三个核心分析器模块：
+该包提供了多个核心分析器模块：
 - AttentionAnalyzer: 注意力机制分析器
 - MetricsAnalyzer: 数据指标分析器  
 - DatasetAnalyzer: 数据集分析器
+- MaskAnalyzer: Mask信息分析器
+- RelationAnalyzer: 跨模态关系分析器
+- LoRAAnalyzer: LoRA模型分析器
 
 每个分析器都提供独立的功能和清晰的接口，便于单独维护和调用。
 """
@@ -14,6 +17,17 @@ from .metrics_analyzer import MetricsAnalyzer, analyze_model_metrics
 from .dataset_analyzer import DatasetAnalyzer, analyze_dataset
 from .mask_analyzer import MaskAnalyzer, analyze_image_mask, analyze_text_mask
 from .relation_analyzer import RelationAnalyzer, analyze_cross_modal_similarity, build_relation_graph
+try:
+    from .lora_analyzer import LoRAAnalyzer, analyze_lora_weights, merge_lora_adapters, compare_lora_adapters
+    LORA_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: LoRA analyzer not available: {e}")
+    LORA_AVAILABLE = False
+    # 创建占位符
+    LoRAAnalyzer = None
+    analyze_lora_weights = None
+    merge_lora_adapters = None
+    compare_lora_adapters = None
 
 __all__ = [
     'AttentionAnalyzer', 'analyze_model_attention',
@@ -21,6 +35,7 @@ __all__ = [
     'DatasetAnalyzer', 'analyze_dataset',
     'MaskAnalyzer', 'analyze_image_mask', 'analyze_text_mask',
     'RelationAnalyzer', 'analyze_cross_modal_similarity', 'build_relation_graph',
+    'LoRAAnalyzer', 'analyze_lora_weights', 'merge_lora_adapters', 'compare_lora_adapters',
     'UnifiedAnalyzer', 'create_unified_analyzer', 'run_comprehensive_analysis'
 ]
 
@@ -37,6 +52,7 @@ class UnifiedAnalyzer:
     - 数据集质量分析
     - Mask信息分析（图像和文本）
     - 跨模态关系分析（类似CLIP）
+    - LoRA模型分析和合并
     """
     
     def __init__(self, 
@@ -60,10 +76,16 @@ class UnifiedAnalyzer:
         
         # 初始化各个分析器
         self.attention_analyzer = AttentionAnalyzer(output_dir=output_dir)
-        self.metrics_analyzer = MetricsAnalyzer(output_dir=output_dir)
-        self.dataset_analyzer = DatasetAnalyzer(output_dir=output_dir)
+        self.metrics_analyzer = MetricsAnalyzer(result_dir=Path(output_dir))
+        self.dataset_analyzer = DatasetAnalyzer(dataset_name=dataset_name, output_dir=output_dir) if dataset_name else None
         self.mask_analyzer = MaskAnalyzer(save_dir=Path(output_dir))
         self.relation_analyzer = RelationAnalyzer(save_dir=Path(output_dir))
+        
+        # 条件性初始化LoRA分析器
+        if LORA_AVAILABLE:
+            self.lora_analyzer = LoRAAnalyzer(output_dir=output_dir)
+        else:
+            self.lora_analyzer = None
         
     def analyze_attention(self, model=None, **kwargs):
         """分析注意力机制"""
@@ -98,6 +120,24 @@ class UnifiedAnalyzer:
     def analyze_relations(self, image_features, text_features, **kwargs):
         """分析跨模态关系"""
         return self.relation_analyzer.analyze_cross_modal_similarity(image_features, text_features, **kwargs)
+    
+    def analyze_lora_weights(self, adapter_path, **kwargs):
+        """分析LoRA权重"""
+        if self.lora_analyzer is None:
+            raise RuntimeError("LoRA analyzer not available. Please install required dependencies.")
+        return self.lora_analyzer.analyze_lora_weights(adapter_path, **kwargs)
+    
+    def merge_lora_adapters(self, base_model, adapters, output_name, **kwargs):
+        """合并LoRA适配器"""
+        if self.lora_analyzer is None:
+            raise RuntimeError("LoRA analyzer not available. Please install required dependencies.")
+        return self.lora_analyzer.merge_adapters(base_model, adapters, output_name, **kwargs)
+    
+    def compare_lora_adapters(self, adapters, **kwargs):
+        """比较LoRA适配器"""
+        if self.lora_analyzer is None:
+            raise RuntimeError("LoRA analyzer not available. Please install required dependencies.")
+        return self.lora_analyzer.compare_adapters(adapters, **kwargs)
     
     def run_comprehensive_analysis(self, **kwargs):
         """运行全面分析"""

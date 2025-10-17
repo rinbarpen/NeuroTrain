@@ -14,8 +14,8 @@ if __name__ == '__main__':
 
     config_path = Path(args.config)
     if not config_path.exists():
-        from src.config import PIPELINE_CONFIG_DIR
-        config_path = Path(PIPELINE_CONFIG_DIR) / args.config
+        from src.constants import ProjectFilenameEnv
+        config_path = ProjectFilenameEnv().pipeline_config_dir / args.config
 
     match config_path.suffix:
         case '.toml':

@@ -12,6 +12,7 @@ tools/analyzers/
 ├── dataset_analyzer.py      # 数据集质量分析器
 ├── mask_analyzer.py         # Mask信息分析器（图像和文本）
 ├── relation_analyzer.py     # 跨模态关系分析器（类似CLIP）
+├── lora_analyzer.py         # LoRA模型分析器
 └── README.md               # 本文档
 ```
 
@@ -72,7 +73,44 @@ results = analyzer.analyze_predictions(
 analyzer.plot_confusion_matrix(y_true, y_pred)
 ```
 
-### 3. DatasetAnalyzer - 数据集分析器
+### 3. LoRAAnalyzer - LoRA模型分析器
+
+专门用于LoRA模型的分析、合并和可视化。
+
+**主要功能：**
+- LoRA适配器合并（顺序合并、加权合并、平均合并）
+- LoRA权重分析和可视化
+- 模型大小和参数统计
+- 合并策略比较
+- 权重分布分析
+
+**使用示例：**
+```python
+from tools.analyzers import LoRAAnalyzer
+
+# 创建LoRA分析器
+analyzer = LoRAAnalyzer(output_dir="runs/lora_analysis")
+
+# 合并LoRA适配器
+merge_info = analyzer.merge_adapters(
+    base_model="THUDM/chatglm3-6b",
+    adapters=["./output/lora_run1", "./output/lora_run2"],
+    output_name="merged_model",
+    merge_strategy="weighted",
+    weights=[0.7, 0.3]
+)
+
+# 分析LoRA权重
+weight_analysis = analyzer.analyze_lora_weights("./output/lora_run1")
+
+# 比较多个适配器
+comparison = analyzer.compare_adapters([
+    "./output/lora_run1", 
+    "./output/lora_run2"
+])
+```
+
+### 4. DatasetAnalyzer - 数据集分析器
 
 用于数据集特征分析、质量检查和统计信息生成。
 
@@ -132,6 +170,9 @@ from tools.analyzers import (
     analyze_model_attention,
     analyze_model_metrics,
     analyze_dataset,
+    analyze_lora_weights,
+    merge_lora_adapters,
+    compare_lora_adapters,
     run_comprehensive_analysis
 )
 
@@ -153,6 +194,22 @@ dataset_results = analyze_dataset(
     dataset_name='CIFAR10',
     dataset_config={'data_dir': './data'}
 )
+
+# 快速LoRA权重分析
+lora_analysis = analyze_lora_weights("./output/lora_run1")
+
+# 快速LoRA合并
+merge_info = merge_lora_adapters(
+    base_model="THUDM/chatglm3-6b",
+    adapters=["./output/lora_run1", "./output/lora_run2"],
+    output_name="merged_model"
+)
+
+# 快速LoRA比较
+comparison = compare_lora_adapters([
+    "./output/lora_run1", 
+    "./output/lora_run2"
+])
 
 # 综合分析
 comprehensive_results = run_comprehensive_analysis(
@@ -183,6 +240,11 @@ runs/analysis_output/
 │   ├── class_distribution.png
 │   ├── data_quality.png
 │   └── dataset_report.txt
+├── lora_analysis/          # LoRA分析结果
+│   ├── merged_models/      # 合并后的模型
+│   ├── analysis/           # 分析结果JSON
+│   ├── visualizations/     # 可视化图表
+│   └── analysis_report.md  # 分析报告
 ├── comprehensive_analysis.json  # 综合分析结果
 └── comprehensive_report.txt     # 综合分析报告
 ```
@@ -236,6 +298,17 @@ analyzer = DatasetAnalyzer(
     label_extractor=custom_label_function,
     image_extractor=custom_image_function,
     output_dir='runs/dataset_analysis'
+)
+```
+
+**LoRAAnalyzer配置：**
+```python
+analyzer = LoRAAnalyzer(
+    output_dir='runs/lora_analysis',
+    device='auto',  # 'auto', 'cpu', 'cuda'
+    use_proxy=True,  # 是否使用代理
+    trust_remote_code=False,  # 是否信任远程代码
+    local_files_only=False  # 是否仅使用本地文件
 )
 ```
 

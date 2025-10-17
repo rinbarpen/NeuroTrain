@@ -189,6 +189,64 @@ analyzer.visualize_error_distribution(
 
 ### 3. 命令行集成
 
+#### LoRA 适配器合并工具
+支持多种合并策略的 LoRA 适配器合并工具，可将一个或多个 LoRA 适配器合并回基础模型。
+
+```bash
+# 基本顺序合并
+python tools/lora_merge.py \
+  --base THUDM/chatglm3-6b \
+  --adapters ./outputs/run1-lora ./outputs/run2-lora \
+  --output ./merged_model \
+  --merge-dtype float16 \
+  --trust-remote-code \
+  --save-tokenizer \
+  --use-proxy
+
+# 加权合并
+python tools/lora_merge.py \
+  --base THUDM/chatglm3-6b \
+  --adapters ./outputs/run1-lora ./outputs/run2-lora \
+  --output ./merged_model \
+  --merge-strategy weighted \
+  --weights 0.7 0.3 \
+  --merge-dtype float16
+
+# 平均合并
+python tools/lora_merge.py \
+  --base THUDM/chatglm3-6b \
+  --adapters ./outputs/run1-lora ./outputs/run2-lora \
+  --output ./merged_model \
+  --merge-strategy average
+
+# 仅使用本地缓存
+python tools/lora_merge.py \
+  --base mistralai/Mistral-7B-v0.1 \
+  --adapters ./lora_out \
+  --output ./merged_mistral \
+  --local-files-only
+```
+
+参数说明：
+- `--base`: 基础模型路径或 Hugging Face 模型 ID
+- `--adapters`: 一个或多个 LoRA 适配器目录
+- `--output`: 合并后模型保存目录
+- `--merge-strategy`: 合并策略（`sequential|weighted|average`）
+- `--weights`: 权重列表（用于加权合并）
+- `--merge-dtype`: 合并时 dtype（`auto|float16|bfloat16|float32`）
+- `--device-map`: 设备映射（默认 `auto`）
+- `--trust-remote-code`: 允许加载自定义代码（多模态模型常用）
+- `--local-files-only`: 仅本地加载，禁止联网
+- `--no-safetensors`: 不使用 safetensors 保存
+- `--save-tokenizer`: 如可用则同时保存 tokenizer
+- `--no-report`: 禁用生成合并报告
+- `--use-proxy`: 下载前调用 `proxy_on` 开启代理（按用户环境约定）
+
+合并策略说明：
+- **sequential**: 顺序合并，按提供顺序依次合并适配器
+- **weighted**: 加权合并，使用指定权重合并多个适配器
+- **average**: 平均合并，使用相等权重合并所有适配器
+
 #### ONNX导出集成
 在训练或测试时自动导出ONNX模型：
 

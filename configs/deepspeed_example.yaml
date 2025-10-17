@@ -1,0 +1,62 @@
+# DeepSpeed训练示例配置文件
+
+# 基本配置
+task: "train"
+run_id: "deepspeed_example"
+seed: 42
+device: "cuda"
+
+# 模型配置
+model:
+  name: "your_model_name"
+  config:
+    input_sizes: [224, 224, 3]
+    num_classes: 1000
+  pretrained: ""  # 预训练模型路径
+  continue_checkpoint: ""  # 继续训练的检查点路径
+
+# 训练配置
+train:
+  epoch: 100
+  batch_size: 32
+  grad_accumulation_steps: 1
+  optimizer:
+    name: "AdamW"
+    learning_rate: 0.001
+    weight_decay: 0.01
+  early_stopping:
+    patience: 10
+    min_delta: 0.001
+
+# 验证配置
+valid:
+  batch_size: 32
+
+# 数据加载器配置
+dataloader:
+  num_workers: 4
+  pin_memory: true
+  drop_last: true
+
+# DeepSpeed配置
+deepspeed:
+  enabled: true
+  zero_stage: 2  # ZeRO优化阶段 (0, 1, 2, 3)
+  fp16: true     # 启用FP16混合精度
+  bf16: false    # 启用BF16混合精度（与fp16互斥）
+  cpu_offload: false  # 启用CPU卸载
+  log_level: "INFO"   # 日志级别
+  config: null        # 自定义DeepSpeed配置文件路径（可选）
+
+# 数据集配置
+dataset:
+  name: "your_dataset"
+  train_path: "data/train"
+  valid_path: "data/valid"
+  test_path: "data/test"
+
+# 输出配置
+output:
+  save_best: true
+  save_last: true
+  save_interval: 10  # 每10个epoch保存一次

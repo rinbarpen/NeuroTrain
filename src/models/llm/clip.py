@@ -8,7 +8,7 @@ from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModel
 from typing import Sequence, List, Tuple, Type
 from pathlib import Path
 
-from src.constants import PRETRAINED_MODEL_DIR
+from constants import PRETRAINED_MODEL_DIR
 
 class CLIP(nn.Module):
     def __init__(self, model_name: str="openai/clip-vit-base-patch32", cache_dir=PRETRAINED_MODEL_DIR, device='cuda', dtype=torch.bfloat16):
@@ -16,7 +16,8 @@ class CLIP(nn.Module):
         self.device = device
 
         self.processor = CLIPProcessor.from_pretrained(model_name, cache_dir=cache_dir)
-        self.model = CLIPModel.from_pretrained(model_name, cache_dir=cache_dir, torch_dtype=dtype).to(device)
+        self.model = CLIPModel.from_pretrained(model_name, cache_dir=cache_dir, torch_dtype=dtype)
+        self.model.to(device)
 
     def encode(self, texts: Sequence[str]|None=None, images: Sequence[Image.Image|str|Path|np.ndarray]|None=None):
         if texts is None and images is None:

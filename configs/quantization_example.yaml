@@ -1,0 +1,117 @@
+# 量化配置示例
+# Quantization Configuration Examples
+
+# 基础量化配置
+quantization:
+  enabled: true
+  method: "dynamic"  # dynamic, static, qat, gptq, awq, bnb_4bit, bnb_8bit
+  dtype: "qint8"     # qint8, qint4, float16, bfloat16
+  device: "auto"
+  trust_remote_code: false
+  
+  # 输出配置
+  save_quantized_model: true
+  quantized_model_path: "outputs/quantized_model"
+  analysis_report_path: "outputs/quantization_analysis"
+
+# 动态量化配置
+dynamic_quantization:
+  quantization:
+    enabled: true
+    method: "dynamic"
+    dtype: "qint8"
+
+# 静态量化配置
+static_quantization:
+  quantization:
+    enabled: true
+    method: "static"
+    dtype: "qint8"
+    num_calibration_samples: 100
+
+# 量化感知训练配置
+qat_quantization:
+  quantization:
+    enabled: true
+    method: "qat"
+    dtype: "qint8"
+
+# GPTQ量化配置
+gptq_quantization:
+  quantization:
+    enabled: true
+    method: "gptq"
+    bits: 4
+    group_size: 128
+    desc_act: false
+
+# AWQ量化配置
+awq_quantization:
+  quantization:
+    enabled: true
+    method: "awq"
+
+# BitsAndBytes 4bit量化配置
+bnb_4bit_quantization:
+  quantization:
+    enabled: true
+    method: "bnb_4bit"
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+
+# BitsAndBytes 8bit量化配置
+bnb_8bit_quantization:
+  quantization:
+    enabled: true
+    method: "bnb_8bit"
+    load_in_8bit: true
+
+# 完整的量化训练配置示例
+full_quantization_training:
+  # 基础配置
+  task: "quantization_example"
+  run_id: "quantization_test"
+  device: "cuda"
+  seed: 42
+  
+  # 模型配置
+  model:
+    name: "resnet18"
+    config:
+      num_classes: 10
+      input_sizes: [3, 224, 224]
+  
+  # 量化配置
+  quantization:
+    enabled: true
+    method: "qat"
+    dtype: "qint8"
+    save_quantized_model: true
+    quantized_model_path: "outputs/quantized_resnet18"
+    analysis_report_path: "outputs/quantization_analysis"
+  
+  # 训练配置
+  train:
+    epoch: 10
+    batch_size: 32
+    optimizer:
+      name: "Adam"
+      learning_rate: 0.001
+      weight_decay: 0.0001
+    criterion: ["CrossEntropyLoss"]
+  
+  # 数据集配置
+  dataset:
+    name: "CIFAR10"
+    config:
+      root: "data/cifar10"
+      train: true
+      download: true
+  
+  # 数据加载器配置
+  dataloader:
+    num_workers: 4
+    pin_memory: true
+    drop_last: true

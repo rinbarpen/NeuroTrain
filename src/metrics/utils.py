@@ -3,7 +3,7 @@ import numpy as np
 from functools import wraps
 
 
-_OutputType = Union[np.float64, List[np.float64]]
+_OutputType = Union[np.float64, List[np.float64], np.ndarray, float]
 
 
 def metric(metric_fn, *, use_meter: bool = True):

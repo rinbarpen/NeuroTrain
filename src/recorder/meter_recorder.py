@@ -10,8 +10,8 @@ from typing import Dict, Callable, Union, Optional
 
 from .meter import Meter
 from .data_saver import DataSaver
-from src.utils.typed import *
-from src.metrics import get_metric_fns, many_metrics
+from utils.typed import *
+from metrics import get_metric_fns, many_metrics
 
 
 class MeterRecorder:
