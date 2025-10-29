@@ -64,9 +64,12 @@ def parse_args():
     parser.add_argument('--check', action='store_true', default=False, help='Check mode')
     parser.add_argument('--output_dir', type=str, help='output directory')
     parser.add_argument('--continue_id', type=str, help='continue with $run_id$')
+    parser.add_argument('--continue_checkpoint', type=str, help='continue checkpoint path')
     parser.add_argument('--pretrained', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
     parser.add_argument('--run_id', type=str, help='run id')
+    # for distributed launchers (torchrun/deepspeed)
+    parser.add_argument('--local_rank', type=int, default=-1, help='local rank passed by launcher')
 
     # parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     # TODO: support for future!
