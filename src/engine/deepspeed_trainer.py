@@ -124,7 +124,7 @@ class DeepSpeedTrainer:
         self.model_engine, self.optimizer, _, self.lr_scheduler = deepspeed.initialize(
             model=self.model,
             config=ds_config,
-            local_rank=self.local_rank
+            dist_init_required=False
         )
         
         self.logger.info(f"DeepSpeed initialized with config: {ds_config}")
@@ -135,16 +135,34 @@ class DeepSpeedTrainer:
     def _update_ds_config(self, ds_config: Dict[str, Any]) -> Dict[str, Any]:
         """更新 DeepSpeed 配置中的自动值"""
         train_config = self.c['train']
+        world_size = 1
+        if dist.is_initialized():
+            world_size = dist.get_world_size()
+        else:
+            world_size = int(os.environ.get('WORLD_SIZE', 1))
+        grad_acc = train_config.get('grad_accumulation_steps', 1) or 1
+        per_device_batch = train_config['batch_size']
         
         # 更新批次大小
         if ds_config.get('train_batch_size') == 'auto':
-            ds_config['train_batch_size'] = train_config['batch_size']
+            ds_config['train_batch_size'] = per_device_batch * grad_acc * world_size
         
         if ds_config.get('train_micro_batch_size_per_gpu') == 'auto':
-            ds_config['train_micro_batch_size_per_gpu'] = train_config['batch_size']
+            ds_config['train_micro_batch_size_per_gpu'] = per_device_batch
         
         if ds_config.get('gradient_accumulation_steps') == 'auto':
-            ds_config['gradient_accumulation_steps'] = train_config.get('grad_accumulation_steps', 1)
+            ds_config['gradient_accumulation_steps'] = grad_acc
+
+        # 再次验证批次设置的合法性，必要时调整
+        micro_batch = ds_config.get('train_micro_batch_size_per_gpu', per_device_batch)
+        grad_acc = ds_config.get('gradient_accumulation_steps', grad_acc)
+        expected_global = micro_batch * grad_acc * world_size
+        if ds_config.get('train_batch_size', expected_global) != expected_global:
+            logging.warning(
+                "DeepSpeed train_batch_size (%s) 与 micro_batch(%s)*grad_acc(%s)*world_size(%s) 不匹配，调整为 %s",
+                ds_config.get('train_batch_size'), micro_batch, grad_acc, world_size, expected_global
+            )
+            ds_config['train_batch_size'] = expected_global
         
         # 更新优化器配置
         if 'optimizer' in ds_config and ds_config['optimizer'].get('params'):
@@ -266,12 +284,28 @@ class DeepSpeedTrainer:
             pbar = train_dataloader
         
         for batch_idx, batch_data in enumerate(pbar):
-            # 准备数据
-            if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
+            # 准备数据 - 处理多种数据格式
+            if isinstance(batch_data, dict):
+                # 字典格式: {'image': tensor, 'mask': tensor} 或 {'image': tensor, 'label': tensor}
+                inputs = batch_data.get('image', batch_data.get('input', None))
+                targets = batch_data.get('mask', batch_data.get('label', batch_data.get('target', None)))
+                if inputs is None:
+                    # 如果没有找到标准键，尝试使用第一个值作为输入
+                    keys = list(batch_data.keys())
+                    inputs = batch_data[keys[0]]
+                    targets = batch_data[keys[1]] if len(keys) > 1 else None
+            elif isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
                 inputs, targets = batch_data
             else:
                 inputs = batch_data
                 targets = None
+            
+            # 将数据移动到设备
+            device = self.model_engine.device
+            if isinstance(inputs, torch.Tensor):
+                inputs = inputs.to(device)
+            if targets is not None and isinstance(targets, torch.Tensor):
+                targets = targets.to(device)
             
             # 前向传播
             if self.criterion and targets is not None:
@@ -316,12 +350,28 @@ class DeepSpeedTrainer:
         
         with torch.no_grad():
             for batch_data in valid_dataloader:
-                # 准备数据
-                if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
+                # 准备数据 - 处理多种数据格式
+                if isinstance(batch_data, dict):
+                    # 字典格式: {'image': tensor, 'mask': tensor} 或 {'image': tensor, 'label': tensor}
+                    inputs = batch_data.get('image', batch_data.get('input', None))
+                    targets = batch_data.get('mask', batch_data.get('label', batch_data.get('target', None)))
+                    if inputs is None:
+                        # 如果没有找到标准键，尝试使用第一个值作为输入
+                        keys = list(batch_data.keys())
+                        inputs = batch_data[keys[0]]
+                        targets = batch_data[keys[1]] if len(keys) > 1 else None
+                elif isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
                     inputs, targets = batch_data
                 else:
                     inputs = batch_data
                     targets = None
+                
+                # 将数据移动到设备
+                device = self.model_engine.device
+                if isinstance(inputs, torch.Tensor):
+                    inputs = inputs.to(device)
+                if targets is not None and isinstance(targets, torch.Tensor):
+                    targets = targets.to(device)
                 
                 # 前向传播
                 if self.criterion and targets is not None:

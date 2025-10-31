@@ -1,8 +1,8 @@
-# DDP快速测试配置文件
-# 用于快速验证DDP功能
+# DeepSpeed快速测试配置文件
+# 用于快速验证DeepSpeed功能
 
 output_dir = "./runs"
-task = "DDP_Quick_Test"
+task = "DeepSpeed_Quick_Test"
 entity = "Lab"
 run_id = ""
 device = "cuda"
@@ -11,10 +11,15 @@ classes = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 metrics = ['accuracy']
 postprocess = "classification"
 
-# DDP配置
-[ddp]
+# DeepSpeed配置
+[deepspeed]
 enabled = true
+zero_stage = 2  # ZeRO优化阶段 (1, 2, 3)
+fp16 = true     # 启用FP16混合精度
+bf16 = false    # 启用BF16混合精度（与fp16互斥）
+cpu_offload = false  # 启用CPU卸载
 log_level = "INFO"
+config = "configs/deepspeed/deepspeed_zero2.json"  # DeepSpeed配置文件
 
 [model]
 name = "torchvision"
@@ -60,15 +65,12 @@ batch_size = 32
 epoch = 5
 save_period = 0.2
 save_recovery_period = 0.2
-grad_accumulation_steps = 0
+grad_accumulation_steps = 1
 
 [train.optimizer]
-type = 'adam'
+type = 'adamw'
 learning_rate = 1e-3
 weight_decay = 1e-4
-
-[train.scaler]
-compute_type = 'float16'
 
 [test]
 batch_size = 32
@@ -80,7 +82,7 @@ input = "data/mnist/test"
 
 [private]
 wandb = false
-mode = 0
+mode = 1
 
 [private.log]
 verbose = true
@@ -92,3 +94,4 @@ log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'
 save_best = true
 save_last = true
 save_interval = 1
+

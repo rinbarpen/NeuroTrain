@@ -1,0 +1,133 @@
+# DeepSpeed UNet + DRIVE 数据集训练配置
+# 用于视网膜血管分割的分布式训练
+
+output_dir = "./runs"
+task = "DeepSpeed_DRIVE_UNet"
+entity = "Lab"
+run_id = ""
+device = "cuda"
+seed = 42
+classes = ["Retina"]
+metrics = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
+postprocess = "binary_segmentation"
+
+# DeepSpeed配置
+[deepspeed]
+enabled = true
+zero_stage = 2  # ZeRO优化阶段 (1, 2, 3)
+fp16 = true     # 启用FP16混合精度
+bf16 = false    # 启用BF16混合精度（与fp16互斥）
+cpu_offload = false  # 启用CPU卸载
+log_level = "INFO"
+config = "configs/deepspeed/deepspeed_zero2.json"  # DeepSpeed配置文件
+
+[model]
+name = "unet"
+continue_checkpoint = ""
+continue_ext_checkpoint = ""
+pretrained = ""
+
+[model.config]
+n_channels = 1
+n_classes = 1
+input_sizes = [
+    [1, 1, 512, 512]
+]
+dtypes = ["float32"]
+bilinear = true
+
+# 损失函数配置 - 组合Dice和BCE损失
+[[criterion]]
+type = 'dice'
+weight = 1.0
+config = {}
+
+[[criterion]]
+type = 'bce'
+weight = 0.5
+config = {}
+
+# 数据增强配置
+[transform]
+RESIZE = [512, 512]
+HFLIP = [0.5]
+VFLIP = [0.5]
+ROTATION = [10]
+PIL_TO_TENSOR = []
+CONVERT_IMAGE_DTYPE = ['float32']
+
+# DRIVE数据集配置
+[dataset]
+name = "DRIVE"
+root_dir = "./data/DRIVE"
+betweens = {train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0]}
+config = {}
+
+# 数据加载器
+[dataloader]
+num_workers = 4
+shuffle = true
+pin_memory = true
+drop_last = true
+
+# 训练配置
+[train]
+batch_size = 4          # 每个GPU的批次大小
+epoch = 100
+save_period = 0.1       # 每10%的epoch保存一次
+save_recovery_period = 0.1
+grad_accumulation_steps = 2  # 梯度累积步数
+
+# 优化器配置
+[train.optimizer]
+type = 'adam'
+learning_rate = 1e-4
+weight_decay = 1e-5
+eps = 1e-8
+
+# 学习率调度器
+[train.lr_scheduler]
+type = 'cosine'
+warmup = 10
+warmup_lr = 1e-6
+update_policy = 'epoch'
+
+# 早停策略
+[train.early_stopping]
+patience = 20
+min_delta = 0.0001
+
+# 验证配置
+[valid]
+batch_size = 4
+
+# 测试配置
+[test]
+batch_size = 4
+
+# 预测配置
+[predict]
+input = "data/DRIVE/test/images"
+
+[predict.config]
+output_format = "numpy"
+save_images = true
+threshold = 0.5
+
+# 私有配置
+[private]
+wandb = false
+mode = 1  # 训练模式
+
+[private.log]
+verbose = true
+debug = false
+log_file_format = '%Y-%m-%d %H_%M_%S'
+log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'
+
+# 输出配置
+[output]
+save_best = true
+save_last = true
+save_interval = 10
+

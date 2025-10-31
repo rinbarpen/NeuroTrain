@@ -35,21 +35,33 @@ def init_deepspeed_distributed():
     """初始化 DeepSpeed 分布式环境"""
     if not DEEPSPEED_AVAILABLE:
         raise ImportError("DeepSpeed is not available. Please install deepspeed: pip install deepspeed")
-    
+
+    local_rank = int(os.environ.get('LOCAL_RANK', 0))
+    world_size_env = os.environ.get('WORLD_SIZE')
+
+    # 当未通过 deepspeed/torchrun 启动时，允许退化为单进程模式
+    if world_size_env is None or int(world_size_env) <= 1:
+        logger.info("DeepSpeed running in single-process mode (WORLD_SIZE not set).")
+        return {
+            'local_rank': local_rank,
+            'world_size': 1,
+            'rank': 0,
+            'distributed': False
+        }
+
     # 初始化分布式环境
     deepspeed.init_distributed()
-    
-    # 获取进程信息
-    local_rank = int(os.environ.get('LOCAL_RANK', 0))
+
     world_size = int(os.environ.get('WORLD_SIZE', 1))
     rank = int(os.environ.get('RANK', 0))
-    
+
     logger.info(f"DeepSpeed distributed initialized - Rank: {rank}, Local Rank: {local_rank}, World Size: {world_size}")
-    
+
     return {
         'local_rank': local_rank,
         'world_size': world_size,
-        'rank': rank
+        'rank': rank,
+        'distributed': True
     }
 
 

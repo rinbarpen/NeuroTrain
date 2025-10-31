@@ -7,11 +7,12 @@ DeepSpeed训练主文件
 from pathlib import Path
 import logging
 import warnings
+import torch
 import torch.distributed as dist
 
 warnings.filterwarnings("ignore")
 
-from src.config import get_config, dump_config, is_predict, is_train, is_test
+from src.config import get_config, dump_config, is_predict, is_train, is_test, set_config
 from src.options import parse_args
 from src.engine.deepspeed_trainer import DeepSpeedTrainer
 from src.models import get_model
@@ -55,6 +56,9 @@ def main():
     rank_info = init_deepspeed_distributed()
     local_rank = rank_info['local_rank']
     world_size = rank_info['world_size']
+    # 设置当前进程的CUDA设备
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
     
     # 设置DeepSpeed日志
     setup_deepspeed_logging(c.get("deepspeed", {}).get("log_level", "INFO"))
@@ -71,12 +75,17 @@ def main():
     if c["seed"] >= 0:
         set_seed(c["seed"])
     
-    device = c["device"]
+    # 基于 local_rank 绑定设备，确保每个进程使用独立GPU
+    device = f"cuda:{local_rank}" if torch.cuda.is_available() else c.get("device", "cpu")
+    c["device"] = device
+    set_config(c)
     is_continue_mode = False  # 用于训练中断后继续的模式
     
     # 创建模型
     model = get_model(c["model"]["name"], c["model"]["config"])
     model = model.to(device)
+    if dist.is_initialized():
+        dist.barrier()
     
     # 加载预训练模型
     pretrained_model = c["model"].get("pretrained")
@@ -97,8 +106,24 @@ def main():
         model.load_state_dict(model_params)
         is_continue_mode = True
     
+    # 仅在rank0执行数据下载准备，其他rank关闭下载标志以避免并发
+    try:
+        if "dataset" in c and isinstance(c["dataset"], dict):
+            dataset_cfg = c["dataset"].get("config", {}) or {}
+            if not is_main_process():
+                if "download" in dataset_cfg:
+                    dataset_cfg["download"] = False
+                    c["dataset"]["config"] = dataset_cfg
+                    set_config(c)
+    except Exception:
+        pass
+    if dist.is_initialized():
+        dist.barrier()
+
     # 获取数据加载器
     train_loader, valid_loader, test_loader = get_train_valid_test_dataloader(use_valid=True)
+    if dist.is_initialized():
+        dist.barrier()
     
     # 如果没有单独的验证集，使用测试集作为验证集
     if valid_loader is None and test_loader is not None:
@@ -164,7 +189,7 @@ def main():
         if valid_loader:
             valid_loader = create_deepspeed_dataloader(
                 valid_loader.dataset,
-                batch_size=c["valid"].get("batch_size", c["train"]["batch_size"]),
+                batch_size=c.get("valid", {}).get("batch_size", c["train"]["batch_size"]),
                 shuffle=False,
                 num_workers=c["dataloader"].get("num_workers", 4),
                 pin_memory=c["dataloader"].get("pin_memory", True),
@@ -258,6 +283,12 @@ def main():
         model_info(output_dir, model, input_sizes, dtypes=dtypes)
         model_flops(output_dir, model, input_sizes)
     
+    # 清理前同步，避免退出阶段心跳/Store报错噪声
+    if dist.is_initialized():
+        try:
+            dist.barrier()
+        except Exception:
+            pass
     # 清理DeepSpeed环境
     cleanup_deepspeed()
 
