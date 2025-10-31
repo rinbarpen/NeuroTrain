@@ -18,16 +18,18 @@ class Tester:
         self.output_dir = output_dir
         self.model = model
 
+        c = get_config()
+        # 先获取 class_labels 和 metric_labels
+        class_labels = c['classes']
+        metric_labels = c['metrics']
+
+        # 注册 class_labels 后再创建目录
         self.filename_env = TestOutputFilenameEnv()
-        self.filename_env.register(test_dir=self.output_dir)
+        self.filename_env.register(test_dir=self.output_dir, class_labels=class_labels)
         self.filename_env.prepare_dir()
 
         self.logger = logging.getLogger('test')
         self.data_saver = DataSaver()
-
-        c = get_config()
-        class_labels = c['classes']
-        metric_labels = c['metrics']
         self.calculator = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="test_")
 
         postprocess_name = c.get('postprocess', "")

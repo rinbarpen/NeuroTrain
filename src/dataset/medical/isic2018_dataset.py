@@ -72,44 +72,23 @@ class ISIC2018Dataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """将数据集转换为numpy格式保存
-        
-        Args:
-            save_dir: 保存目录
-            root_dir: 数据集根目录
-            betweens: 兼容性参数，实际不再使用
-            **kwargs: 其他配置参数
-        """
-        save_dir = save_dir / ISIC2018Dataset.name()
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        train_dataset = ISIC2018Dataset.get_train_dataset(root_dir, **kwargs)
-        valid_dataset = ISIC2018Dataset.get_valid_dataset(root_dir, **kwargs)
-        test_dataset  = ISIC2018Dataset.get_test_dataset(root_dir, **kwargs)
-
-        from torch.utils.data import DataLoader
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader  = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-        for dataloader, data_dir, dataset_type in zip((train_dataloader, valid_dataloader, test_dataloader), (save_dir, save_dir, save_dir), ('train', 'valid', 'test')):
-            for i, (image, mask) in enumerate(dataloader):
-                image_path = data_dir / ISIC2018Dataset.mapping[dataset_type][0].replace('*.jpg', f'{i}.npy')
-                mask_path = data_dir / ISIC2018Dataset.mapping[dataset_type][1].replace('*.jpg', f'{i}.npy')
-                image_path.parent.mkdir(parents=True, exist_ok=True)
-                mask_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                np.save(image_path, image.numpy())
-                np.save(mask_path, mask.numpy())
-
-        config_file = save_dir / "config.yaml"
-        with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({**kwargs}, f)
-
-    @staticmethod
     def name():
         return "ISIC2018"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取ISIC2018数据集元数据"""
+        return {
+            'num_classes': 2,
+            'class_names': ['background', 'lesion'],
+            'task_type': 'segmentation',
+            'metrics': ['dice', 'iou', 'accuracy', 'jaccard'],
+            'num_train': 2594,
+            'num_val': 100,
+            'num_test': 1000,
+            'dataset_name': 'ISIC2018',
+            'description': 'ISIC 2018 Skin Lesion Analysis Challenge'
+        }
     
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

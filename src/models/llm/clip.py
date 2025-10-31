@@ -8,7 +8,7 @@ from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModel
 from typing import Sequence, List, Tuple, Type
 from pathlib import Path
 
-from constants import PRETRAINED_MODEL_DIR
+from src.constants import PRETRAINED_MODEL_DIR
 
 class CLIP(nn.Module):
     def __init__(self, model_name: str="openai/clip-vit-base-patch32", cache_dir=PRETRAINED_MODEL_DIR, device='cuda', dtype=torch.bfloat16):

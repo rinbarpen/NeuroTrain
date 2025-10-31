@@ -1,7 +1,58 @@
+# Pipeline配置文件示例
+# 支持以下功能：
+# 1. variants: 参数变体，可以为不同参数组合生成多个任务（例如不同的seed）
+# 2. devices: GPU设备分配，指定每个任务使用的GPU卡
+# 3. parallel: 是否允许并行执行（在命令行使用--parallel时生效）
+# 4. ext_args: 额外的命令行参数
+
+# 示例1: 简单的单任务配置
 [task1]
-config = ""
+config = "configs/single/train.template.toml"
 ext_args = []
 
+# 示例2: 带参数变体的任务（多个seed）
 [task2]
-config = ""
+config = "configs/single/train.template.toml"
 ext_args = []
+# variants会生成所有参数组合
+[task2.variants]
+seed = [42, 43, 44]
+
+# 示例3: 带GPU设备分配的任务
+[task3]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [0]  # 使用GPU 0，也可以写成 devices = 0 或 devices = "0"
+
+# 示例4: 使用多张GPU卡的任务
+[task4]
+config = "configs/ddp_example.toml"
+ext_args = []
+devices = [0, 1]  # 使用GPU 0和1，也可以写成 devices = "0,1"
+# 注意：多卡训练需要在配置文件中启用DDP
+
+# 示例5: 带变体和GPU分配的完整示例
+[task5]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [2]  # 使用GPU 2
+parallel = true  # 允许并行执行
+[task5.variants]
+seed = [42, 43, 44]  # 生成3个任务，分别使用seed 42, 43, 44
+
+# 示例6: 多个任务使用不同的GPU（可以在并行模式下同时运行）
+[task6_gpu0]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [0]
+parallel = true
+[task6_gpu0.variants]
+seed = [42, 43]
+
+[task6_gpu1]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [1]
+parallel = true
+[task6_gpu1.variants]
+seed = [44, 45]

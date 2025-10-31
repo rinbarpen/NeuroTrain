@@ -67,6 +67,8 @@ def parse_args():
     parser.add_argument('--pretrained', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
     parser.add_argument('--run_id', type=str, help='run id')
+    parser.add_argument('--monitor', action='store_true', default=False, help='Enable training monitor')
+    parser.add_argument('--web_monitor', action='store_true', default=False, help='Enable web monitor dashboard')
 
     # parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     # TODO: support for future!
@@ -153,6 +155,13 @@ def parse_args():
         CONFIG['private']['mode'] |= TEST_MODE
     if args.predict:
         CONFIG['private']['mode'] |= PREDICT_MODE
+
+    if args.monitor or args.web_monitor:
+        CONFIG.setdefault('monitor', {})
+        CONFIG['monitor']['enabled'] = True
+    if args.web_monitor:
+        CONFIG.setdefault('monitor', {})
+        CONFIG['monitor']['web'] = True
 
     if args.run_id and not args.continue_checkpoint:
         CONFIG['run_id'] = args.run_id

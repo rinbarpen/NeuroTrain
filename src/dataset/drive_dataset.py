@@ -67,39 +67,23 @@ class DriveDataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """将数据集转换为numpy格式保存（兼容保留betweens参数，但内部不再使用切片）"""
-        save_dir = save_dir / DriveDataset.name()
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        train_dataset = DriveDataset.get_train_dataset(root_dir, **kwargs)
-        test_dataset = DriveDataset.get_test_dataset(root_dir, **kwargs)
-
-        from torch.utils.data import DataLoader
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-        for dataloader, data_dir, dataset_type in zip((train_dataloader, test_dataloader), (save_dir, save_dir), ('train', 'test')):
-            image_dir = (data_dir / DriveDataset.mapping[dataset_type][0]).parent
-            mask_dir = (data_dir / DriveDataset.mapping[dataset_type][1]).parent
-            image_dir.mkdir(parents=True, exist_ok=True)
-            mask_dir.mkdir(parents=True, exist_ok=True)
-
-            for i, (image, mask) in enumerate(dataloader):
-                image_path = data_dir / DriveDataset.mapping[dataset_type][0].replace('*.png', f'{i}.npy')
-                mask_path = data_dir / DriveDataset.mapping[dataset_type][1].replace('*.png', f'{i}.npy')
-
-                np.save(image_path, image.numpy())
-                np.save(mask_path, mask.numpy())
-
-        # 不再保存betweens配置
-        config_file = save_dir / "config.yaml"
-        with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({**kwargs}, f, sort_keys=False)
-
-    @staticmethod
     def name():
         return "DRIVE"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取DRIVE数据集元数据"""
+        return {
+            'num_classes': 2,
+            'class_names': ['background', 'vessel'],
+            'task_type': 'segmentation',
+            'metrics': ['dice', 'iou', 'accuracy', 'sensitivity', 'specificity'],
+            'image_size': (584, 565, 3),  # 原始图像尺寸
+            'num_train': 20,
+            'num_test': 20,
+            'dataset_name': 'DRIVE',
+            'description': 'Digital Retinal Images for Vessel Extraction'
+        }
 
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

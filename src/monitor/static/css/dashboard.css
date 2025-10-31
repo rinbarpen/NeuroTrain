@@ -1,0 +1,284 @@
+/* Dashboard Styles */
+
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 2px solid #e9ecef;
+    border-radius: 10px 10px 0 0 !important;
+    font-weight: 600;
+}
+
+.card-header h5 {
+    margin: 0;
+    color: #495057;
+}
+
+.card-header i {
+    margin-right: 8px;
+    color: #6c757d;
+}
+
+/* Status Cards */
+.card.text-white {
+    border-radius: 15px;
+}
+
+.card.text-white .card-body {
+    padding: 1.5rem;
+}
+
+.card.text-white h6 {
+    opacity: 0.9;
+    margin-bottom: 0.5rem;
+}
+
+.card.text-white h4 {
+    margin: 0;
+    font-weight: 700;
+}
+
+/* Progress Bar */
+.progress {
+    border-radius: 15px;
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    border-radius: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-bar-striped {
+    background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
+    background-size: 1rem 1rem;
+}
+
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+@keyframes progress-bar-stripes {
+    0% { background-position-x: 1rem; }
+}
+
+/* Alerts */
+.alert-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    border-left: 4px solid;
+    background-color: #f8f9fa;
+}
+
+.alert-item.warning {
+    border-left-color: #ffc107;
+    background-color: #fff3cd;
+}
+
+.alert-item.error {
+    border-left-color: #dc3545;
+    background-color: #f8d7da;
+}
+
+.alert-item.info {
+    border-left-color: #17a2b8;
+    background-color: #d1ecf1;
+}
+
+.alert-item.critical {
+    border-left-color: #6f42c1;
+    background-color: #e2e3f1;
+}
+
+.alert-timestamp {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.alert-message {
+    font-weight: 500;
+    margin: 0.25rem 0;
+}
+
+/* Charts */
+canvas {
+    max-height: 300px;
+}
+
+/* Control Buttons */
+.btn-group .btn {
+    border-radius: 8px;
+    margin-right: 0.5rem;
+    font-weight: 500;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
+}
+
+/* Performance Stats */
+#performance-stats h6 {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+#performance-stats h4 {
+    color: #495057;
+    font-weight: 700;
+    margin: 0;
+}
+
+/* Status Indicator */
+#status-indicator {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Loading Spinner */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn-group {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .btn-group .btn {
+        margin-bottom: 0.5rem;
+        margin-right: 0;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #1a1a1a;
+        color: #e9ecef;
+    }
+    
+    .card {
+        background-color: #2d2d2d;
+        color: #e9ecef;
+    }
+    
+    .card-header {
+        background-color: #2d2d2d;
+        border-bottom-color: #495057;
+    }
+    
+    .alert-item {
+        background-color: #3d3d3d;
+        color: #e9ecef;
+    }
+}
+
+/* Custom Scrollbar */
+#alerts-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+#alerts-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#alerts-list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+#alerts-list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}
+
+/* Chart Container */
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+/* Tooltip Styles */
+.tooltip {
+    font-size: 0.875rem;
+}
+
+.tooltip-inner {
+    background-color: #212529;
+    color: #fff;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+}
+
+.tooltip.bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #212529;
+}
+
+.tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #212529;
+}
+
+.tooltip.bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #212529;
+}
+
+.tooltip.bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #212529;
+}
+
+

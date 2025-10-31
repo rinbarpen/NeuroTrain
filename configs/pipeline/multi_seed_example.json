@@ -1,0 +1,49 @@
+{
+    "_comment": "Pipeline多seed示例配置 - JSON格式",
+    "_usage": "python main_pipeline.py -c configs/pipeline/multi_seed_example.json [--parallel] [--gpus 0,1,2,3]",
+    
+    "experiment_seed42_gpu0": {
+        "_comment": "任务1: 在GPU 0上运行seed 42",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [0],
+        "parallel": true,
+        "variants": {
+            "seed": [42]
+        }
+    },
+    
+    "experiment_seed43_gpu1": {
+        "_comment": "任务2: 在GPU 1上运行seed 43",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [1],
+        "parallel": true,
+        "variants": {
+            "seed": [43]
+        }
+    },
+    
+    "experiment_seed44_gpu2": {
+        "_comment": "任务3: 在GPU 2上运行seed 44",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [2],
+        "parallel": true,
+        "variants": {
+            "seed": [44]
+        }
+    },
+    
+    "experiment_multi_seed_gpu3": {
+        "_comment": "任务4: 在GPU 3上依次运行多个seed（串行）",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [3],
+        "parallel": false,
+        "variants": {
+            "seed": [45, 46, 47]
+        }
+    }
+}
+

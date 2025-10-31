@@ -17,14 +17,22 @@ from src.utils import EarlyStopping, save_model, select_postprocess_fn
 from src.recorder import MeterRecorder, DataSaver
 from src.visualizer.painter import Plot
 from src.constants import TrainOutputFilenameEnv
+from src.monitor import TrainingMonitor, ProgressTracker
+from src.monitor import create_web_monitor
 
 class Trainer:
     def __init__(self, output_dir: Path, model: nn.Module, is_continue_mode: bool=False):
         self.output_dir = output_dir
 
         c = get_config()
+        
+        # 先获取 class_labels 和 metric_labels
+        class_labels = c['classes']
+        metric_labels = c['metrics']
+        
+        # 注册所有需要的属性后再创建目录
         self.filename_env = TrainOutputFilenameEnv()
-        self.filename_env.register(train_dir=self.output_dir, model=c["model"]["name"])
+        self.filename_env.register(train_dir=self.output_dir, model=c["model"]["name"], class_labels=class_labels)
         self.filename_env.register(epoch=0, num_epochs=0)
         self.filename_env.prepare_dir()
 
@@ -32,9 +40,6 @@ class Trainer:
 
         self.logger = logging.getLogger('train')
         self.data_saver = DataSaver()
-
-        class_labels = c['classes']
-        metric_labels = c['metrics']
         self.train_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="train_")
         self.valid_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="valid_")
 
@@ -42,6 +47,28 @@ class Trainer:
         assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
 
         self.postprocess = select_postprocess_fn(postprocess_name)
+        monitor_conf = c.get('monitor', {})
+        self.monitor = None
+        self.progress_tracker = None
+        self.web_monitor = None
+        if monitor_conf.get('enabled', False):
+            try:
+                self.monitor = TrainingMonitor(monitor_conf.get('config'))
+                self.monitor.start_monitoring()
+                self.progress_tracker = ProgressTracker()
+                self.logger.info("Training monitor enabled")
+            except Exception as e:
+                self.logger.warning(f"Monitor initialization failed: {e}")
+                self.monitor = None
+                self.progress_tracker = None
+        if monitor_conf.get('web'):
+            try:
+                self.web_monitor = create_web_monitor()
+                self.web_monitor.start(block=False)
+                self.logger.info("Web monitor started")
+            except Exception as e:
+                self.logger.warning(f"Web monitor initialization failed: {e}")
+                self.web_monitor = None
         if is_continue_mode:
             self._recovery()
 
@@ -193,6 +220,34 @@ class Trainer:
                 targets.detach().cpu().numpy(), 
                 outputs.detach().cpu().numpy())
 
+            current_lr = self.optimizer.param_groups[0]['lr'] if self.optimizer is not None else 0.0
+            if self.monitor:
+                self.monitor.update_training_metrics(
+                    epoch=epoch,
+                    step=batch,
+                    loss=batch_loss,
+                    learning_rate=current_lr,
+                    batch_size=c['train']['batch_size'],
+                )
+            if self.progress_tracker:
+                if batch == 1:
+                    self.progress_tracker.start_epoch(epoch)
+                self.progress_tracker.start_step(batch)
+                self.progress_tracker.end_step(c['train']['batch_size'])
+            if self.web_monitor:
+                try:
+                    self.web_monitor.update_metrics(
+                        epoch=epoch,
+                        step=batch,
+                        loss=batch_loss,
+                        learning_rate=current_lr,
+                        batch_size=c['train']['batch_size'],
+                        throughput=c['train']['batch_size'] / max(self.step_time_meter.avg, 1e-6)
+                    )
+                except Exception as exc:
+                    self.logger.warning(f"Web monitor update failed: {exc}")
+                    self.web_monitor = None
+
         train_loss /= len(train_dataloader)
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
         # 保存step级loss
@@ -296,6 +351,15 @@ class Trainer:
         all_step_lrs = []
         epoch_lrs = []
 
+        steps_per_epoch = len(train_dataloader) if train_dataloader is not None else 0
+        if self.progress_tracker:
+            self.progress_tracker.start_training(num_epochs - last_epoch, steps_per_epoch)
+        if self.web_monitor:
+            try:
+                self.web_monitor.start_training(num_epochs - last_epoch, steps_per_epoch)
+            except Exception as exc:
+                self.logger.warning(f"Failed to start web monitor training session: {exc}")
+                self.web_monitor = None
         with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
                 train_loss, epoch_step_losses, epoch_step_lrs = self._train_epoch(epoch, num_epochs, train_dataloader, pbar)
@@ -370,6 +434,13 @@ class Trainer:
                 save_model_preset(self.filename_env.output_last_model_filename, 
                         ext_path=self.filename_env.output_last_ext_model_filename,
                         epoch=num_epochs, loss=train_loss)
+                if self.progress_tracker:
+                    self.progress_tracker.end_epoch()
+                if self.web_monitor:
+                    try:
+                        self.web_monitor.end_epoch()
+                    except Exception as exc:
+                        self.logger.warning(f"Web monitor end_epoch failed: {exc}")
 
             # accumulation_step
             # if policy is to use the remain batch grad, it is accumulation_policy == 'remain leave'
@@ -387,6 +458,17 @@ class Trainer:
             #                 ext_path=self.last_model_ext_file_path, **ext_model_args,
             #                 epoch=num_epochs, loss=best_loss)
             #         self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
+
+        if self.progress_tracker and self.progress_tracker.is_training:
+            self.progress_tracker.end_training()
+        if self.monitor:
+            self.monitor.stop_monitoring()
+        if self.web_monitor:
+            try:
+                self.web_monitor.end_training()
+                self.web_monitor.stop()
+            except Exception as exc:
+                self.logger.warning(f"Failed to stop web monitor cleanly: {exc}")
 
         self._print_table(valid_dataloader is not None)
 

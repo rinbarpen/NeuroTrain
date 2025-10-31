@@ -1,0 +1,157 @@
+# 混合数据集配置示例
+
+# 示例 1: 基本混合数据集
+dataset:
+  type: enhanced_hybrid
+  
+  enhanced_hybrid:
+    datasets:
+      # 数据集 1: MNIST
+      - name: mnist
+        root_dir: data/mnist
+        train_split: train
+        test_split: test
+        valid_split: valid
+        ratio: 0.3        # 采样比例 30%
+        priority: 1       # 优先级最高
+        weight: 1.0       # 权重
+        
+      # 数据集 2: CIFAR-10
+      - name: cifar10
+        root_dir: data/cifar10
+        train_split: train
+        test_split: test
+        valid_split: valid
+        ratio: 0.7        # 采样比例 70%
+        priority: 2
+        weight: 1.0
+    
+    # 全局设置
+    shuffle_order: true    # 随机打乱数据集顺序
+    random_seed: 42        # 随机种子
+    enable_dynamic_resampling: false
+
+---
+
+# 示例 2: 医学影像分割混合数据集
+dataset:
+  type: enhanced_hybrid
+  
+  enhanced_hybrid:
+    datasets:
+      # DRIVE 视网膜血管分割
+      - name: drive
+        root_dir: data/drive
+        ratio: 0.4
+        priority: 1
+        weight: 1.0
+        
+      # STARE 视网膜血管分割
+      - name: medical/stare
+        root_dir: data/stare
+        ratio: 0.3
+        priority: 2
+        weight: 1.0
+        
+      # ChaseDB1 视网膜血管分割
+      - name: medical/chasedb1
+        root_dir: data/chasedb1
+        ratio: 0.3
+        priority: 3
+        weight: 0.8  # 稍低的权重
+    
+    shuffle_order: true
+    random_seed: 123
+
+---
+
+# 示例 3: 多任务混合数据集
+dataset:
+  type: enhanced_hybrid
+  
+  enhanced_hybrid:
+    datasets:
+      # COCO 目标检测
+      - name: coco
+        root_dir: data/coco
+        task: detection
+        year: '2017'
+        ratio: 0.5
+        
+      # COCO 语义分割
+      - name: coco_segmentation
+        root_dir: data/coco
+        year: '2017'
+        target_size: [512, 512]
+        ratio: 0.5
+    
+    shuffle_order: false
+    random_seed: 456
+
+---
+
+# 示例 4: 不平衡数据处理
+dataset:
+  type: enhanced_hybrid
+  
+  enhanced_hybrid:
+    datasets:
+      # 小数据集
+      - name: medical/isic2016
+        root_dir: data/isic2016
+        ratio: 0.5
+        weight: 2.0  # 更高的权重
+        
+      # 大数据集
+      - name: imagenet
+        root_dir: data/imagenet
+        ratio: 0.5
+        weight: 1.0
+    
+    shuffle_order: true
+    random_seed: 789
+
+---
+
+# 示例 5: 多源迁移学习
+dataset:
+  type: enhanced_hybrid
+  
+  enhanced_hybrid:
+    datasets:
+      # 源域: ImageNet
+      - name: imagenet
+        root_dir: data/imagenet
+        ratio: 0.7
+        priority: 1
+        
+      # 目标域: 医学影像
+      - name: medical/isic2017
+        root_dir: data/isic2017
+        ratio: 0.3
+        priority: 2
+    
+    shuffle_order: true
+    random_seed: 1024
+
+# DataLoader 配置
+dataloader:
+  batch_size: 32
+  num_workers: 4
+  shuffle: true
+  pin_memory: true
+  drop_last: true
+
+# 训练配置
+training:
+  epochs: 100
+  
+  optimizer:
+    type: AdamW
+    lr: 0.001
+    weight_decay: 0.01
+  
+  scheduler:
+    type: CosineAnnealingLR
+    T_max: 100
+

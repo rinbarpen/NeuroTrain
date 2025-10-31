@@ -17,7 +17,7 @@ import matplotlib.dates as mdates
 from matplotlib.figure import Figure
 import seaborn as sns
 
-from ..recorder.meter import Meter
+from src.recorder.meter import Meter
 from .training_monitor import TrainingMonitor, SystemMetrics, TrainingMetrics
 from .progress_tracker import ProgressTracker, ProgressSnapshot
 from .alert_system import AlertSystem, Alert

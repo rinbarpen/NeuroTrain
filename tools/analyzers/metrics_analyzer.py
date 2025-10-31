@@ -13,15 +13,34 @@ Date: 2024
 
 import os
 import re
-import torch
+import json
+from datetime import datetime
+from pathlib import Path
+import logging
+from typing import Dict, List, Optional, Union, Any, Tuple, Sequence
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
-from typing import Dict, List, Optional, Union, Any, Tuple
-from datetime import datetime
-import json
+import matplotlib.pyplot as plt
+import torch
+
+# Reporting utilities (optional dependency handled in the module)
+try:
+from tools.reporting import (
+    HTMLReportGenerator,
+    ReportRenderingError,
+    ReportSummary,
+    build_report_context,
+)
+
+REPORTING_AVAILABLE = True
+except Exception:  # pragma: no cover - optional feature fallback
+    HTMLReportGenerator = None  # type: ignore
+    ReportRenderingError = None  # type: ignore
+    ReportSummary = None  # type: ignore
+    build_report_context = None  # type: ignore
+    REPORTING_AVAILABLE = False
 
 # 导入NeuroTrain的指标模块
 try:
@@ -38,12 +57,19 @@ except ImportError:
 
 # 尝试导入PDF生成库
 try:
-    from reportlab.lib.pagesizes import letter, A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-    REPORTLAB_AVAILABLE = True
+# pylint: disable=import-error
+from reportlab.lib.pagesizes import letter, A4  # type: ignore
+from reportlab.platypus import (  # type: ignore
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore
+from reportlab.lib.units import inch  # type: ignore
+from reportlab.lib import colors  # type: ignore
+REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
@@ -66,6 +92,8 @@ class MetricsAnalyzer:
         
         self.result_dir = Path(result_dir)
         self.result_dir.mkdir(parents=True, exist_ok=True)
+
+        self.logger = logging.getLogger("MetricsAnalyzer")
         
         # 支持的指标类型
         self.supported_metrics = {
@@ -554,6 +582,82 @@ class MetricsAnalyzer:
                 f.write(f"\n{metric_name.upper()} Rankings:\n")
                 for i, (model_name, score) in enumerate(rankings, 1):
                     f.write(f"  {i}. {model_name}: {score:.4f}\n")
+
+    # ------------------------------------------------------------------
+    # New functionality: HTML/PDF reporting integration
+
+    def generate_html_report(
+        self,
+        summary: Dict[str, Any],
+        metrics_overall: Optional[Dict[str, float]] = None,
+        metrics_per_class: Optional[Dict[str, Dict[str, float]]] = None,
+        charts: Optional[Sequence[Any]] = None,
+        monitor_json: Optional[Path] = None,
+        artifacts: Optional[Sequence[Dict[str, Any]]] = None,
+        notes: Optional[Sequence[str]] = None,
+        html_filename: str = "report.html",
+        convert_to_pdf: bool = True,
+    ) -> Optional[Path]:
+        """Generate an enriched HTML (and optional PDF) report.
+
+        This method is a high-level convenience wrapper around the
+        :mod:`tools.reporting` package.  It collects the provided data
+        and renders the built-in HTML template.  PDF export requires
+        either WeasyPrint or pdfkit.
+
+        Parameters
+        ----------
+        summary:
+            Dictionary containing high level experiment summary. Expected
+            keys include ``title``, ``task``, ``model_name`` etc.
+        metrics_overall:
+            Mapping of aggregate metrics.
+        metrics_per_class:
+            Mapping of per-class metrics.
+        charts:
+            Sequence of chart entries (file paths or dictionaries as
+            accepted by :class:`HTMLReportGenerator`).
+        monitor_json:
+            Path to monitor JSON file to embed in the report.
+        artifacts:
+            Additional artefacts to list in the report.
+        notes:
+            Optional textual notes.
+        html_filename:
+            Name of the generated HTML file.
+        convert_to_pdf:
+            If True, attempt to generate PDF via available backend.
+        """
+
+        if not REPORTING_AVAILABLE:
+            self.logger.warning("HTML reporting not available (missing dependencies)")
+            return None
+
+        try:
+            summary_obj = ReportSummary(**summary)
+        except TypeError as exc:  # pragma: no cover
+            raise ValueError(f"Invalid summary fields: {exc}") from exc
+
+        context = build_report_context(
+            summary=summary_obj,
+            metrics_overall=metrics_overall,
+            metrics_per_class=metrics_per_class,
+            charts=charts,
+            monitor_json=monitor_json,
+            artifacts=artifacts,
+            notes=notes,
+        )
+
+        generator = HTMLReportGenerator()
+        html_path = generator.render(
+            output_dir=self.result_dir,
+            context=context,
+            html_filename=html_filename,
+            convert_to_pdf=convert_to_pdf,
+        )
+
+        self.logger.info("Enriched HTML report generated at %s", html_path)
+        return html_path
 
 
 def analyze_model_metrics(metrics_data: Union[Dict, Path], 

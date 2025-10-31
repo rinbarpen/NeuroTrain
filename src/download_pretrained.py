@@ -9,7 +9,7 @@ from torchvision import models
 import timm
 from huggingface_hub import snapshot_download as hf_download
 
-from src.config import PRETRAINED_MODEL_DIR
+from src.constants import PRETRAINED_MODEL_DIR
 from src.utils.annotation import retry
 
 

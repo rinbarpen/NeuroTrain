@@ -30,8 +30,13 @@ class MNISTDataset(CustomDataset):
             split: 数据集类型
             download: 是否下载数据集
             **kwargs: 其他配置参数
+                - enable_cache: 是否启用缓存，默认True
         """
         super(MNISTDataset, self).__init__(root_dir, split, **kwargs)
+        
+        # 如果从缓存加载成功，直接返回
+        if self._cache_loaded:
+            return
         
         self.download = download
         
@@ -52,9 +57,20 @@ class MNISTDataset(CustomDataset):
             
         self.n = len(self.dataset)
         
+        # 将dataset转换为samples列表以便缓存
+        self.samples = [(img, label) for img, label in self.dataset]
+        
+        # 自动保存到缓存
+        self._save_to_cache_if_needed()
+        
     def __getitem__(self, index):
         """获取指定索引的数据样本"""
-        image, label = self.dataset[index]
+        # 从缓存加载的情况
+        if self._cache_loaded and hasattr(self, 'samples'):
+            image, label = self.samples[index]
+        else:
+            # 从dataset加载
+            image, label = self.dataset[index]
         
         # 转换为numpy数组并归一化
         image = np.array(image, dtype=np.float32) / 255.0
@@ -72,55 +88,29 @@ class MNISTDataset(CustomDataset):
             'mask': mask_tensor,    # 掩码张量 (1, 28, 28)
             'metadata': {
                 'label': int(label),  # 原始数字标签
-                'split': self.dataset_type,
-                'download': self.download
+                'split': self.split,
+                'download': getattr(self, 'download', True)
             }
         }
     
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """将数据集转换为numpy格式保存
-        
-        Args:
-            save_dir: 保存目录
-            root_dir: 数据集根目录
-            betweens: 兼容性参数，实际不再使用
-            **kwargs: 其他配置参数
-        """
-        save_dir = save_dir / MNISTDataset.name()
-        save_dir.mkdir(parents=True, exist_ok=True)
-        
-        train_dataset = MNISTDataset.get_train_dataset(root_dir, **kwargs)
-        valid_dataset = MNISTDataset.get_valid_dataset(root_dir, **kwargs)
-        test_dataset = MNISTDataset.get_test_dataset(root_dir, **kwargs)
-        
-        from torch.utils.data import DataLoader
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
-        
-        for dataloader, dataset_type in zip(
-            (train_dataloader, valid_dataloader, test_dataloader), 
-            ('train', 'valid', 'test')
-        ):
-            type_dir = save_dir / dataset_type
-            type_dir.mkdir(parents=True, exist_ok=True)
-            
-            for i, (image, mask) in enumerate(dataloader):
-                image_path = type_dir / f'image_{i:05d}.npy'
-                mask_path = type_dir / f'mask_{i:05d}.npy'
-                
-                np.save(image_path, image.numpy())
-                np.save(mask_path, mask.numpy())
-        
-        # 保存配置文件
-        config_file = save_dir / "config.yaml"
-        with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({**kwargs}, f)
-    
-    @staticmethod
     def name():
         return "MNIST"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取MNIST数据集元数据"""
+        return {
+            'num_classes': 10,
+            'class_names': ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+            'image_size': (28, 28, 1),
+            'task_type': 'classification',  # 或 'segmentation' 取决于使用方式
+            'metrics': ['accuracy', 'precision', 'recall', 'f1_score'],
+            'num_train': 50000,
+            'num_valid': 10000,
+            'num_test': 10000,
+            'dataset_name': 'MNIST'
+        }
     
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

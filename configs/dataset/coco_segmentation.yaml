@@ -1,0 +1,98 @@
+# COCO实例分割配置文件
+
+# 实验基本信息
+name: coco_segmentation
+description: COCO instance segmentation training
+
+# 数据集配置
+dataset:
+  name: coco
+  root_dir: data/coco
+  config:
+    year: '2017'
+    task: segmentation  # detection, segmentation, keypoint, caption
+    return_masks: true
+    use_crowd: false
+    min_keypoints: 0
+
+# 数据加载配置
+dataloader:
+  batch_size: 4
+  num_workers: 4
+  pin_memory: true
+  shuffle: true
+  drop_last: true
+
+# 模型配置
+model:
+  name: mask_rcnn  # 或其他实例分割模型
+  backbone: resnet50
+  num_classes: 91  # COCO有80个类别 + background
+  pretrained: true
+
+# 训练配置
+training:
+  epochs: 50
+  learning_rate: 0.001
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+  
+  # 损失函数权重
+  loss_weights:
+    bbox: 1.0
+    classification: 1.0
+    mask: 1.0
+    
+  # 梯度裁剪
+  grad_clip: 1.0
+  
+  # 混合精度训练
+  use_amp: true
+
+# 验证配置
+validation:
+  interval: 1  # 每个epoch验证一次
+  metrics:
+    - mAP  # bbox mAP
+    - mAP_mask  # mask mAP
+    - mAP50
+    - mAP75
+    - AR
+
+# 优化器配置
+optimizer:
+  type: AdamW
+  lr: 0.001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+
+# 学习率调度器配置
+scheduler:
+  type: CosineAnnealingLR
+  T_max: 50
+  eta_min: 0.00001
+
+# 日志配置
+logging:
+  log_dir: logs/coco_segmentation
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: neurotrain-coco
+    entity: your_entity
+
+# 检查点配置
+checkpoint:
+  save_dir: runs/coco_segmentation
+  save_interval: 5
+  keep_last_n: 3
+  
+# GPU配置
+device:
+  use_cuda: true
+  device_ids: [0]  # GPU设备ID列表
+  
+# 随机种子
+seed: 42
+

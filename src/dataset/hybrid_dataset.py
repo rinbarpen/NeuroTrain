@@ -7,24 +7,6 @@ from torch.utils.data import Dataset, Subset
 import random
 
 class HybridDataset(Dataset):
-    def __init__(self, datasets: Sequence[CustomDataset]):
-        self.datasets = datasets
-        self.lengths = [len(dataset) for dataset in datasets]
-        self.cumulative_lengths = np.cumsum(self.lengths)
-    
-    def __len__(self):
-        return self.cumulative_lengths[-1]
-    
-    def __getitem__(self, index: int):
-        dataset_index = np.searchsorted(self.cumulative_lengths, index, side='right')
-        local_index = index if dataset_index == 0 else index - self.cumulative_lengths[dataset_index - 1]
-        return self.datasets[dataset_index][local_index]
-    
-    def name(self):
-        return f'HybridDataset({", ".join([dataset.name() for dataset in self.datasets])})'
-
-
-class EnhancedHybridDataset(Dataset):
     """
     增强版混合数据集，支持以下功能：
     1. 数据集占比控制 - 可以设置每个数据集的采样比例
@@ -116,9 +98,10 @@ class EnhancedHybridDataset(Dataset):
         # 构建索引映射
         self._build_index_mapping()
         
-        logging.info(f"EnhancedHybridDataset初始化完成:")
+        logging.info(f"HybridDataset初始化完成:")
         for i, dataset in enumerate(self.datasets):
-            logging.info(f"  数据集{i}: {dataset.name()} - 原始长度: {self.original_lengths[i]}, "
+            dataset_name = getattr(dataset, 'name', f'Dataset_{i}')
+            logging.info(f"  数据集{i}: {dataset_name} - 原始长度: {self.original_lengths[i]}, "
                         f"采样长度: {self.sampling_lengths[i]}, 比例: {self.ratios[i]:.3f}, "
                         f"权重: {self.weights[i]:.3f}")
     
@@ -179,9 +162,14 @@ class EnhancedHybridDataset(Dataset):
         # 如果数据是字典，添加数据集元信息
         if isinstance(data, dict):
             data = data.copy()
+            # 获取数据集名称，确保是字符串而不是函数
+            dataset_name = getattr(self.datasets[dataset_index], 'name', f'Dataset_{dataset_index}')
+            if callable(dataset_name):
+                dataset_name = dataset_name()
+            
             data['_dataset_info'] = {
                 'dataset_index': dataset_index,
-                'dataset_name': self.datasets[dataset_index].name(),
+                'dataset_name': dataset_name,
                 'original_index': actual_index,
                 'weight': self.weights[dataset_index]
             }
@@ -189,21 +177,34 @@ class EnhancedHybridDataset(Dataset):
         return data
     
     def name(self):
-        dataset_names = [dataset.name() for dataset in self.datasets]
-        return f'EnhancedHybridDataset({", ".join(dataset_names)})'
+        dataset_names = []
+        for i, dataset in enumerate(self.datasets):
+            name = getattr(dataset, 'name', f'Dataset_{i}')
+            if callable(name):
+                name = name()
+            dataset_names.append(name)
+        return f"Hybrid({', '.join(dataset_names)})"
     
     def get_dataset_info(self) -> Dict:
         """获取数据集详细信息"""
         info = {
             'total_length': self.total_length,
             'num_datasets': self.num_datasets,
+            'dataset_names': [],
+            'ratios': self.ratios,
+            'weights': self.weights,
             'datasets': []
         }
         
         for i, dataset in enumerate(self.datasets):
+            dataset_name = getattr(dataset, 'name', f'Dataset_{i}')
+            if callable(dataset_name):
+                dataset_name = dataset_name()
+            info['dataset_names'].append(dataset_name)
+            
             dataset_info = {
                 'index': i,
-                'name': dataset.name(),
+                'name': dataset_name,
                 'original_length': self.original_lengths[i],
                 'sampling_length': self.sampling_lengths[i],
                 'ratio': self.ratios[i],
@@ -269,10 +270,11 @@ class EnhancedHybridDataset(Dataset):
             'total_samples': self.total_length,
             'datasets': []
         }
-        
+    
         for i, dataset in enumerate(self.datasets):
+            dataset_name = getattr(dataset, 'name', f'Dataset_{i}')
             dataset_stats = {
-                'name': dataset.name(),
+                'name': dataset_name,
                 'original_samples': self.original_lengths[i],
                 'sampled_samples': self.sampling_lengths[i],
                 'sampling_ratio': self.ratios[i],
@@ -285,20 +287,34 @@ class EnhancedHybridDataset(Dataset):
         return stats
 
 
-def create_enhanced_hybrid_dataset_from_config(datasets_config: List[Dict]) -> EnhancedHybridDataset:
+def create_hybrid_dataset_from_config(dataset_config: Dict, mode: str, global_config: Dict = None) -> HybridDataset:
     """
-    从配置创建增强版混合数据集
+    从配置创建增强混合数据集
     
     Args:
-        datasets_config: 数据集配置列表，每个配置包含:
-            - dataset: CustomDataset实例
-            - ratio: 采样比例 (可选)
-            - priority: 优先级 (可选)
-            - weight: 权重 (可选)
+        dataset_config: 数据集配置字典，包含 hybrid 配置
+        mode: 数据集模式 ('train', 'test', 'valid')
+        global_config: 全局配置字典，用于设置变换等
     
     Returns:
-        EnhancedHybridDataset实例
+        HybridDataset: 创建的混合数据集
     """
+    from .dataset import get_train_dataset, get_test_dataset, get_valid_dataset
+    from pathlib import Path
+    from src.config import set_config
+    
+    # 如果提供了全局配置，设置到全局变量中
+    if global_config is not None:
+        set_config(global_config)
+    
+    # 获取 hybrid 配置
+    config = dataset_config.get('hybrid', {})
+    datasets_list = config.get('datasets', [])
+    
+    if not datasets_list:
+        raise ValueError("hybrid 配置中没有找到数据集列表")
+    
+    # 创建数据集列表
     datasets = []
     ratios = []
     priorities = []
@@ -308,12 +324,34 @@ def create_enhanced_hybrid_dataset_from_config(datasets_config: List[Dict]) -> E
     has_priorities = False
     has_weights = False
     
-    for config in datasets_config:
-        if 'dataset' not in config:
-            raise ValueError("数据集配置必须包含'dataset'字段")
+    # 处理每个数据集配置
+    for config in datasets_list:
+        # 根据mode获取对应的数据集
+        dataset_name = config.get('class_name', config.get('name', ''))
+        root_dir = Path(config['root_dir'])
         
-        datasets.append(config['dataset'])
+        # 提取数据集特定的参数
+        dataset_kwargs = {}
+        for key, value in config.items():
+            if key not in ['name', 'class_name', 'root_dir', 'train_split', 'test_split', 'valid_split', 'val_split', 'ratio', 'priority', 'weight']:
+                dataset_kwargs[key] = value
         
+        # 根据模式选择对应的split
+        if mode == 'train':
+            split = config.get('train_split', 'train')
+            dataset = get_train_dataset(dataset_name, root_dir, **dataset_kwargs)
+        elif mode == 'test':
+            split = config.get('test_split', 'test')
+            dataset = get_test_dataset(dataset_name, root_dir, **dataset_kwargs)
+        elif mode in ['valid', 'val']:
+            split = config.get('valid_split', config.get('val_split', 'valid'))
+            dataset = get_valid_dataset(dataset_name, root_dir, **dataset_kwargs)
+        else:
+            raise ValueError(f"不支持的模式: {mode}")
+        
+        datasets.append(dataset)
+        
+        # 收集比例、优先级和权重信息
         if 'ratio' in config:
             ratios.append(config['ratio'])
             has_ratios = True
@@ -337,9 +375,17 @@ def create_enhanced_hybrid_dataset_from_config(datasets_config: List[Dict]) -> E
     final_priorities = priorities if has_priorities and all(p is not None for p in priorities) else None
     final_weights = weights if has_weights and all(w is not None for w in weights) else None
     
-    return EnhancedHybridDataset(
+    # 获取全局设置
+    shuffle_order = config.get('shuffle_order', False)
+    random_seed = config.get('random_seed', None)
+    enable_dynamic_resampling = config.get('enable_dynamic_resampling', False)
+    
+    return HybridDataset(
         datasets=datasets,
         ratios=final_ratios,
         priorities=final_priorities,
-        weights=final_weights
+        weights=final_weights,
+        shuffle_order=shuffle_order,
+        random_seed=random_seed,
+        enable_dynamic_resampling=enable_dynamic_resampling
     )

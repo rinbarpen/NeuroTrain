@@ -4,7 +4,8 @@ from pathlib import Path
 import torch.nn as nn
 import torchvision.transforms as mtf
 import numpy as np
-from src.engine.predictor.BasePredictor import BasePredictor
+
+from engine.predictor.BasePredictor import BasePredictor
 
 class SegmentPredictor(BasePredictor):
     def __init__(self, output_dir: str|Path, model: nn.Module, device: str, **kwargs):

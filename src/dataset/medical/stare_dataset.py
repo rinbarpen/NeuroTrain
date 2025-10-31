@@ -73,37 +73,23 @@ class StareDataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """导出为numpy（兼容保留betweens形参，但内部不使用）"""
-        save_dir = save_dir / StareDataset.name()
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        train_dataset = StareDataset.get_train_dataset(root_dir, **kwargs)
-        test_dataset = StareDataset.get_test_dataset(root_dir, **kwargs)
-
-        from torch.utils.data import DataLoader
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-        for dataloader, dataset_type in ((train_dataloader, 'train'), (test_dataloader, 'test')):
-            image_dir = (save_dir / StareDataset.mapping[dataset_type][0]).parent
-            mask_dir = (save_dir / StareDataset.mapping[dataset_type][1]).parent
-            image_dir.mkdir(parents=True, exist_ok=True)
-            mask_dir.mkdir(parents=True, exist_ok=True)
-
-            for i, (image, mask) in enumerate(dataloader):
-                image_path = image_dir / f'{i}.npy'
-                mask_path = mask_dir / f'{i}.npy'
-                np.save(image_path, image.numpy())
-                np.save(mask_path, mask.numpy())
-
-        config_file = save_dir / "config.yaml"
-        with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({**kwargs}, f, sort_keys=False)
-
-    @staticmethod
     def name():
         return "STARE"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取STARE数据集元数据"""
+        return {
+            'num_classes': 2,
+            'class_names': ['background', 'vessel'],
+            'task_type': 'segmentation',
+            'metrics': ['dice', 'iou', 'accuracy', 'sensitivity', 'specificity'],
+            'image_size': (700, 605, 3),
+            'num_train': 10,
+            'num_test': 10,
+            'dataset_name': 'STARE',
+            'description': 'Structured Analysis of the Retina'
+        }
 
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

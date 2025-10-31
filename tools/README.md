@@ -187,7 +187,111 @@ analyzer.visualize_error_distribution(
 )
 ```
 
-### 3. 命令行集成
+### 3. 数据处理工具
+
+#### `data_to_latex.py` - 数据文件转LaTeX格式工具
+- **功能**: 将各种数据文件（CSV、Excel、JSON等）转换为LaTeX格式
+- **主要特性**:
+  - 支持多种数据格式：CSV、Excel、JSON、Parquet、TSV
+  - 支持多种LaTeX格式：table、longtable、itemize、enumerate、description
+  - 自动转义LaTeX特殊字符
+  - 支持列选择和自定义模板
+  - 支持行数限制和数据预览
+
+**命令行使用**:
+```bash
+# 转换CSV为标准表格
+python tools/data_to_latex.py -i data.csv -t table --caption "实验结果" --label "tab:results"
+
+# 转换为无序列表（自定义模板）
+python tools/data_to_latex.py -i data.xlsx -t itemize --template "{name}: {value}"
+
+# 转换为描述列表
+python tools/data_to_latex.py -i data.json -t description --key-column name
+
+# 只选择特定列并保存
+python tools/data_to_latex.py -i data.csv -o output.tex -t table -c col1 col2 col3
+
+# 长表格（支持跨页）
+python tools/data_to_latex.py -i data.csv -t longtable --max-rows 100
+
+# 查看数据信息
+python tools/data_to_latex.py -i data.csv --show-info
+```
+
+**支持的LaTeX格式**:
+- `table`: 标准表格 (tabular)
+- `longtable`: 长表格（支持跨页，需要 `\usepackage{longtable}`）
+- `itemize`: 无序列表
+- `enumerate`: 有序列表
+- `description`: 描述列表
+
+**Python使用**:
+```python
+from tools.data_to_latex import DataToLatexConverter
+
+# 创建转换器
+converter = DataToLatexConverter(
+    input_file='data.csv',
+    output_file='output.tex',
+    latex_type='table',
+    columns=['name', 'score'],
+    caption='Results',
+    label='tab:results'
+)
+
+# 加载数据
+converter.load_data()
+
+# 执行转换
+latex_code = converter.convert()
+
+# 保存
+converter.save(latex_code)
+```
+
+更多示例请查看 `tools/data_to_latex_examples.md`
+
+#### `to_parquet.py` - 数据文件转Parquet格式工具
+- **功能**: 将CSV、Excel等文件转换为高效的Parquet格式
+- **主要特性**:
+  - 支持单文件和批量转换
+  - 自动识别文件类型
+
+```bash
+# 转换单个文件
+python tools/to_parquet.py -i data.csv
+
+# 批量转换目录
+python tools/to_parquet.py -i data/
+```
+
+#### `list_datasets.py` - 数据集查询工具
+- **功能**: 查询和浏览项目中支持的数据集
+- **主要特性**:
+  - 列出所有可用数据集
+  - 按任务类型查询数据集
+  - 查看数据集详细信息
+  - 显示统计信息
+
+```bash
+# 列出所有数据集
+python tools/list_datasets.py --list-all
+
+# 列出所有任务类型
+python tools/list_datasets.py --list-tasks
+
+# 按任务查询
+python tools/list_datasets.py --task classification
+
+# 查看数据集信息
+python tools/list_datasets.py --info imagenet
+
+# 显示统计信息
+python tools/list_datasets.py --statistics
+```
+
+### 4. 命令行集成
 
 #### LoRA 适配器合并工具
 支持多种合并策略的 LoRA 适配器合并工具，可将一个或多个 LoRA 适配器合并回基础模型。

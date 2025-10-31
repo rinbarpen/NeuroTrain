@@ -114,3 +114,47 @@ bleu_metrics = get_metric_fns([
     'bleu',
     'sentence_bleu'
 ])
+
+# Import Top-K metrics
+from .topk import (
+    # 简化版本（不带装饰器）
+    topk_accuracy,
+    topk_precision,
+    topk_recall,
+    topk_f1,
+    # 工厂函数
+    make_topk_accuracy,
+    make_topk_precision,
+    make_topk_recall,
+    make_topk_f1,
+    # 预定义的Top-1指标
+    top1_accuracy,
+    top1_precision,
+    top1_recall,
+    top1_f1,
+    # 预定义的Top-3指标
+    top3_accuracy,
+    top3_precision,
+    top3_recall,
+    top3_f1,
+    # 预定义的Top-5指标
+    top5_accuracy,
+    top5_precision,
+    top5_recall,
+    top5_f1,
+    # 预定义的Top-10指标
+    top10_accuracy,
+    top10_precision,
+    top10_recall,
+    top10_f1,
+    # 便捷函数
+    get_topk_metrics
+)
+
+# 分类任务的Top-K指标集合
+classification_topk_metrics = get_metric_fns([
+    'top1_accuracy',
+    'top3_accuracy',
+    'top5_accuracy',
+    'top10_accuracy',
+])

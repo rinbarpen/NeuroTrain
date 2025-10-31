@@ -131,6 +131,20 @@ class BOWL2018Dataset(CustomDataset):
     @staticmethod
     def name():
         return "BOWL2018"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取BOWL2018数据集元数据"""
+        return {
+            'num_classes': 2,
+            'class_names': ['background', 'nucleus'],
+            'task_type': 'segmentation',
+            'metrics': ['dice', 'iou', 'accuracy'],
+            'num_train': 670,
+            'num_test': 65,
+            'dataset_name': 'BOWL2018',
+            'description': 'Data Science Bowl 2018 Nucleus Segmentation'
+        }
 
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

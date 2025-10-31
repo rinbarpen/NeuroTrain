@@ -17,8 +17,8 @@ import psutil
 import torch
 import numpy as np
 
-from recorder.meter import Meter, MiniMeter
-from utils.ndict import NDict
+from src.recorder.meter import Meter, MiniMeter
+from src.utils.ndict import NDict
 
 
 @dataclass

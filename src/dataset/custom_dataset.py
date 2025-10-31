@@ -1,10 +1,13 @@
 from torch.utils.data import Dataset, Subset
 from pathlib import Path
 from abc import abstractmethod
-from typing import Literal, TypedDict, Tuple, Optional, List, Sequence
+from typing import TypedDict, Optional, List, Sequence
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 保留Betweens类型定义，因为其他地方可能还在使用
 class Betweens(TypedDict):
@@ -16,6 +19,9 @@ class CustomDataset(Dataset):
     """数据集基类，提供标准化的数据集接口"""
     mapping = ... # {'train': (), 'valid': (), 'test': ()}
     
+    # 标记是否需要缓存处理（子类可以重写）
+    _cacheable = True
+    
     def __init__(self, root_dir: Path, split: str, desired_n: int = 0, **kwargs):
         """
         初始化数据集基类
@@ -25,17 +31,208 @@ class CustomDataset(Dataset):
             split: 数据集类型 ('train', 'test', 'valid', 'val', 'xx')
             desired_n: 期望的样本数量，默认0
             **kwargs: 其他扩展参数
+                - enable_cache: 是否启用缓存，默认True（自动启用）
+                - cache_root: 缓存根目录，默认为workspace的cache目录
+                - cache_version: 缓存版本号，默认为"v1"
+                - cache_format: 缓存格式，默认为"pkl"
+                - force_rebuild_cache: 是否强制重建缓存，默认False
         """
         super(Dataset, self).__init__()
 
         self.split = split
         self.root_dir = root_dir
         self.n = desired_n  # 数据集样本数量
+        
+        # 缓存相关配置（默认启用）
+        self.enable_cache = kwargs.pop('enable_cache', True)
+        self.cache_root = kwargs.pop('cache_root', None)
+        self.cache_version = kwargs.pop('cache_version', 'v1')
+        self.cache_format = kwargs.pop('cache_format', 'pkl')
+        self.force_rebuild_cache = kwargs.pop('force_rebuild_cache', False)
+        self._cache_manager = None
+        self._cache_loaded = False  # 标记是否从缓存加载
 
         for k,v in kwargs.items():
             setattr(self, k, v)
         
         self.samples = []
+        
+        # 自动尝试从缓存加载
+        if self.enable_cache and self._cacheable:
+            self._try_load_from_cache()
+    
+    def _get_cache_manager(self):
+        """获取缓存管理器实例（延迟初始化）"""
+        if self._cache_manager is None and self.enable_cache:
+            from .cache_manager import DatasetCacheManager
+            self._cache_manager = DatasetCacheManager(
+                dataset_name=self.name(),
+                cache_root=self.cache_root,
+                version=self.cache_version,
+                enable_cache=self.enable_cache
+            )
+        return self._cache_manager
+    
+    def _get_cache_config(self):
+        """获取用于缓存键生成的配置"""
+        # 子类可以重写此方法来自定义缓存配置
+        return {
+            "root_dir": str(self.root_dir),
+            "desired_n": self.n
+        }
+    
+    def _try_load_from_cache(self):
+        """尝试从缓存加载数据（内部方法，自动调用）"""
+        if not self.enable_cache or self.force_rebuild_cache:
+            return False
+        
+        cache_manager = self._get_cache_manager()
+        if cache_manager is None:
+            return False
+        
+        config = self._get_cache_config()
+        
+        # 检查缓存是否存在
+        if not cache_manager.exists(self.split, config, self.cache_format):
+            logger.debug(f"缓存不存在: {self.name()} ({self.split})")
+            return False
+        
+        # 尝试加载缓存
+        cached_data = cache_manager.load(
+            self.split,
+            config,
+            self.cache_format,
+            check_validity=True
+        )
+        
+        if cached_data is not None:
+            # 恢复缓存的数据
+            self.samples = cached_data.get("samples", [])
+            self.n = cached_data.get("n", len(self.samples))
+            self._cache_loaded = True
+            logger.info(f"✓ 从缓存加载: {self.name()} ({self.split}), 样本数: {self.n}")
+            return True
+        
+        return False
+    
+    def _save_to_cache_if_needed(self):
+        """如果需要，保存到缓存（内部方法，子类加载完数据后调用）"""
+        if not self.enable_cache or self._cache_loaded:
+            return False
+        
+        cache_manager = self._get_cache_manager()
+        if cache_manager is None:
+            return False
+        
+        config = self._get_cache_config()
+        
+        # 准备要缓存的数据
+        cache_data = {
+            "samples": self.samples,
+            "n": self.n,
+            "split": self.split
+        }
+        
+        metadata = {
+            "num_samples": len(self),
+            "dataset_class": self.__class__.__name__
+        }
+        
+        success = cache_manager.save(
+            cache_data,
+            self.split,
+            config,
+            self.cache_format,
+            metadata=metadata
+        )
+        
+        if success:
+            logger.info(f"✓ 已保存缓存: {self.name()} ({self.split})")
+        
+        return success
+    
+    def save_to_cache(self, format: str = "pkl", metadata: Optional[dict] = None):
+        """将当前数据集保存到缓存
+        
+        Args:
+            format: 缓存格式（pkl/pt/json）
+            metadata: 额外的元数据信息
+        """
+        cache_manager = self._get_cache_manager()
+        if cache_manager is None:
+            logger.warning("缓存未启用，无法保存")
+            return False
+        
+        config = {
+            "root_dir": str(self.root_dir),
+            "desired_n": self.n
+        }
+        
+        # 准备要缓存的数据
+        cache_data = {
+            "samples": self.samples,
+            "n": self.n,
+            "split": self.split
+        }
+        
+        if metadata is None:
+            metadata = {}
+        metadata.update({
+            "num_samples": len(self),
+            "dataset_class": self.__class__.__name__
+        })
+        
+        return cache_manager.save(
+            cache_data,
+            self.split,
+            config,
+            format,
+            metadata=metadata
+        )
+    
+    def load_from_cache(self, format: str = "pkl") -> bool:
+        """从缓存加载数据集
+        
+        Args:
+            format: 缓存格式（pkl/pt/json）
+        
+        Returns:
+            是否成功加载
+        """
+        cache_manager = self._get_cache_manager()
+        if cache_manager is None:
+            return False
+        
+        config = {
+            "root_dir": str(self.root_dir),
+            "desired_n": self.n
+        }
+        
+        cached_data = cache_manager.load(
+            self.split,
+            config,
+            format,
+            check_validity=not self.force_rebuild_cache
+        )
+        
+        if cached_data is not None:
+            # 恢复缓存的数据
+            self.samples = cached_data.get("samples", [])
+            self.n = cached_data.get("n", len(self.samples))
+            logger.info(f"成功从缓存加载数据集: {self.name()} ({self.split}), 样本数: {self.n}")
+            return True
+        
+        return False
+    
+    def clear_cache(self):
+        """清除当前数据集的缓存"""
+        cache_manager = self._get_cache_manager()
+        if cache_manager is not None:
+            config = {
+                "root_dir": str(self.root_dir),
+                "desired_n": self.n
+            }
+            return cache_manager.clear(self.split, config)
 
     def __len__(self):
         """返回数据集样本数量"""
@@ -48,15 +245,27 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @abstractmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """将数据集转换为numpy格式保存"""
-        ...
-
-    @staticmethod
-    @abstractmethod
     def name() -> str:
         """返回数据集名称"""
         ...
+    
+    @staticmethod
+    def metadata(**kwargs) -> dict:
+        """获取数据集元数据信息
+        
+        返回包含以下信息的字典:
+            - num_classes: 类别数量
+            - class_names: 类别名称列表 (如果适用)
+            - task_type: 任务类型 (classification, segmentation, detection等)
+            - metrics: 推荐使用的评估指标列表
+            - 其他数据集特定的元信息
+        
+        子类应该重写此方法以提供具体的元数据信息
+        """
+        return {
+            'task_type': 'unknown',
+            'metrics': [],
+        }
 
     @staticmethod
     @abstractmethod
@@ -211,7 +420,9 @@ class CustomDataset(Dataset):
         - 改为使用顺序采样前 dataset_size 个样本的索引，并更新 self.n。
         """
         # 计算目标样本数
-        if dataset_size is None or dataset_size <= 1.0:
+        if dataset_size is None:
+            dataset_size = len(self)
+        elif dataset_size <= 1.0:
             dataset_size = int(dataset_size * len(self))
         else:
             dataset_size = int(dataset_size)
@@ -230,12 +441,61 @@ class CustomDataset(Dataset):
             self.sampler = SequentialSampler(range(dataset_size))
         return self
 
-    def dataloader(self, batch_size: int, shuffle: bool = True, num_workers: int = 0, pin_memory: bool=True, drop_last: bool=False, collate_fn=None) -> DataLoader:
+    def dataloader(
+        self, 
+        batch_size: int, 
+        shuffle: bool = True, 
+        num_workers: int = 0, 
+        pin_memory: bool = True, 
+        drop_last: bool = False, 
+        collate_fn = None,
+        enable_prefetch: bool = False,
+        prefetch_buffer_size: int = 2
+    ) -> DataLoader:
+        """
+        创建DataLoader
+        
+        Args:
+            batch_size: batch大小
+            shuffle: 是否打乱
+            num_workers: 工作进程数
+            pin_memory: 是否使用pin memory
+            drop_last: 是否丢弃最后不完整的batch
+            collate_fn: 数据整理函数
+            enable_prefetch: 是否启用预读取
+            prefetch_buffer_size: 预读取缓冲区大小
+        
+        Returns:
+            DataLoader实例
+        """
         # 当提供 sampler 时，必须禁用 shuffle 以避免冲突
         sampler = getattr(self, 'sampler', None)
         if sampler is not None and shuffle:
             shuffle = False
-        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, sampler=sampler, num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last, collate_fn=collate_fn)
+        
+        # 如果启用预读取，包装数据集
+        dataset = self
+        if enable_prefetch:
+            from .prefetch_wrapper import create_prefetch_dataset
+            mode = "sequential" if not shuffle else "general"
+            dataset = create_prefetch_dataset(
+                self,
+                buffer_size=prefetch_buffer_size,
+                enable_prefetch=True,
+                mode=mode
+            )
+            logger.info(f"DataLoader启用预读取，模式: {mode}, 缓冲区: {prefetch_buffer_size}")
+        
+        return DataLoader(
+            dataset, 
+            batch_size=batch_size, 
+            shuffle=shuffle, 
+            sampler=sampler, 
+            num_workers=num_workers, 
+            pin_memory=pin_memory, 
+            drop_last=drop_last, 
+            collate_fn=collate_fn
+        )
 
     def get_dataset(self, splits: str|Sequence[str], **kwargs):
         if isinstance(splits, str):

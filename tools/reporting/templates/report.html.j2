@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or "NeuroTrain Report" }}</title>
+    <style>
+        body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; margin: 0; background: #f5f5f9; color: #333; }
+        header { background: #1f2937; color: white; padding: 30px 40px; }
+        h1, h2, h3 { margin: 0; }
+        main { padding: 30px 40px; }
+        section { background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); margin-bottom: 30px; overflow: hidden; }
+        section header { background: linear-gradient(120deg, #2563eb, #4338ca); color: white; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
+        section header h2 { font-size: 1.4rem; font-weight: 600; }
+        section header span { font-size: 0.9rem; opacity: 0.85; }
+        section .content { padding: 24px; }
+        .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+        .card { background: #f9fafb; border-radius: 10px; padding: 16px; border: 1px solid #e5e7eb; }
+        .card h3 { font-size: 0.95rem; margin-bottom: 8px; font-weight: 600; color: #2563eb; }
+        .card p { margin: 0; font-size: 1rem; font-weight: 500; }
+        .card span { display: block; margin-top: 6px; font-size: 0.85rem; color: #6b7280; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        tr:nth-child(even) { background: #f9fafb; }
+        th { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #2563eb; }
+        .chart-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+        .chart-card { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
+        .chart-card .caption { padding: 12px 16px; font-size: 0.9rem; color: #374151; background: #f3f4f6; border-top: 1px solid #e5e7eb; }
+        .chart-card img { width: 100%; display: block; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(37, 99, 235, 0.1); color: #2563eb; padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
+        .badge::before { content: "●"; font-size: 0.6rem; }
+        .two-columns { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+        pre { background: #0f172a; color: #f8fafc; padding: 16px 20px; border-radius: 10px; overflow-x: auto; }
+        code { font-family: "Fira Code", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        footer { padding: 30px 40px; text-align: center; font-size: 0.85rem; color: #6b7280; }
+        @media (max-width: 640px) { main, header, footer { padding: 20px; } }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="badge">NeuroTrain Auto Report</div>
+        <h1>{{ title or "NeuroTrain Experiment Report" }}</h1>
+        {% if summary and summary.generated_at %}
+            <p style="margin-top: 12px; color: rgba(255, 255, 255, 0.7);">Generated at {{ summary.generated_at }}</p>
+        {% endif %}
+    </header>
+
+    <main>
+        {% if summary %}
+        <section>
+            <header>
+                <h2>Overview</h2>
+                {% if summary.runtime %}<span>Runtime: {{ summary.runtime }}</span>{% endif %}
+            </header>
+            <div class="content">
+                <div class="cards">
+                    {% if summary.task %}
+                    <div class="card">
+                        <h3>Task</h3>
+                        <p>{{ summary.task }}</p>
+                    </div>
+                    {% endif %}
+                    {% if summary.model_name %}
+                    <div class="card">
+                        <h3>Model</h3>
+                        <p>{{ summary.model_name }}</p>
+                        {% if summary.model_info %}<span>{{ summary.model_info }}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if summary.dataset %}
+                    <div class="card">
+                        <h3>Dataset</h3>
+                        <p>{{ summary.dataset }}</p>
+                        {% if summary.samples %}<span>{{ summary.samples }} samples</span>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if summary.metrics %}
+                    <div class="card">
+                        <h3>Best Metric</h3>
+                        {% for name, value in summary.metrics.items() %}
+                            <p>{{ name }}: {{ value }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if metrics %}
+        <section>
+            <header><h2>Metrics Summary</h2></header>
+            <div class="content">
+                {% if metrics.overall %}
+                    <div class="cards">
+                        {% for name, value in metrics.overall.items() %}
+                        <div class="card">
+                            <h3>{{ name }}</h3>
+                            <p>{{ "%.4f"|format(value) }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if metrics.per_class %}
+                    <h3 style="margin-top: 24px;">Per-class Metrics</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Class</th>
+                                    {% for metric_name in metrics.per_class.metric_names %}
+                                        <th>{{ metric_name }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for class_name, metric_values in metrics.per_class.values.items() %}
+                                <tr>
+                                    <td>{{ class_name }}</td>
+                                    {% for metric_name in metrics.per_class.metric_names %}
+                                        <td>{{ "%.4f"|format(metric_values.get(metric_name, 0)) }}</td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if charts %}
+        <section>
+            <header><h2>Visual Insights</h2></header>
+            <div class="content">
+                <div class="chart-grid">
+                    {% for chart in charts %}
+                        <div class="chart-card">
+                            {% if chart.type == "inline" %}
+                                <img src="{{ chart.data_uri }}" alt="chart"/>
+                            {% elif chart.type == "file" %}
+                                <img src="{{ chart.path }}" alt="chart"/>
+                            {% else %}
+                                <div style="padding:24px;color:#ef4444;">Missing chart: {{ chart.path }}</div>
+                            {% endif %}
+                            {% if chart.caption %}
+                                <div class="caption">{{ chart.caption }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if monitor_data %}
+        <section>
+            <header><h2>Monitoring Summary</h2></header>
+            <div class="content">
+                {% if monitor_data.system_metrics %}
+                <div class="cards">
+                    <div class="card">
+                        <h3>System Metrics Samples</h3>
+                        <p>{{ monitor_data.system_metrics|length }}</p>
+                        <span>Collected by training monitor</span>
+                    </div>
+                    {% if monitor_data.training_metrics %}
+                    <div class="card">
+                        <h3>Training Updates</h3>
+                        <p>{{ monitor_data.training_metrics|length }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if monitor_data.training_metrics %}
+                <pre>{{ monitor_data.training_metrics[-1]|tojson(indent=2) }}</pre>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if artifacts %}
+        <section>
+            <header><h2>Artifacts</h2></header>
+            <div class="content">
+                <ul>
+                {% for artifact in artifacts %}
+                    <li><a href="{{ artifact.path }}" target="_blank">{{ artifact.name }}</a> &mdash; {{ artifact.description }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if notes %}
+        <section>
+            <header><h2>Notes</h2></header>
+            <div class="content">
+                {% for note in notes %}
+                    <p>{{ note }}</p>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+    </main>
+
+    <footer>
+        Generated by NeuroTrain • {{ summary.generated_at if summary and summary.generated_at else "" }}
+    </footer>
+</body>
+</html>

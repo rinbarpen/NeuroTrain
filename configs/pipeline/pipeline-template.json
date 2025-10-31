@@ -1,10 +1,65 @@
 {
+    "_comment": "Pipeline配置文件示例 - 支持variants（参数变体）和devices（GPU分配）",
+    
     "task1": {
-        "config": "",
+        "_comment": "示例1: 简单的单任务配置",
+        "config": "configs/single/train.template.toml",
         "ext_args": []
     },
+    
     "task2": {
-        "config": "",
-        "ext_args": []
+        "_comment": "示例2: 带参数变体的任务（多个seed）",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "variants": {
+            "seed": [42, 43, 44]
+        }
+    },
+    
+    "task3": {
+        "_comment": "示例3: 带GPU设备分配的任务",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [0]
+    },
+    
+    "task4": {
+        "_comment": "示例4: 使用多张GPU卡的任务",
+        "config": "configs/ddp_example.toml",
+        "ext_args": [],
+        "devices": [0, 1],
+        "_note": "多卡训练需要在配置文件中启用DDP"
+    },
+    
+    "task5": {
+        "_comment": "示例5: 带变体和GPU分配的完整示例",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [2],
+        "parallel": true,
+        "variants": {
+            "seed": [42, 43, 44]
+        }
+    },
+    
+    "task6_gpu0": {
+        "_comment": "示例6: 多个任务使用不同的GPU（可以在并行模式下同时运行）",
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [0],
+        "parallel": true,
+        "variants": {
+            "seed": [42, 43]
+        }
+    },
+    
+    "task6_gpu1": {
+        "config": "configs/single/train.template.toml",
+        "ext_args": [],
+        "devices": [1],
+        "parallel": true,
+        "variants": {
+            "seed": [44, 45]
+        }
     }
 }

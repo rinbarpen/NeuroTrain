@@ -17,8 +17,8 @@ import numpy as np
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from ..recorder.meter import Meter
-from ..utils.ndict import NDict
+from src.recorder.meter import Meter
+from src.utils.ndict import NDict
 
 
 class AlertLevel(Enum):

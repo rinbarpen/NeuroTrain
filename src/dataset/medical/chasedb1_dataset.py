@@ -77,42 +77,23 @@ class ChaseDB1Dataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
-        """
-        导出为numpy文件
-        - 兼容保留 betweens 形参，但内部不再进行切片
-        - 统一保存为 save_dir/<dataset_name>/<split>/... 结构
-        """
-        save_dir = save_dir / ChaseDB1Dataset.name()
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        train_dataset = ChaseDB1Dataset.get_train_dataset(root_dir, **kwargs)
-        test_dataset = ChaseDB1Dataset.get_test_dataset(root_dir, **kwargs)
-
-        from torch.utils.data import DataLoader
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
-        test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-        for dataloader, dataset_type in ((train_dataloader, 'train'), (test_dataloader, 'test')):
-            image_dir = (save_dir / ChaseDB1Dataset.mapping[dataset_type][0]).parent
-            mask_dir = (save_dir / ChaseDB1Dataset.mapping[dataset_type][1]).parent
-            image_dir.mkdir(parents=True, exist_ok=True)
-            mask_dir.mkdir(parents=True, exist_ok=True)
-
-            for i, (image, mask) in enumerate(dataloader):
-                image_path = image_dir / f'{i}.npy'
-                mask_path = mask_dir / f'{i}.npy'
-                np.save(image_path, image.numpy())
-                np.save(mask_path, mask.numpy())
-
-        # 配置文件不再写 betweens
-        config_file = save_dir / "config.yaml"
-        with config_file.open('w', encoding='utf-8') as f:
-            yaml.dump({**kwargs}, f, sort_keys=False)
-
-    @staticmethod
     def name():
         return "CHASEDB1"
+    
+    @staticmethod
+    def metadata(**kwargs):
+        """获取ChaseDB1数据集元数据"""
+        return {
+            'num_classes': 2,
+            'class_names': ['background', 'vessel'],
+            'task_type': 'segmentation',
+            'metrics': ['dice', 'iou', 'accuracy', 'sensitivity', 'specificity'],
+            'image_size': (999, 960, 3),
+            'num_train': 20,
+            'num_test': 8,
+            'dataset_name': 'ChaseDB1',
+            'description': 'CHASE_DB1 retinal vessel segmentation dataset'
+        }
 
     @staticmethod
     def get_train_dataset(root_dir: Path, **kwargs):

@@ -4,7 +4,9 @@
 
 ## 🚀 特性
 
-- **多数据集支持**: 支持DRIVE、CHASEDB1、STARE等医学图像数据集
+- **多数据集支持**: 支持DRIVE、CHASEDB1、STARE等医学图像数据集，以及COCO目标检测/分割数据集和CIFAR图像分类数据集
+- **Diffusion模型支持**: 完整支持扩散模型训练，包括无条件生成、条件生成和文本到图像生成 🆕
+- **LLM驱动的数据分析**: 使用自然语言查询分析、筛选和处理数据集 🆕
 - **灵活的数据集配置**: 单一数据集、混合数据集、增强版混合数据集
 - **智能采样策略**: 权重采样、平衡采样、优先级采样
 - **丰富的数据增强**: 旋转、翻转、亮度调整、弹性变换等
@@ -66,9 +68,21 @@ data/
 ├── chasedb1/
 │   ├── images/
 │   └── masks/
-└── stare/
-    ├── images/
-    └── masks/
+├── stare/
+│   ├── images/
+│   └── masks/
+└── coco/                    # COCO数据集（可选）
+    ├── annotations/
+    ├── train2017/
+    └── val2017/
+```
+
+**下载COCO数据集（可选）**：
+```bash
+# 使用自动下载脚本
+bash scripts/download_coco.sh 2017 all
+
+# 或者手动下载，详见 docs/COCO_DATASET_GUIDE.md
 ```
 
 ### 2. 配置训练参数
@@ -101,6 +115,8 @@ python main.py -c configs/my_training.toml --train --test
 - **[训练指南](docs/training_guide.md)** - 详细的模型训练教程
 - **[数据集配置指南](docs/dataset_configuration_guide.md)** - 如何配置各种数据集
 - **[增强版混合数据集指南](docs/enhanced_hybrid_dataset_guide.md)** - 高级数据集配置
+- **[Diffusion数据集指南](docs/DIFFUSION_DATASET.md)** - Diffusion模型数据集使用指南 🆕
+- **[LLM数据分析器指南](docs/LLM_DATA_ANALYZER.md)** - LLM驱动的数据分析和筛选 🆕
 - **[结果分析指南](docs/results_analysis_guide.md)** - 如何分析训练结果
 - **[故障排除指南](docs/troubleshooting_guide.md)** - 常见问题解决方案
 
@@ -199,6 +215,18 @@ python main.py -c configs/my_config.toml --test
 ```bash
 python main_pipeline.py -c configs/pipeline/pipeline-template.toml
 ```
+
+### 5. Diffusion模型训练 🆕
+训练扩散模型进行图像生成：
+```bash
+# 运行示例
+python examples/diffusion_dataset_example.py
+
+# 或使用配置文件
+python main.py -c examples/config_diffusion_example.toml --train
+```
+
+了解更多：[Diffusion数据集指南](docs/DIFFUSION_DATASET.md) 和 [快速开始README](DIFFUSION_DATASET_README.md)
 
 ## 📊 结果分析
 
@@ -320,7 +348,20 @@ python test_enhanced_config.py
 
 ## 📝 更新日志
 
-### v1.0.0 (最新)
+### v1.2.0 (最新)
+- ✨ 新增CIFAR-10和CIFAR-100数据集支持，用于图像分类任务
+- 📊 数据集统计信息（mean/std）作为静态变量，便于访问
+- 🔧 新增metadata静态方法，提供类别信息和推荐metrics
+- 📚 添加CIFAR数据集使用指南和示例代码
+- ✅ 支持自动下载CIFAR数据集
+
+### v1.1.0
+- ✨ 新增COCO数据集支持，支持目标检测、实例分割、关键点检测和图像描述任务
+- 📚 添加COCO数据集使用指南和示例代码
+- 🛠️ 提供COCO数据集自动下载脚本
+- ✅ 添加COCO数据集单元测试
+
+### v1.0.0
 - ✨ 新增增强版混合数据集支持
 - ✨ 支持多种采样策略（权重、平衡、优先级）
 - ✨ 完善的文档系统
@@ -334,7 +375,9 @@ python test_enhanced_config.py
 
 ## 🔮 计划功能
 
-- [ ] 更多深度学习模型支持（ResNet、DenseNet等）
+- [x] 通用目标检测数据集支持（COCO）✅
+- [x] 图像分类数据集支持（CIFAR-10/100）✅
+- [ ] 更多深度学习模型支持（ResNet、DenseNet、Transformer等）
 - [ ] 自动超参数调优
 - [ ] 分布式训练优化
 - [ ] 模型量化和剪枝

@@ -1,0 +1,39 @@
+# Pipeline多seed示例配置
+# 使用方式: python main_pipeline.py -c configs/pipeline/multi_seed_example.toml
+# 并行执行: python main_pipeline.py -c configs/pipeline/multi_seed_example.toml --parallel
+# 指定GPU: python main_pipeline.py -c configs/pipeline/multi_seed_example.toml --gpus 0,1,2,3
+
+# 任务1: 在不同GPU上运行不同seed的训练
+[experiment_seed42_gpu0]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [0]  # 使用GPU 0
+parallel = true  # 允许并行执行
+[experiment_seed42_gpu0.variants]
+seed = [42]
+
+[experiment_seed43_gpu1]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [1]  # 使用GPU 1
+parallel = true
+[experiment_seed43_gpu1.variants]
+seed = [43]
+
+[experiment_seed44_gpu2]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [2]  # 使用GPU 2
+parallel = true
+[experiment_seed44_gpu2.variants]
+seed = [44]
+
+# 任务2: 在同一个GPU上依次运行多个seed（串行）
+[experiment_multi_seed_gpu3]
+config = "configs/single/train.template.toml"
+ext_args = []
+devices = [3]  # 使用GPU 3
+parallel = false  # 串行执行
+[experiment_multi_seed_gpu3.variants]
+seed = [45, 46, 47]  # 会生成3个任务，依次执行
+

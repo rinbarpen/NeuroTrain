@@ -1,6 +1,6 @@
 import torch
 
-from constants import PRETRAINED_MODEL_DIR
+from src.constants import PRETRAINED_MODEL_DIR
 
 def get_model(model_name: str, config: dict):
     default_dtype = torch.float16

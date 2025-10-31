@@ -115,6 +115,13 @@ class TrainOutputFilenameEnv:
         (root_dir / "weights").mkdir(exist_ok=True, parents=True)
         (root_dir / "recovery").mkdir(exist_ok=True, parents=True)
 
+        # 为每个类别创建目录（如果 class_labels 存在的话）
+        class_labels = getattr(self, "class_labels", None)
+        if class_labels:
+            for class_label in class_labels:
+                (root_dir / "train" / class_label).mkdir(exist_ok=True, parents=True)
+                (root_dir / "valid" / class_label).mkdir(exist_ok=True, parents=True)
+
     # loss image files
     @property
     def output_epoch_loss_image_filename(self) -> Path:
@@ -236,8 +243,15 @@ class TestOutputFilenameEnv:
             setattr(self, k, v)
     
     def prepare_dir(self):
-        (getattr(self, "test_dir")).mkdir(exist_ok=True, parents=True)
-    
+        test_dir = getattr(self, "test_dir")
+        test_dir.mkdir(exist_ok=True, parents=True)
+        
+        # 为每个类别创建目录（如果 class_labels 存在的话）
+        class_labels = getattr(self, "class_labels", None)
+        if class_labels:
+            for class_label in class_labels:
+                (test_dir / class_label).mkdir(exist_ok=True)
+
     @property
     def output_test_all_metric_details_filename(self) -> Path:
         return Path(self.OUTPUT_TEST_ALL_METRIC_DETAILS_FILENAME.format(test_dir=getattr(self, "test_dir")))
@@ -274,11 +288,13 @@ class InferenceOutputFilenameEnv:
 
     OUTPUT_RESULT_FILENAME = '{infer_dir}/{input_filename}'
 
-    def register(self, infer_dir: Path, **kwargs):
-        setattr(self, 'infer_dir', infer_dir)
+    def register(self, **kwargs):
         for k,v in kwargs.items():
             setattr(self, k, v)
 
     @property
-    def output_result_filename(self, input_filename: str) -> Path:
-        return Path(self.OUTPUT_RESULT_FILENAME.format(infer_dir=self.infer_dir, input_filename=input_filename))
+    def output_result_filename(self) -> Path:
+        return Path(
+            self.OUTPUT_RESULT_FILENAME.format(
+                infer_dir=getattr(self, 'infer_dir'), 
+                input_filename=getattr(self, 'input_filename')))
