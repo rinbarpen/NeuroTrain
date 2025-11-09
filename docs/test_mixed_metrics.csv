@@ -1,0 +1,8 @@
+model,accuracy,loss,error_rate,inference_time
+ResNet50,0.9523,0.125,0.0477,120.5
+VGG16,0.9234,0.156,0.0766,145.2
+OurModel,0.9678,0.089,0.0322,95.3
+MobileNet,0.9012,0.198,0.0988,78.4
+DenseNet,0.9445,0.112,0.0555,110.8
+EfficientNet,0.9556,0.098,0.0444,85.6
+

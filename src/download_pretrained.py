@@ -91,6 +91,21 @@ TORCHVISION_MODEL_MAP = {
 
 
 def download_and_save(model_name: str, desired_provider: Optional[str] = None):
+    """
+    下载预训练模型，支持多个来源
+    
+    断点续传支持情况:
+    - HuggingFace: 支持断点续传 (resume_download=True)
+    - torchvision: 会在文件存在时跳过下载（基础断点续传支持）
+    - timm: 会在文件存在时跳过下载（基础断点续传支持）
+    
+    Args:
+        model_name: 模型名称
+        desired_provider: 指定的下载来源（可选）
+        
+    Returns:
+        模型保存目录路径
+    """
     CACHE_DIR = Path(PRETRAINED_MODEL_DIR)
     logger = logging.getLogger('downloader')
 
@@ -101,6 +116,7 @@ def download_and_save(model_name: str, desired_provider: Optional[str] = None):
             logger.info(f"Downloading torchvision model: {model_name}...")
             save_dir = CACHE_DIR / model_name
             save_dir.mkdir(parents=True, exist_ok=True)
+            # torchvision会在文件存在时自动跳过下载，提供基础的断点续传支持
             model_fn(pretrained=True, cache_dir=save_dir)
             logger.info(f"Saved {model_name} weights to {save_dir}")
             return save_dir
@@ -111,6 +127,7 @@ def download_and_save(model_name: str, desired_provider: Optional[str] = None):
         logger.info(f"Downloading timm model: {model_name}...")
         save_dir = CACHE_DIR / model_name
         save_dir.mkdir(parents=True, exist_ok=True)
+        # timm会在文件存在时自动跳过下载，提供基础的断点续传支持
         timm.create_model(model_name, pretrained=True, cache_dir=save_dir)
         logger.info(f"Saved {model_name} weights to {save_dir}")
         return save_dir
@@ -120,12 +137,13 @@ def download_and_save(model_name: str, desired_provider: Optional[str] = None):
         logger.info(f"Downloading huggingface model: {model_name}...")
         save_dir = CACHE_DIR / model_name.replace('/', '／')
         save_dir.mkdir(parents=True, exist_ok=True)
+        # HuggingFace支持完整的断点续传
         hf_download(
             repo_id=model_name,
             local_dir=save_dir,
             cache_dir=save_dir,
             local_dir_use_symlinks=False,
-            resume_download=True
+            resume_download=True  # 启用断点续传
         )
         logger.info(f"Saved {model_name} files to {save_dir}")
         return save_dir

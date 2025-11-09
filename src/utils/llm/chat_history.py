@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from src.utils.llm.llm_utils import chat_template
 
 class ChatHistory:
@@ -5,17 +7,21 @@ class ChatHistory:
         self.processor = processor
         self.history = []
     
-    def add_message(self, role: str, text: str, image: str|None=None):
-        conversation = chat_template(role, text, image)
+    def add_message(self, role: str, text: str, image: str | None = None, images: Sequence[str] | None = None):
+        image_list = self._normalize_images(image, images)
+        if image_list:
+            conversation = chat_template(role, text, images=image_list)
+        else:
+            conversation = chat_template(role, text)
         self.history.append(conversation)
         return self
 
-    def add_user_message(self, text: str, image: str|None=None):
-        self.add_message('user', text, image)
+    def add_user_message(self, text: str, image: str | None = None, images: Sequence[str] | None = None):
+        self.add_message('user', text, image=image, images=images)
         return self
 
-    def add_assistant_message(self, text: str, image: str|None=None):
-        self.add_message('assistant', text, image)
+    def add_assistant_message(self, text: str, image: str | None = None, images: Sequence[str] | None = None):
+        self.add_message('assistant', text, image=image, images=images)
         return self
 
     def __len__(self):
@@ -52,3 +58,12 @@ class ChatHistory:
             else:
                 t += "{}</s>".format(message['content'][0]['text'])
         return t
+
+    @staticmethod
+    def _normalize_images(image: str | None, images: Sequence[str] | None) -> list[str]:
+        image_list: list[str] = []
+        if image:
+            image_list.append(image)
+        if images:
+            image_list.extend(img for img in images if img)
+        return image_list

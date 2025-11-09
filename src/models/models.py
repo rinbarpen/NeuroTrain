@@ -128,5 +128,27 @@ def get_model(model_name: str, config: dict):
                 "tokenizer": tokenizer,
                 "model": model,
             }
+        
+        case 'emoe_refcoco' | 'emoe-refcoco':
+            from .like.emoe.refcoco_model import EMOE_RefCOCO, EMOERefCOCOModelWrapper
+            
+            base_model = EMOE_RefCOCO(
+                backbone=config.get('backbone', 'vit_base_patch16_224'),
+                vit_hidden_dim=config.get('vit_hidden_dim', 768),
+                num_heads=config.get('num_heads', 8),
+                num_experts=config.get('num_experts', 4),
+                expert_hidden_dim=config.get('expert_hidden_dim'),
+                k=config.get('k', 2),
+                sparse=config.get('sparse', True),
+                dropout=config.get('dropout', 0.1),
+                text_encoder_name=config.get('text_encoder_name', 'openai/clip-vit-base-patch32'),
+                text_encoder_dim=config.get('text_encoder_dim', 512),
+                alignment_dim=config.get('alignment_dim', 512),
+                temperature=config.get('temperature', 0.07),
+                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+            )
+            # 使用包装器以适配训练器的数据格式
+            model = EMOERefCOCOModelWrapper(base_model)
+            return model
 
     raise ValueError(f'No supported model: {model_name}')

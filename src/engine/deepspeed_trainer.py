@@ -23,12 +23,7 @@ import torch.distributed as dist
 from rich.table import Table
 from rich.console import Console
 
-try:
-    import deepspeed
-    DEEPSPEED_AVAILABLE = True
-except ImportError:
-    DEEPSPEED_AVAILABLE = False
-    deepspeed = None
+import deepspeed
 
 from src.config import get_config
 from src.utils import EarlyStopping, select_postprocess_fn

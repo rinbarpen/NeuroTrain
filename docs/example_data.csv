@@ -1,0 +1,8 @@
+model,accuracy,f1_score,params,task
+ResNet50,0.9523,0.9412,25.6M,classification
+VGG16,0.9234,0.9145,138.4M,classification
+EfficientNet,0.9678,0.9589,5.3M,classification
+MobileNet,0.9012,0.8934,4.2M,classification
+U-Net,0.8834,0.8756,31.0M,segmentation
+DeepLabV3,0.9145,0.9023,58.7M,segmentation
+

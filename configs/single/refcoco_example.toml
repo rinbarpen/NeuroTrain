@@ -1,0 +1,46 @@
+# RefCOCO数据集训练配置示例
+# 数据集路径：/media/rczx/Dataset/coco2014
+
+[experiment]
+name = "refcoco_training"
+description = "RefCOCO referring expression comprehension training"
+
+[dataset]
+name = "refcoco"
+root_dir = "/media/rczx/Dataset/coco2014"
+[dataset.config]
+image_dir = "images"
+# RefCOCO标注文件应放在 annotations/refs(unc).p 或 annotations/refs(google).p
+
+[dataloader]
+batch_size = 16
+num_workers = 4
+pin_memory = true
+shuffle = true
+drop_last = true
+
+[model]
+name = "refcoco_model"  # 需要实现RefCOCO模型
+backbone = "resnet50"
+pretrained = true
+
+[training]
+epochs = 50
+learning_rate = 0.0001
+
+[optimizer]
+type = "AdamW"
+lr = 0.0001
+weight_decay = 0.0001
+
+[scheduler]
+type = "CosineAnnealingLR"
+T_max = 50
+eta_min = 0.00001
+
+[device]
+use_cuda = true
+device_ids = [0]
+
+seed = 42
+

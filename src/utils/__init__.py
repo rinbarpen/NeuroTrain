@@ -43,8 +43,10 @@ from .util import (
     model_flops,
     freeze_layers,
     str2dtype,
+    run_async_task,
 )
 from .postprocess import select_postprocess_fn
+from .download import download_file, download_with_retry, download_multiple
 
 # 延迟导入 painter 相关类以避免循环依赖
 def __getattr__(name):

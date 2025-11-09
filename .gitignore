@@ -13,3 +13,9 @@ tests/*
 models/*
 libs/*
 cache/*
+src/neurotrain.egg-info/dependency_links.txt
+src/neurotrain.egg-info/PKG-INFO
+src/neurotrain.egg-info/requires.txt
+src/neurotrain.egg-info/SOURCES.txt
+src/neurotrain.egg-info/top_level.txt
+bbox_list.json

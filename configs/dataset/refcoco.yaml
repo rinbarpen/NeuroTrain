@@ -1,0 +1,23 @@
+# RefCOCO数据集配置
+# 数据集路径：/media/rczx/Dataset/coco2014
+# RefCOCO标注文件需要单独下载并放在annotations目录下
+
+refcoco:
+  root_dir: "/media/rczx/Dataset/coco2014"
+  image_dir: "images"
+  transform: null
+  # RefCOCO标注文件应放在 annotations/refs(unc).p 或 annotations/refs(google).p
+  # 如果没有RefCOCO标注文件，可以使用COCO的instances标注文件获取bbox信息
+
+refcoco+:
+  root_dir: "/media/rczx/Dataset/coco2014"
+  image_dir: "images"
+  transform: null
+  # RefCOCO+标注文件应放在 annotations/refs(unc).p
+
+refcocog:
+  root_dir: "/media/rczx/Dataset/coco2014"
+  image_dir: "images"
+  transform: null
+  # RefCOCOg标注文件应放在 annotations/refs(google).p
+

@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import logging
+import os
 import torch
 from torch import nn
 import warnings
 import torch.distributed as dist
+from concurrent.futures import ThreadPoolExecutor
 
 warnings.filterwarnings("ignore")
 
@@ -36,6 +38,13 @@ if __name__ == "__main__":
     parse_args()
     
     c = get_config()
+    async_workers = c['train'].get('async_workers')
+    if async_workers is None or async_workers <= 0:
+        async_workers = os.cpu_count() or 1
+    async_executor = ThreadPoolExecutor(
+        max_workers=async_workers,
+        thread_name_prefix='trainer_async',
+    )
     
     # 检查是否使用 DDP
     use_ddp = c.get("ddp", {}).get("enabled", False)
@@ -127,7 +136,12 @@ if __name__ == "__main__":
             )
             
             # 创建标准训练器
-            handler = Trainer(train_dir, model, is_continue_mode=is_continue_mode)
+            handler = Trainer(
+                train_dir,
+                model,
+                is_continue_mode=is_continue_mode,
+                async_executor=async_executor,
+            )
             
             # 获取训练工具
             tools = get_train_tools(model.module if hasattr(model, 'module') else model)
@@ -202,7 +216,12 @@ if __name__ == "__main__":
                 except Exception as e:
                     logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
 
-            handler = Trainer(train_dir, model, is_continue_mode=is_continue_mode)
+            handler = Trainer(
+                train_dir,
+                model,
+                is_continue_mode=is_continue_mode,
+                async_executor=async_executor,
+            )
             handler.setup_trainer(criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler, scaler=scaler)
             handler.train(
                 num_epochs=c["train"]["epoch"],
@@ -289,3 +308,5 @@ if __name__ == "__main__":
     if not use_ddp or is_main_process():
         model_info(output_dir, model, input_sizes, dtypes=dtypes)
         model_flops(output_dir, model, input_sizes)
+
+    async_executor.shutdown(wait=True)

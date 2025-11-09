@@ -36,6 +36,8 @@ dependencies = [
     "transformers>=4.51.3",
     "wandb>=0.19.9",
     "webcolors>=24.11.1",
+    "curl-cffi>=0.13.0",
+    "umap-learn>=0.5.9.post2",
 ]
 # --extra cu118 cu126 cu128 cpu
 [project.optional-dependencies]

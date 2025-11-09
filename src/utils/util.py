@@ -7,6 +7,7 @@ import time
 import math
 import random
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from torch import nn
@@ -267,6 +268,31 @@ def str2dtype(dtype: str) -> torch.dtype:
         case _:
             ttype = torch.get_default_dtype()
     return ttype
+
+
+def run_async_task(
+    executor: ThreadPoolExecutor | None,
+    func: Callable[..., Any] | None,
+    *args,
+    logger: logging.Logger | None = None,
+    **kwargs,
+):
+    if func is None:
+        return
+
+    def _wrapper():
+        try:
+            func(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            target_logger = logger or logging.getLogger(__name__)
+            func_name = getattr(func, '__qualname__', getattr(func, '__name__', repr(func)))
+            target_logger.warning(f"Async task {func_name} failed: {exc}")
+
+    if executor is None:
+        _wrapper()
+    else:
+        executor.submit(_wrapper)
+
 
 def tensor_print(tensor: torch.Tensor, name: str=''):
     print(f'{name}: {tensor.shape} {tensor.dtype} {tensor.device} | {tensor}')

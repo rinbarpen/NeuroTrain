@@ -1,28 +1,29 @@
 from PIL import Image
 import cv2
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Literal, List
 from curl_cffi import requests
 import io
 import math
 
-def chat_template(role: str, text: str, image: str=None):
-    if image:
-        conversation = {
-            'role': role,
-            'content': [
-                {"type": "text", "text": text},
-                {"type": "image"},
-            ],
-        }
-    else:
-        conversation = {
-            'role': role,
-            'content': [
-                {"type": "text", "text": text},
-            ],
-        }
-    
+def chat_template(role: str, text: str, image: str | None = None, images: Sequence[str] | None = None):
+    content = [{"type": "text", "text": text}]
+
+    if image or images:
+        image_list: list[str] = []
+        if image:
+            image_list.append(image)
+        if images:
+            image_list.extend(img for img in images if img)
+        for _ in image_list:
+            content.append({"type": "image"})
+
+    conversation = {
+        'role': role,
+        'content': content,
+    }
+
     return conversation
 
 def image_to_PIL(image: Image.Image|cv2.Mat|str|Path, *, image_format: Literal['JPEG', 'PNG'] = 'JPEG') -> Image.Image:

@@ -39,18 +39,29 @@ cd "${DATA_DIR}"
 
 echo -e "${GREEN}数据将保存到: $(pwd)${NC}"
 
-# 下载函数
+# 下载函数（支持断点续传）
 download_file() {
     local url=$1
     local filename=$(basename "${url}")
     
+    # 检查文件是否已存在
     if [ -f "${filename}" ]; then
-        echo -e "${YELLOW}文件已存在，跳过: ${filename}${NC}"
-        return 0
+        local local_size=$(stat -f%z "${filename}" 2>/dev/null || stat -c%s "${filename}" 2>/dev/null)
+        echo -e "${YELLOW}文件已存在: ${filename} (${local_size} bytes)${NC}"
+        
+        # 尝试获取远程文件大小进行完整性检查
+        local remote_size=$(curl -sI "${url}" | grep -i "content-length" | awk '{print $2}' | tr -d '\r')
+        if [ -n "${remote_size}" ] && [ "${local_size}" -eq "${remote_size}" ] 2>/dev/null; then
+            echo -e "${GREEN}✓ 文件已完整，跳过下载: ${filename}${NC}"
+            return 0
+        else
+            echo -e "${YELLOW}文件大小不匹配，将从断点继续下载: ${filename}${NC}"
+        fi
     fi
     
     echo -e "${GREEN}下载: ${filename}${NC}"
-    if wget -c "${url}"; then
+    # 使用 wget -c 支持断点续传，-t 0 表示无限重试，--progress=bar:force 显示进度条
+    if wget -c -t 0 --progress=bar:force:noscroll "${url}"; then
         echo -e "${GREEN}✓ 下载完成: ${filename}${NC}"
         return 0
     else

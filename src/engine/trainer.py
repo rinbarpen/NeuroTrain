@@ -1,6 +1,5 @@
 from pathlib import Path
 import numpy as np
-from tqdm import tqdm
 import torch
 from torch import nn
 from torch.amp.grad_scaler import GradScaler
@@ -11,9 +10,12 @@ from rich.table import Table
 from rich.console import Console
 import json
 from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Mapping, Sequence
 
 from src.config import get_config, ALL_STYLES
-from src.utils import EarlyStopping, save_model, select_postprocess_fn
+from src.utils import EarlyStopping, save_model, select_postprocess_fn, run_async_task
+from src.utils.progress_bar import ProgressBar
 from src.recorder import MeterRecorder, DataSaver
 from src.visualizer.painter import Plot
 from src.constants import TrainOutputFilenameEnv
@@ -21,16 +23,22 @@ from src.monitor import TrainingMonitor, ProgressTracker
 from src.monitor import create_web_monitor
 
 class Trainer:
-    def __init__(self, output_dir: Path, model: nn.Module, is_continue_mode: bool=False):
+    def __init__(
+        self,
+        output_dir: Path,
+        model: nn.Module,
+        is_continue_mode: bool = False,
+        *,
+        async_executor: ThreadPoolExecutor | None = None,
+    ):
         self.output_dir = output_dir
 
         c = get_config()
+        self.device = torch.device(c['device'])
         
-        # 先获取 class_labels 和 metric_labels
         class_labels = c['classes']
         metric_labels = c['metrics']
         
-        # 注册所有需要的属性后再创建目录
         self.filename_env = TrainOutputFilenameEnv()
         self.filename_env.register(train_dir=self.output_dir, model=c["model"]["name"], class_labels=class_labels)
         self.filename_env.register(epoch=0, num_epochs=0)
@@ -51,6 +59,9 @@ class Trainer:
         self.monitor = None
         self.progress_tracker = None
         self.web_monitor = None
+        self.log_interval = max(1, int(c['train'].get('log_interval', 10)))
+        self._async_executor = async_executor
+
         if monitor_conf.get('enabled', False):
             try:
                 self.monitor = TrainingMonitor(monitor_conf.get('config'))
@@ -93,20 +104,6 @@ class Trainer:
                 _load_and_restore(pointer_file)
                 return
 
-            # 兼容旧版本：若指针文件不存在，则查找最新的 recovery_epoch_*.json
-            candidates = list(recovery_dir.glob('recovery_epoch_*.json'))
-            if candidates:
-                def _extract_epoch(p: Path) -> int:
-                    name = p.stem  # e.g., recovery_epoch_12
-                    try:
-                        return int(name.rsplit('_', 1)[1])
-                    except Exception:
-                        return -1
-                latest = max(candidates, key=_extract_epoch)
-                if latest.exists():
-                    _load_and_restore(latest)
-                    return
-
             self.logger.info("No recovery data found")
         except Exception as e:
             self.logger.warning(f"Recovery failed: {e}")
@@ -132,9 +129,52 @@ class Trainer:
         self.scaler = scaler
         self.lr_scheduler = lr_scheduler
 
-    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, pbar: tqdm):
+    def _move_to_device(self, value):
+        if isinstance(value, torch.Tensor):
+            if value.device == self.device:
+                return value
+            return value.to(self.device, non_blocking=True)
+        if isinstance(value, Mapping):
+            return {k: self._move_to_device(v) for k, v in value.items()}
+        if isinstance(value, tuple):
+            return tuple(self._move_to_device(v) for v in value)
+        if isinstance(value, list):
+            return [self._move_to_device(v) for v in value]
+        if isinstance(value, set):
+            return {self._move_to_device(v) for v in value}
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return [self._move_to_device(v) for v in value]
+        return value
+
+    def _forward_model(self, batch_inputs):
+        inputs = None
+        targets = None
+
+        if isinstance(batch_inputs, tuple) and len(batch_inputs) == 2:
+            inputs, targets = batch_inputs
+        else:
+            inputs = batch_inputs
+            targets = None
+
+        if self.criterion is not None and targets is not None:
+            outputs = self.model(inputs)
+            loss = self.criterion(targets, outputs)
+            return outputs, loss
+
+        result = self.model(inputs)
+        if isinstance(result, tuple) and len(result) == 2:
+            return result
+        if isinstance(result, dict):
+            loss = result.get('loss')
+            assert loss is not None
+            return result, loss
+
+        raise ValueError(
+            "Model forward must return (outputs, loss) tuple or dict containing loss when criterion is None"
+        )
+
+    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, pbar: ProgressBar):
         c = get_config()
-        device = torch.device(c['device'])
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
         lr_scheduler_update_policy = c['train'].get('lr_scheduler', {}).get('update_policy', 'epoch')
@@ -143,23 +183,20 @@ class Trainer:
         step_lrs = []
         self.model.train()
 
+        total_steps = len(train_dataloader)
+
         if not enable_accumulation_step and self.optimizer is not None:
             self.optimizer.zero_grad()
 
-        # Discard the last batch
         for batch, batch_inputs in enumerate(train_dataloader, 1):
-            inputs, targets = batch_inputs['image'].to(device), batch_inputs['mask'].to(device)
+            batch_inputs = self._move_to_device(batch_inputs)
 
             sum_loss = 0.0
             if self.scaler:
-                device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
+                device_type = 'cuda' if 'cuda' in self.device.type else 'cpu'
                 compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
                 with autocast(device_type, dtype=compute_type):
-                    if self.criterion:
-                        outputs = self.model(inputs)
-                        loss = self.criterion(targets, outputs)
-                    else:
-                        outputs, loss = self.model(inputs)
+                    outputs, loss = self._forward_model(batch_inputs)
 
                     if not enable_accumulation_step:
                         self.scaler.scale(loss).backward()
@@ -178,11 +215,7 @@ class Trainer:
                             if self.optimizer is not None:
                                 self.optimizer.zero_grad()
             else:
-                if self.criterion:
-                    outputs = self.model(inputs)
-                    loss = self.criterion(targets, outputs)
-                else:
-                    outputs, loss = self.model(inputs)
+                outputs, loss = self._forward_model(batch_inputs)
                 
                 if not enable_accumulation_step:
                     loss.backward()
@@ -211,42 +244,77 @@ class Trainer:
                 current_lr = self.optimizer.param_groups[0]['lr']
                 step_lrs.append(current_lr)
             
-            pbar.update()
-            pbar.set_postfix({'batch_loss': batch_loss, 'epoch': epoch, 'step': batch + epoch * len(train_dataloader)})
+            metric_targets = outputs['targets']
+            metric_preds = outputs['preds']
 
-            if self.postprocess is not None:
-                targets, outputs = self.postprocess(targets, outputs)
-            self.train_metric_recorder.finish_one_batch(
-                targets.detach().cpu().numpy(), 
-                outputs.detach().cpu().numpy())
+            if (
+                self.postprocess is not None
+                and isinstance(metric_targets, torch.Tensor)
+                and isinstance(metric_preds, torch.Tensor)
+            ):
+                metric_targets, metric_preds = self.postprocess(metric_targets, metric_preds)
+
+            if (
+                isinstance(metric_targets, torch.Tensor)
+                and isinstance(metric_preds, torch.Tensor)
+            ):
+                self.train_metric_recorder.finish_one_batch(
+                    metric_targets.detach().cpu().numpy(),
+                    metric_preds.detach().cpu().numpy(),
+                )
 
             current_lr = self.optimizer.param_groups[0]['lr'] if self.optimizer is not None else 0.0
             if self.monitor:
-                self.monitor.update_training_metrics(
+                run_async_task(
+                    self._async_executor,
+                    self.monitor.update_training_metrics,
                     epoch=epoch,
                     step=batch,
                     loss=batch_loss,
                     learning_rate=current_lr,
                     batch_size=c['train']['batch_size'],
+                    logger=self.logger,
                 )
             if self.progress_tracker:
                 if batch == 1:
                     self.progress_tracker.start_epoch(epoch)
-                self.progress_tracker.start_step(batch)
-                self.progress_tracker.end_step(c['train']['batch_size'])
+                if batch % self.log_interval == 0 or batch == total_steps:
+                    self.progress_tracker.start_step(batch)
+                    self.progress_tracker.end_step(c['train']['batch_size'])
             if self.web_monitor:
                 try:
-                    self.web_monitor.update_metrics(
+                    step_time_meter = getattr(self, 'step_time_meter', None)
+                    if step_time_meter is not None and hasattr(step_time_meter, 'avg'):
+                        throughput = c['train']['batch_size'] / max(step_time_meter.avg, 1e-6)
+                    else:
+                        throughput = 0.0
+
+                    run_async_task(
+                        self._async_executor,
+                        self.web_monitor.update_metrics,
                         epoch=epoch,
                         step=batch,
                         loss=batch_loss,
                         learning_rate=current_lr,
                         batch_size=c['train']['batch_size'],
-                        throughput=c['train']['batch_size'] / max(self.step_time_meter.avg, 1e-6)
+                        throughput=throughput,
+                        logger=self.logger,
                     )
                 except Exception as exc:
                     self.logger.warning(f"Web monitor update failed: {exc}")
                     self.web_monitor = None
+
+            pbar.update()
+
+            pbar.update_step(
+                epoch=epoch,
+                current_step=batch,
+                total_steps=total_steps,
+                loss_label='batch_loss',
+                loss_value=batch_loss,
+                global_step=batch + epoch * total_steps,
+                force=batch == total_steps,
+            )
 
         train_loss /= len(train_dataloader)
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
@@ -258,47 +326,51 @@ class Trainer:
         self.train_metric_recorder.finish_one_epoch()
         return train_loss, step_losses, step_lrs
 
-    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, pbar: tqdm):
-        c = get_config()
-        device = torch.device(c['device'])
+    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, pbar: ProgressBar):
         self.model.eval()
         valid_loss = 0.0
 
         with torch.no_grad():
             step_losses = []
-            for batch_inputs in valid_dataloader:
-                inputs, targets = batch_inputs['image'].to(device), batch_inputs['mask'].to(device)
+            total_steps = len(valid_dataloader)
+            for batch_idx, batch_inputs in enumerate(valid_dataloader, 1):
+                batch_inputs = self._move_to_device(batch_inputs)
 
-                if self.scaler:
-                    device_type = 'cuda' if 'cuda' in c['device'] else 'cpu'
-                    compute_type = torch.bfloat16 if c['train']['scaler']['compute_type'] == 'bfloat16' else torch.float16
-                    with autocast(device_type, dtype=compute_type):
-                        if self.criterion:
-                            outputs = self.model(inputs)
-                            losses = self.criterion(targets, outputs)
-                        else:
-                            # buildin loss
-                            outputs, losses = self.model(inputs)
-                else:
-                    if self.criterion:
-                        outputs = self.model(inputs)
-                        losses = self.criterion(targets, outputs)
-                    else:
-                        # buildin loss
-                        outputs, losses = self.model(inputs)
-
-                valid_sum_loss = losses.sum().item()
-                batch_loss = valid_sum_loss
+                outputs, loss = self._forward_model(batch_inputs)
+        
+                batch_loss = loss.item()
                 valid_loss += batch_loss
                 step_losses.append(batch_loss)
-                pbar.update(1)
-                pbar.set_postfix({'valid_batch_loss': batch_loss, 'epoch': epoch})
 
-                if self.postprocess is not None:
-                    targets, outputs = self.postprocess(targets, outputs)
-                self.valid_metric_recorder.finish_one_batch(
-                    targets.detach().cpu().numpy(), 
-                    outputs.detach().cpu().numpy())
+                metric_targets = outputs['targets']
+                metric_preds = outputs['preds']
+
+                if (
+                    self.postprocess is not None
+                    and isinstance(metric_targets, torch.Tensor)
+                    and isinstance(metric_preds, torch.Tensor)
+                ):
+                    metric_targets, metric_preds = self.postprocess(metric_targets, metric_preds)
+
+                if (
+                    isinstance(metric_targets, torch.Tensor)
+                    and isinstance(metric_preds, torch.Tensor)
+                ):
+                    self.valid_metric_recorder.finish_one_batch(
+                        metric_targets.detach().cpu().numpy(),
+                        metric_preds.detach().cpu().numpy(),
+                    )
+
+                pbar.update()
+
+                pbar.update_step(
+                    epoch=epoch,
+                    current_step=batch_idx,
+                    total_steps=total_steps,
+                    loss_label='valid_batch_loss',
+                    loss_value=batch_loss,
+                    force=batch_idx == total_steps,
+                )
 
         valid_loss /= len(valid_dataloader)
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
@@ -310,7 +382,6 @@ class Trainer:
               valid_dataloader = None, 
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
-        device = torch.device(c['device'])
         save_period = c["train"]["save_period"] 
         if save_period >= 1:
             save_period = int(save_period)
@@ -327,10 +398,7 @@ class Trainer:
         else:
             save_recovery_period = int(save_recovery_period * num_epochs)
 
-        accumulation_steps = c["train"]["grad_accumulation_steps"]
-        enable_accumulation_step = accumulation_steps > 0
-
-        self.model = self.model.to(device)
+        self.model = self.model.to(self.device)
 
         save_model_preset = partial(save_model, model=self.model, optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler, version=c['run_id'])
 
@@ -360,7 +428,8 @@ class Trainer:
             except Exception as exc:
                 self.logger.warning(f"Failed to start web monitor training session: {exc}")
                 self.web_monitor = None
-        with tqdm(total=(num_epochs-last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0)), desc='Training...') as pbar:
+        total_pbar_steps = (num_epochs - last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0))
+        with ProgressBar(total=total_pbar_steps, desc='Training...', log_interval=self.log_interval) as pbar:
             for epoch in range(last_epoch+1, num_epochs+1):
                 train_loss, epoch_step_losses, epoch_step_lrs = self._train_epoch(epoch, num_epochs, train_dataloader, pbar)
                 train_losses.append(train_loss)

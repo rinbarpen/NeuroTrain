@@ -97,6 +97,59 @@ class KLLoss(Loss):
         loss = kl_divergence_loss(targets, preds)
         return loss * self.weight
 
+class ContrastiveLoss(Loss):
+    """
+    对比学习损失函数，用于Region-Text对齐
+    
+    支持对称损失（text2region + region2text）和单边损失
+    """
+    def __init__(self, weight: float=1.0, temperature: float=0.07, symmetric: bool=True):
+        """
+        Args:
+            weight: 损失权重
+            temperature: 温度参数，用于缩放相似度
+            symmetric: 是否使用对称损失（双边损失）
+        """
+        super(ContrastiveLoss, self).__init__(weight=weight)
+        self.temperature = temperature
+        self.symmetric = symmetric
+    
+    def forward(self, targets: torch.Tensor, preds: dict) -> torch.Tensor:
+        """
+        计算对比学习损失
+        
+        Args:
+            targets: 不需要（对比损失使用batch内的配对）
+            preds: 字典，包含以下键:
+                - 'logits_per_text': (B, B) 文本到区域的相似度矩阵
+                - 'logits_per_region': (B, B) 区域到文本的相似度矩阵（可选）
+        
+        Returns:
+            对比学习损失
+        """
+        logits_per_text = preds.get('logits_per_text')
+        logits_per_region = preds.get('logits_per_region')
+        
+        if logits_per_text is None:
+            raise ValueError("preds must contain 'logits_per_text'")
+        
+        batch_size = logits_per_text.shape[0]
+        device = logits_per_text.device
+        labels = torch.arange(batch_size, device=device)
+        
+        # 文本到区域的损失
+        text_loss = F.cross_entropy(logits_per_text, labels)
+        
+        if self.symmetric and logits_per_region is not None:
+            # 对称损失：区域到文本的损失
+            region_loss = F.cross_entropy(logits_per_region, labels)
+            total_loss = (text_loss + region_loss) / 2
+        else:
+            total_loss = text_loss
+        
+        return total_loss * self.weight
+
+
 class DistillationLoss(Loss):
     def __init__(self, temperature: float=1.0, weight: float=1.0):
         super(DistillationLoss, self).__init__(weight=weight)
@@ -384,5 +437,7 @@ def get_criterion(c: dict):
         return KLLoss(weight, **cc)
     elif 'distillation' in c_type:
         return DistillationLoss(weight=weight, **cc)
+    elif 'contrastive' in c_type:
+        return ContrastiveLoss(weight=weight, **cc)
 
     return None

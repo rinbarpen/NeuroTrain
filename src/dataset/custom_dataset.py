@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, Subset
 from pathlib import Path
 from abc import abstractmethod
-from typing import TypedDict, Optional, List, Sequence
+from typing import TypedDict, Optional, List, Sequence, Any, Dict
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
@@ -441,6 +441,10 @@ class CustomDataset(Dataset):
             self.sampler = SequentialSampler(range(dataset_size))
         return self
 
+    @staticmethod
+    def collate_fn(batch: List[Any]) -> Any:
+        return batch
+
     def dataloader(
         self, 
         batch_size: int, 
@@ -468,6 +472,7 @@ class CustomDataset(Dataset):
         Returns:
             DataLoader实例
         """
+        collate_fn = collate_fn or self.collate_fn
         # 当提供 sampler 时，必须禁用 shuffle 以避免冲突
         sampler = getattr(self, 'sampler', None)
         if sampler is not None and shuffle:
