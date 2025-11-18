@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 from .emoe import EViTMoE
 from src.constants import PRETRAINED_MODEL_DIR
+from src.utils.ndict import ModelOutput
 
 
 class EMOE_RefCOCO(nn.Module):
@@ -267,11 +268,27 @@ class EMOERefCOCOModelWrapper(nn.Module):
             texts = batch_data.get('text_ids')
 
         text_attn_mask = batch_data.get('text_attn_mask')
+        batch_targets = batch_data.get('targets')
+        if batch_targets is None:
+            batch_targets = batch_data.get('category_ids')
 
         if regions is None or texts is None:
             raise ValueError("batch_data必须包含'regions'或'inputs'以及'texts'或'text_ids'")
 
         outputs = self.model(regions, texts, text_attn_mask=text_attn_mask)
-        
-        return outputs
+
+        total_loss = outputs.get('total_loss')
+        if total_loss is None:
+            raise ValueError("EMOE model must provide 'total_loss' for training.")
+
+        preds = outputs.get('logits_per_region')
+        if preds is None:
+            preds = outputs.get('logits_per_text')
+        model_output = ModelOutput(preds=preds, targets=batch_targets, loss=total_loss)
+        for key, value in outputs.items():
+            if key == 'total_loss':
+                continue
+            model_output[key] = value
+
+        return model_output, total_loss
 

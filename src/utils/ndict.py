@@ -55,6 +55,37 @@ class NDict(dict):
     def fromkeys(cls, seq, value=None):
         return cls(dict.fromkeys(seq, value))
 
+
+class Sample(NDict):
+    """Standardized dataset sample representation."""
+
+    def __init__(self, *, inputs=None, targets=None, metadata=None, **kwargs):
+        super().__init__()
+        if inputs is not None:
+            self["inputs"] = inputs
+        if targets is not None:
+            self["targets"] = targets
+        if metadata is not None:
+            self["metadata"] = metadata if isinstance(metadata, (dict, NDict)) else {"value": metadata}
+        for key, value in kwargs.items():
+            self[key] = value
+
+
+class ModelOutput(NDict):
+    """Standardized model output representation."""
+
+    def __init__(self, *, preds=None, targets=None, loss=None, **kwargs):
+        super().__init__()
+        if preds is not None:
+            self["preds"] = preds
+        if targets is not None:
+            self["targets"] = targets
+        if loss is not None:
+            self["loss"] = loss
+        for key, value in kwargs.items():
+            self[key] = value
+
+
 if __name__ == '__main__':
     ndict = NDict({'a': {'b': 1, 'c': 2}, 'd': 3})
     print(ndict.unfold())

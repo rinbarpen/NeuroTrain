@@ -2,7 +2,7 @@
 # DDP训练启动脚本（TOML配置版本）
 
 # 设置环境变量
-export CUDA_VISIBLE_DEVICES=0,1,2,3  # 根据实际GPU数量调整
+export CUDA_VISIBLE_DEVICES=0,1  # 根据实际GPU数量调整
 export NCCL_DEBUG=INFO  # 可选：启用NCCL调试信息
 
 # 检查配置文件是否存在

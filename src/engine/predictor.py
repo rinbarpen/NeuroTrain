@@ -1,4 +1,6 @@
 from pathlib import Path
+from typing import Any, Mapping, Sequence
+
 from tqdm import tqdm
 import torch
 from torch import nn
@@ -7,8 +9,9 @@ import numpy as np
 import logging
 
 from src.config import get_config
-from src.utils import Timer, get_transforms, select_postprocess_fn
+from src.utils import Timer, get_transforms, select_postprocess_fn, reset_peak_memory_stats, log_memory_cost
 from src.monitor import TrainingMonitor, ProgressTracker
+from src.utils.ndict import ModelOutput, Sample, NDict
 
 class Predictor:
     def __init__(self, output_dir: Path, model: nn.Module):
@@ -51,6 +54,7 @@ class Predictor:
         device = torch.device(c['device'])
         self.model = self.model.to(device)
         self.model.eval()
+        reset_peak_memory_stats()
         if self.progress_tracker:
             self.progress_tracker.start_training(1, len(inputs))
         if self.web_monitor:
@@ -75,13 +79,20 @@ class Predictor:
                 image = Image.open(input).convert('L')
                 size = image.size # (H, W)
                 transforms = get_transforms()
-                image_tensor = transforms(image).unsqueeze(0)
+                image_tensor = transforms(image)
+                if not isinstance(image_tensor, torch.Tensor):
+                    image_tensor = torch.as_tensor(np.array(image), dtype=torch.float32)
+                image_tensor = image_tensor.unsqueeze(0)
             with self.timer.timeit(task=input_filename + '.inference'):
                 image_tensor = image_tensor.to(device)
-                pred_tensor = self.model(image_tensor)
+                batch_sample = Sample(inputs=image_tensor.to(device))
+                outputs = self._run_model(batch_sample)
+                pred_tensor = outputs.get('preds')
+                if not isinstance(pred_tensor, torch.Tensor):
+                    raise ValueError("ModelOutput missing tensor 'preds' during predict.")
             with self.timer.timeit(task=input_filename + '.postprocess'):
                 import torch.nn.functional as F
-                pred = F.sigmoid(pred_tensor)
+                pred = torch.sigmoid(pred_tensor)
                 pred[pred >= 0.5] = 255
                 pred[pred < 0.5] = 0
                 pred = pred.detach().cpu().numpy()
@@ -128,3 +139,27 @@ class Predictor:
                 self.logger.warning(f"Failed to stop web monitor: {exc}")
         cost = self.timer.total_elapsed_time()
         self.logger.info(f'Predicting had cost {cost}s')
+        log_memory_cost("Predict", self.logger)
+
+    def _run_model(self, batch_inputs: Any) -> ModelOutput:
+        inputs_obj = batch_inputs
+
+        if isinstance(batch_inputs, tuple) and len(batch_inputs) == 2:
+            inputs_obj, _ = batch_inputs
+
+        if isinstance(inputs_obj, Mapping):
+            model_input = inputs_obj
+        else:
+            model_input = inputs_obj
+
+        result = self.model(model_input)
+        if isinstance(result, tuple):
+            outputs_raw = result[0]
+        else:
+            outputs_raw = result
+
+        if isinstance(outputs_raw, ModelOutput):
+            return outputs_raw
+        if isinstance(outputs_raw, Mapping):
+            return ModelOutput(**outputs_raw)
+        return ModelOutput(preds=outputs_raw)

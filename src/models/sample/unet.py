@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from src.utils.ndict import ModelOutput
+
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
@@ -55,18 +57,12 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
-        # input is CHW
-        diffY = torch.tensor([x2.size()[2] - x1.size()[2]])
-        diffX = torch.tensor([x2.size()[3] - x1.size()[3]])
-
-        # x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-        #                 diffY // 2, diffY - diffY // 2])
-        # torch.div(dim_t, 2, rounding_mode='trunc')
-        x1 = F.pad(x1, [torch.div(diffX, 2, rounding_mode='trunc'),
-                        torch.div(diffX - diffX, 2, rounding_mode='trunc'),
-                        torch.div(diffY, 2, rounding_mode='trunc'),
-                        torch.div(diffY - diffY, 2, rounding_mode='trunc')])
-
+        diff_y = x2.size(2) - x1.size(2)
+        diff_x = x2.size(3) - x1.size(3)
+        x1 = F.pad(
+            x1,
+            [diff_x // 2, diff_x - diff_x // 2, diff_y // 2, diff_y - diff_y // 2],
+        )
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -98,8 +94,15 @@ class UNet(nn.Module):
         self.up4 = Up(128, 64, bilinear)
         self.outc = OutConv(64, n_classes)
 
-    def forward(self, x):
-        x1 = self.inc(x)
+    def forward(self, batch_inputs):
+        inputs = batch_inputs
+        targets = None
+        if isinstance(batch_inputs, dict):
+            inputs = batch_inputs.get("inputs")
+            targets = batch_inputs.get("targets")
+        if inputs is None:
+            raise ValueError("UNet forward expects 'inputs' in batch dictionary")
+        x1 = self.inc(inputs)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
@@ -109,4 +112,5 @@ class UNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return logits
+        output = ModelOutput(preds=logits, targets=targets)
+        return output, None

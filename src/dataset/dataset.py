@@ -573,6 +573,8 @@ def _get_dataloader_traditional_mode(use_valid: bool):
         valid_dataset = get_dataset("valid")
         if hasattr(valid_dataset, "get_collate_fn"):
             valid_collate_fn = valid_dataset.get_collate_fn()
+        else:
+            valid_collate_fn = None
         valid_loader = DataLoader(
             valid_dataset,
             batch_size=c["valid"]["batch_size"],
