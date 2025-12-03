@@ -30,6 +30,7 @@ from .timer import Timer
 from .annotation import time_cost, deprecated, buildin, timer, singleton
 from .criterion import dice_loss, kl_divergence_loss, get_criterion
 from .see_cam import ImageHeatMapGenerator
+from .training_stop import TrainingStopManager
 from .util import (
     prepare_logger,
     set_seed,
@@ -44,6 +45,8 @@ from .util import (
     freeze_layers,
     str2dtype,
     run_async_task,
+    reset_peak_memory_stats,
+    log_memory_cost,
 )
 from .postprocess import select_postprocess_fn
 from .download import download_file, download_with_retry, download_multiple

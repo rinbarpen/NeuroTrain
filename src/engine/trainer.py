@@ -12,9 +12,24 @@ import json
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Mapping, Sequence
+from typing import Any, Tuple
+
+
+class TrainingStopRequested(RuntimeError):
+    """Internal exception to unwind control flow when stop is requested."""
+    pass
 
 from src.config import get_config, ALL_STYLES
-from src.utils import EarlyStopping, save_model, select_postprocess_fn, run_async_task
+from src.utils import (
+    EarlyStopping,
+    save_model,
+    select_postprocess_fn,
+    run_async_task,
+    TrainingStopManager,
+    reset_peak_memory_stats,
+    log_memory_cost,
+)
+from src.utils.ndict import ModelOutput, NDict
 from src.utils.progress_bar import ProgressBar
 from src.recorder import MeterRecorder, DataSaver
 from src.visualizer.painter import Plot
@@ -47,6 +62,12 @@ class Trainer:
         self.model = model
 
         self.logger = logging.getLogger('train')
+        self._stop_manager = TrainingStopManager()
+        self._stop_manager.set_logger(self.logger)
+        self._stop_manager.install_signal_handlers()
+        self._stop_manager.register_stop_file(self.filename_env.stop_flag_file)
+        self._stop_saved = False
+        self._save_model_fn = None
         self.data_saver = DataSaver()
         self.train_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="train_")
         self.valid_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="valid_")
@@ -134,6 +155,8 @@ class Trainer:
             if value.device == self.device:
                 return value
             return value.to(self.device, non_blocking=True)
+        if isinstance(value, NDict):
+            return NDict({k: self._move_to_device(v) for k, v in value.items()})
         if isinstance(value, Mapping):
             return {k: self._move_to_device(v) for k, v in value.items()}
         if isinstance(value, tuple):
@@ -146,34 +169,67 @@ class Trainer:
             return [self._move_to_device(v) for v in value]
         return value
 
-    def _forward_model(self, batch_inputs):
-        inputs = None
+    def _forward_model(self, batch_inputs) -> tuple[ModelOutput, torch.Tensor]:
+        inputs_obj = batch_inputs
         targets = None
 
         if isinstance(batch_inputs, tuple) and len(batch_inputs) == 2:
-            inputs, targets = batch_inputs
+            inputs_obj, targets = batch_inputs
+
+        model_input = inputs_obj
+        if isinstance(inputs_obj, Mapping):
+            model_input = inputs_obj
+            targets = inputs_obj.get('targets', targets)
         else:
-            inputs = batch_inputs
-            targets = None
+            model_input = inputs_obj
 
-        if self.criterion is not None and targets is not None:
-            outputs = self.model(inputs)
-            loss = self.criterion(targets, outputs)
-            return outputs, loss
-
-        result = self.model(inputs)
+        result = self.model(model_input)
+        model_loss: Any = None
         if isinstance(result, tuple) and len(result) == 2:
-            return result
-        if isinstance(result, dict):
-            loss = result.get('loss')
-            assert loss is not None
-            return result, loss
+            outputs_raw, model_loss = result
+        else:
+            outputs_raw = result
 
-        raise ValueError(
-            "Model forward must return (outputs, loss) tuple or dict containing loss when criterion is None"
-        )
+        if isinstance(outputs_raw, ModelOutput):
+            outputs = outputs_raw
+        elif isinstance(outputs_raw, Mapping):
+            outputs = ModelOutput(**outputs_raw)
+        else:
+            outputs = ModelOutput(preds=outputs_raw)
 
-    def _train_epoch(self, epoch: int, num_epochs: int, train_dataloader: DataLoader, pbar: ProgressBar):
+        if 'targets' not in outputs and targets is not None:
+            outputs['targets'] = targets
+
+        loss: torch.Tensor | None = None
+        if model_loss is not None:
+            loss = model_loss if isinstance(model_loss, torch.Tensor) else torch.as_tensor(model_loss, device=self.device)
+        elif 'loss' in outputs:
+            candidate = outputs['loss']
+            loss = candidate if isinstance(candidate, torch.Tensor) else torch.as_tensor(candidate, device=self.device)
+        elif self.criterion is not None:
+            preds = outputs.get('preds')
+            final_targets = outputs.get('targets')
+            if isinstance(preds, torch.Tensor) and isinstance(final_targets, torch.Tensor):
+                loss = self.criterion(final_targets, preds)
+
+        if loss is None:
+            raise ValueError("Unable to compute loss: ensure model or criterion provides it.")
+
+        if not isinstance(loss, torch.Tensor):
+            loss = torch.as_tensor(loss, device=self.device)
+
+        assert isinstance(loss, torch.Tensor)
+        return outputs, loss
+
+    def _train_epoch(
+        self,
+        epoch: int,
+        num_epochs: int,
+        train_dataloader: DataLoader,
+        pbar: ProgressBar,
+        train_losses_ref: list[float],
+        valid_losses_ref: list[float],
+    ):
         c = get_config()
         accumulation_steps = c["train"]["grad_accumulation_steps"]
         enable_accumulation_step = accumulation_steps > 0
@@ -184,12 +240,14 @@ class Trainer:
         self.model.train()
 
         total_steps = len(train_dataloader)
+        processed_batches = 0
 
         if not enable_accumulation_step and self.optimizer is not None:
             self.optimizer.zero_grad()
 
         for batch, batch_inputs in enumerate(train_dataloader, 1):
             batch_inputs = self._move_to_device(batch_inputs)
+            processed_batches += 1
 
             sum_loss = 0.0
             if self.scaler:
@@ -316,7 +374,22 @@ class Trainer:
                 force=batch == total_steps,
             )
 
-        train_loss /= len(train_dataloader)
+            if self._stop_manager.should_stop():
+                stopped_losses = train_losses_ref.copy()
+                if processed_batches > 0:
+                    stopped_losses.append(train_loss / processed_batches)
+                self._handle_stop_request(
+                    epoch,
+                    num_epochs,
+                    stopped_losses,
+                    valid_losses_ref.copy(),
+                )
+                raise TrainingStopRequested
+
+        if processed_batches > 0:
+            train_loss /= processed_batches
+        else:
+            train_loss = 0.0
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}')
         # 保存step级loss
         try:
@@ -326,15 +399,26 @@ class Trainer:
         self.train_metric_recorder.finish_one_epoch()
         return train_loss, step_losses, step_lrs
 
-    def _valid_epoch(self, epoch: int, num_epochs: int, valid_dataloader: DataLoader, pbar: ProgressBar):
+    def _valid_epoch(
+        self,
+        epoch: int,
+        num_epochs: int,
+        valid_dataloader: DataLoader,
+        pbar: ProgressBar,
+        train_losses_ref: list[float],
+        valid_losses_ref: list[float],
+    ):
         self.model.eval()
         valid_loss = 0.0
+
+        processed_batches = 0
 
         with torch.no_grad():
             step_losses = []
             total_steps = len(valid_dataloader)
             for batch_idx, batch_inputs in enumerate(valid_dataloader, 1):
                 batch_inputs = self._move_to_device(batch_inputs)
+                processed_batches += 1
 
                 outputs, loss = self._forward_model(batch_inputs)
         
@@ -372,7 +456,22 @@ class Trainer:
                     force=batch_idx == total_steps,
                 )
 
-        valid_loss /= len(valid_dataloader)
+                if self._stop_manager.should_stop():
+                    stopped_valid_losses = valid_losses_ref.copy()
+                    if processed_batches > 0:
+                        stopped_valid_losses.append(valid_loss / processed_batches)
+                    self._handle_stop_request(
+                        epoch,
+                        num_epochs,
+                        train_losses_ref.copy(),
+                        stopped_valid_losses,
+                    )
+                    raise TrainingStopRequested
+
+        if processed_batches > 0:
+            valid_loss /= processed_batches
+        else:
+            valid_loss = 0.0
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
         self.valid_metric_recorder.finish_one_epoch()
         return valid_loss
@@ -399,8 +498,12 @@ class Trainer:
             save_recovery_period = int(save_recovery_period * num_epochs)
 
         self.model = self.model.to(self.device)
+        reset_peak_memory_stats()
 
         save_model_preset = partial(save_model, model=self.model, optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler, version=c['run_id'])
+        self._save_model_fn = save_model_preset
+        self._stop_manager.reset()
+        self._stop_saved = False
 
         if early_stop and valid_dataloader is None:
             self.logger.warning("Validate isn't launched, early_stop will be cancelled")
@@ -429,104 +532,137 @@ class Trainer:
                 self.logger.warning(f"Failed to start web monitor training session: {exc}")
                 self.web_monitor = None
         total_pbar_steps = (num_epochs - last_epoch) * (len(train_dataloader) + (len(valid_dataloader) if valid_dataloader else 0))
-        with ProgressBar(total=total_pbar_steps, desc='Training...', log_interval=self.log_interval) as pbar:
-            for epoch in range(last_epoch+1, num_epochs+1):
-                train_loss, epoch_step_losses, epoch_step_lrs = self._train_epoch(epoch, num_epochs, train_dataloader, pbar)
-                train_losses.append(train_loss)
-                
-                # 收集step级别的数据
-                all_step_losses.extend(epoch_step_losses)
-                all_step_lrs.extend(epoch_step_lrs)
-                
-                # 收集epoch级别的学习率
-                if self.optimizer is not None:
-                    current_lr = self.optimizer.param_groups[0]['lr']
-                    epoch_lrs.append(current_lr)
-                
-                pbar.update(0)
-                pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
+        stop_triggered = False
+        completed_epoch = last_epoch
 
-                # 调整 lr per one epoch
-                if hasattr(self, 'lr_scheduler') and self.lr_scheduler is not None:
-                    # self.optimizer.step()
-                    self.lr_scheduler.step()
-
-                # recovery info
-                if save_recovery_period > 0 and epoch % save_recovery_period == 0:
-                    self.logger.info(f'save temporary recovery info when {epoch}/{num_epochs}')
-                    self._save_recovery_info(epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
-                # checkpoint info
-                if save_period > 0 and epoch % save_period == 0:
-                    self.logger.info(f'save temporary checkpoint info when {epoch}/{num_epochs}')
-                    self.filename_env.register(epoch=epoch, num_epochs=num_epochs)
-                    save_model_filename = self.filename_env.output_temp_model_filename
-                    save_model_ext_filename = self.filename_env.output_temp_ext_model_filename
-                    save_model_preset(save_model_filename,             
-                            ext_path=save_model_ext_filename,        
-                            epoch=epoch, loss=train_loss)
-                    self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
-                # metrics info
-                if save_period > 0 and epoch % save_period == 0:
-                    self.logger.info(f'save temporary losses and metrics info when {epoch}/{num_epochs}')
-                    self._save_train_info(epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
-
-                # validate
-                if valid_dataloader:
-                    valid_loss = self._valid_epoch(epoch, num_epochs, valid_dataloader, pbar)
-                    valid_losses.append(valid_loss)
-
-                    pbar.update(0)
-                    pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
+        try:
+            with ProgressBar(total=total_pbar_steps, desc='Training...', log_interval=self.log_interval) as pbar:
+                for epoch in range(last_epoch+1, num_epochs+1):
+                    train_loss, epoch_step_losses, epoch_step_lrs = self._train_epoch(
+                        epoch,
+                        num_epochs,
+                        train_dataloader,
+                        pbar,
+                        train_losses,
+                        valid_losses,
+                    )
+                    train_losses.append(train_loss)
+                    completed_epoch = epoch
                     
-                    # save best model
-                    target_loss = valid_loss
-                    if target_loss < best_loss:
-                        best_loss = target_loss
-                        save_model_preset(self.filename_env.output_best_model_filename, 
-                                    ext_path=self.filename_env.output_best_ext_model_filename,
-                                    epoch=epoch, loss=best_loss)
-                        self.logger.info(f'save model params to {self.filename_env.output_best_model_filename} and ext params to {self.filename_env.output_best_ext_model_filename} when {epoch=}, {best_loss=}')
+                    # 收集step级别的数据
+                    all_step_losses.extend(epoch_step_losses)
+                    all_step_lrs.extend(epoch_step_lrs)
+                    
+                    # 收集epoch级别的学习率
+                    if self.optimizer is not None:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        epoch_lrs.append(current_lr)
+                    
+                    pbar.update(0)
+                    pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
 
-                    if early_stopper:
-                        early_stopper(valid_loss)
-                        if early_stopper.is_stopped():
-                            self.logger.info("Early stopping")
-                            break
-                # else:
-                #     best_loss = train_loss
-                #     save_model(self.best_model_file_path, self.model, 
-                #                 ext_path=self.best_model_ext_file_path,
-                #                 optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler,
-                #                 epoch=epoch, version=c['run_id'], loss=best_loss)
-                #     self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+                    # 调整 lr per one epoch
+                    if hasattr(self, 'lr_scheduler') and self.lr_scheduler is not None:
+                        self.lr_scheduler.step()
 
-                save_model_preset(self.filename_env.output_last_model_filename, 
+                    # recovery info
+                    if save_recovery_period > 0 and epoch % save_recovery_period == 0:
+                        self.logger.info(f'save temporary recovery info when {epoch}/{num_epochs}')
+                        self._save_recovery_info(epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
+                    # checkpoint info
+                    if save_period > 0 and epoch % save_period == 0:
+                        self.logger.info(f'save temporary checkpoint info when {epoch}/{num_epochs}')
+                        self.filename_env.register(epoch=epoch, num_epochs=num_epochs)
+                        save_model_filename = self.filename_env.output_temp_model_filename
+                        save_model_ext_filename = self.filename_env.output_temp_ext_model_filename
+                        save_model_preset(save_model_filename,             
+                                ext_path=save_model_ext_filename,        
+                                epoch=epoch, loss=train_loss)
+                        self.logger.info(f'save model params to {save_model_filename} and ext params to {save_model_ext_filename} when {epoch=}, {train_loss=}')
+                    # metrics info
+                    if save_period > 0 and epoch % save_period == 0:
+                        self.logger.info(f'save temporary losses and metrics info when {epoch}/{num_epochs}')
+                        self._save_train_info(epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
+
+                    # validate
+                    if valid_dataloader:
+                        valid_loss = self._valid_epoch(
+                            epoch,
+                            num_epochs,
+                            valid_dataloader,
+                            pbar,
+                            train_losses,
+                            valid_losses,
+                        )
+                        valid_losses.append(valid_loss)
+
+                        pbar.update(0)
+                        pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
+                        
+                        # save best model
+                        target_loss = valid_loss
+                        if target_loss < best_loss:
+                            best_loss = target_loss
+                            save_model_preset(self.filename_env.output_best_model_filename, 
+                                        ext_path=self.filename_env.output_best_ext_model_filename,
+                                        epoch=epoch, loss=best_loss)
+                            self.logger.info(f'save model params to {self.filename_env.output_best_model_filename} and ext params to {self.filename_env.output_best_ext_model_filename} when {epoch=}, {best_loss=}')
+
+                        if early_stopper:
+                            early_stopper(valid_loss)
+                            if early_stopper.is_stopped():
+                                self.logger.info("Early stopping")
+                                break
+
+                    # else:
+                    #     best_loss = train_loss
+                    #     save_model(self.best_model_file_path, self.model, 
+                    #                 ext_path=self.best_model_ext_file_path,
+                    #                 optimizer=self.optimizer, scaler=self.scaler, lr_scheduler=self.lr_scheduler,
+                    #                 epoch=epoch, version=c['run_id'], loss=best_loss)
+                    #     self.logger.info(f'save model params to {self.best_model_file_path} and ext params to {self.best_model_ext_file_path} when {epoch=}, {best_loss=}')
+
+                    save_model_preset(
+                        self.filename_env.output_last_model_filename,
                         ext_path=self.filename_env.output_last_ext_model_filename,
-                        epoch=num_epochs, loss=train_loss)
-                if self.progress_tracker:
-                    self.progress_tracker.end_epoch()
-                if self.web_monitor:
-                    try:
-                        self.web_monitor.end_epoch()
-                    except Exception as exc:
-                        self.logger.warning(f"Web monitor end_epoch failed: {exc}")
+                        epoch=num_epochs,
+                        loss=train_loss,
+                    )
+                    if self.progress_tracker:
+                        self.progress_tracker.end_epoch()
+                    if self.web_monitor:
+                        try:
+                            self.web_monitor.end_epoch()
+                        except Exception as exc:
+                            self.logger.warning(f"Web monitor end_epoch failed: {exc}")
 
-            # accumulation_step
-            # if policy is to use the remain batch grad, it is accumulation_policy == 'remain leave'
-            # if enable_accumulation_step:
-            #     if (len(train_dataloader) * num_epochs) % accumulation_steps != 0:
-            #         if self.scaler:
-            #             self.scaler.step(self.optimizer)
-            #             self.scaler.update()
-            #             self.optimizer.zero_grad()
-            #         else:
-            #             self.optimizer.step()
-            #             self.optimizer.zero_grad()
+        except TrainingStopRequested:
+            stop_triggered = True
 
-            #         save_model(self.last_model_file_path, **model_args,
-            #                 ext_path=self.last_model_ext_file_path, **ext_model_args,
-            #                 epoch=num_epochs, loss=best_loss)
-            #         self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
+        # accumulation_step
+        # if policy is to use the remain batch grad, it is accumulation_policy == 'remain leave'
+        # if enable_accumulation_step:
+        #     if (len(train_dataloader) * num_epochs) % accumulation_steps != 0:
+        #         if self.scaler:
+        #             self.scaler.step(self.optimizer)
+        #             self.scaler.update()
+        #             self.optimizer.zero_grad()
+        #         else:
+        #             self.optimizer.step()
+        #             self.optimizer.zero_grad()
+
+        #         save_model(self.last_model_file_path, **model_args,
+        #                 ext_path=self.last_model_ext_file_path, **ext_model_args,
+        #                 epoch=num_epochs, loss=best_loss)
+        #         self.logger.info(f'save model params to {self.last_model_file_path} and ext params to {self.last_model_ext_file_path} while finishing training')
+
+        except KeyboardInterrupt:
+            stop_triggered = True
+            self._stop_manager.request_stop(reason="keyboard-interrupt")
+            self.logger.warning("检测到键盘中断，正在安全终止训练")
+        finally:
+            if stop_triggered and not self._stop_saved:
+                self._handle_stop_request(completed_epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
 
         if self.progress_tracker and self.progress_tracker.is_training:
             self.progress_tracker.end_training()
@@ -543,8 +679,49 @@ class Trainer:
 
         self._draw_visualizations(all_step_losses, all_step_lrs, epoch_lrs, num_epochs)
 
-        self._save_train_info(num_epochs, num_epochs, train_losses, valid_losses if valid_dataloader else None)
+        self._save_train_info(completed_epoch, num_epochs, train_losses, valid_losses if valid_dataloader else None)
         self._wandb_save(train_losses, valid_losses, self.optimizer, self.scaler, self.lr_scheduler)
+        log_memory_cost("Train", self.logger)
+
+    def _handle_stop_request(self, epoch: int, num_epochs: int, train_losses, valid_losses=None):
+        """在收到停止信号时，统一保存checkpoint、扩展状态以及恢复信息。"""
+        if self._stop_saved:
+            return
+
+        self._stop_saved = True
+        reason = self._stop_manager.reason or "manual"
+        safe_epoch = max(epoch, 0)
+        self.logger.warning(f"检测到训练终止请求（原因：{reason}），将在 epoch={safe_epoch} 保存临时检查点")
+
+        last_loss = train_losses[-1] if train_losses else None
+        try:
+            if self._save_model_fn is not None:
+                stop_model_path = self.filename_env.output_stop_model_filename
+                stop_ext_path = self.filename_env.output_stop_ext_model_filename
+                self._save_model_fn(
+                    stop_model_path,
+                    ext_path=stop_ext_path,
+                    epoch=safe_epoch,
+                    loss=last_loss,
+                )
+                self.logger.info(f"Stop checkpoint saved to {stop_model_path} / {stop_ext_path}")
+        except Exception as exc:
+            self.logger.error(f"Failed to save stop checkpoint: {exc}")
+
+        try:
+            self._save_recovery_info(safe_epoch, num_epochs, train_losses, valid_losses)
+        except Exception as exc:
+            self.logger.warning(f"Failed to save recovery info on stop: {exc}")
+
+        try:
+            self._save_train_info(safe_epoch, num_epochs, train_losses, valid_losses)
+        except Exception as exc:
+            self.logger.warning(f"Failed to save metric info on stop: {exc}")
+
+        try:
+            self._stop_manager.acknowledge()
+        except Exception as exc:
+            self.logger.debug(f"Failed to cleanup stop flag: {exc}")
 
     def _draw_visualizations(self, all_step_losses, all_step_lrs, epoch_lrs, num_epochs):
         """生成可视化图表"""

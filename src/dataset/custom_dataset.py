@@ -239,7 +239,7 @@ class CustomDataset(Dataset):
         return self.n
 
     @abstractmethod
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> Any:
         """获取指定索引的数据样本"""
         ...
 
@@ -269,19 +269,19 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @abstractmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取训练数据集"""
         ...
     
     @staticmethod
     @abstractmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取验证数据集"""
         ...
     
     @staticmethod
     @abstractmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取测试数据集"""
         ...
 

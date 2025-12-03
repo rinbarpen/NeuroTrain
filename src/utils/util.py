@@ -15,6 +15,7 @@ from torch.optim.lr_scheduler import LRScheduler, StepLR, MultiStepLR, CosineAnn
 from torch.amp.grad_scaler import GradScaler
 import torch.distributed as dist
 import torchinfo
+import psutil
 from typing import Sequence, Type, Optional, Dict, Any, Union, List, Tuple, Callable, TypeVar
 from pathlib import Path
 from fvcore.nn import flop_count, flop_count_table, FlopCountAnalysis, parameter_count, parameter_count_table
@@ -292,6 +293,51 @@ def run_async_task(
         _wrapper()
     else:
         executor.submit(_wrapper)
+
+
+def reset_peak_memory_stats():
+    """Reset GPU peak memory statistics if CUDA is available."""
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+
+def _collect_memory_cost() -> Dict[str, float]:
+    stats: Dict[str, float] = {}
+    try:
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        stats['cpu_used_mb'] = memory_info.rss / (1024 ** 2)
+    except Exception:
+        stats['cpu_used_mb'] = 0.0
+    try:
+        stats['cpu_percent'] = psutil.virtual_memory().percent
+    except Exception:
+        stats['cpu_percent'] = 0.0
+
+    if torch.cuda.is_available():
+        try:
+            stats['gpu_allocated_mb'] = torch.cuda.memory_allocated() / (1024 ** 2)
+            stats['gpu_reserved_mb'] = torch.cuda.memory_reserved() / (1024 ** 2)
+            stats['gpu_max_allocated_mb'] = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        except Exception:
+            stats['gpu_allocated_mb'] = stats['gpu_reserved_mb'] = stats['gpu_max_allocated_mb'] = 0.0
+    return stats
+
+
+def log_memory_cost(stage: str, logger: Optional[logging.Logger] = None):
+    """Log CPU/GPU memory cost information for a specific stage."""
+    stats = _collect_memory_cost()
+    logger = logger or logging.getLogger(stage.lower())
+    parts = [
+        f"CPU Used: {stats.get('cpu_used_mb', 0.0):.1f} MB ({stats.get('cpu_percent', 0.0):.1f}%)",
+    ]
+    if torch.cuda.is_available():
+        parts.append(
+            f"GPU Allocated: {stats.get('gpu_allocated_mb', 0.0):.1f} MB / "
+            f"Reserved: {stats.get('gpu_reserved_mb', 0.0):.1f} MB / "
+            f"Max: {stats.get('gpu_max_allocated_mb', 0.0):.1f} MB"
+        )
+    logger.info(f"{stage} Memory Cost | " + " | ".join(parts))
 
 
 def tensor_print(tensor: torch.Tensor, name: str=''):

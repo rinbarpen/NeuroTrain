@@ -1,6 +1,7 @@
 from typing import Sequence, Union, List, Optional, TypeVar, Type, Literal
 import numpy as np
 from functools import wraps
+import inspect
 
 
 _OutputType = Union[np.float64, List[np.float64], np.ndarray, float]
@@ -124,14 +125,28 @@ def many_metrics(
         if use_meter and meter_prefix is not None:
             meter_name = f"{meter_prefix}_{name}"
         
-        # 调用指标函数，传递meter_name参数
+        # 根据函数签名判断可传递的参数
+        sig = inspect.signature(metric)
+        params = sig.parameters
+        accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+        def _accepts(param_name: str) -> bool:
+            return accepts_kwargs or (param_name in params)
+
+        call_kwargs = {}
+        if _accepts('class_split'):
+            call_kwargs['class_split'] = class_split
+        if _accepts('weights'):
+            call_kwargs['weights'] = weights
+        if _accepts('class_axis'):
+            call_kwargs['class_axis'] = class_axis
+        if _accepts('meter_name'):
+            call_kwargs['meter_name'] = meter_name
+
         result[name] = metric(
-            y_true, 
-            y_pred, 
-            class_split, 
-            weights, 
-            class_axis=class_axis,
-            meter_name=meter_name
+            y_true,
+            y_pred,
+            **call_kwargs,
         )
     return result
 

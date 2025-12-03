@@ -1,12 +1,9 @@
-import torch
 from pathlib import Path
-from torchvision import transforms
-import yaml
-import numpy as np
 from PIL import Image
 from typing import Literal
 
 from .custom_dataset import CustomDataset, Betweens
+from src.utils.ndict import Sample
 
 class DriveDataset(CustomDataset):
     mapping = {
@@ -55,16 +52,9 @@ class DriveDataset(CustomDataset):
             mask = Image.open(mask_path).convert('L')
 
         image, mask = self.transforms(image), self.transforms(mask)
-        return {
-            'image': image,  # 图像张量
-            'mask': mask,    # 掩码张量
-            'metadata': {
-                'image_path': str(image_path),
-                'mask_path': str(mask_path),
-                'is_rgb': self.config['is_rgb'],
-                'split': self.split  # 使用 self.split 而不是 self.dataset_type
-            }
-        }
+
+        sample = Sample(inputs=image, targets=mask)
+        return sample
 
     @staticmethod
     def name():

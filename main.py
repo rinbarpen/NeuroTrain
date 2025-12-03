@@ -48,6 +48,7 @@ if __name__ == "__main__":
     
     # 检查是否使用 DDP
     use_ddp = c.get("ddp", {}).get("enabled", False)
+    device = c["device"]
     
     # 初始化 DDP 分布式环境
     if use_ddp:
@@ -55,6 +56,8 @@ if __name__ == "__main__":
         rank_info = init_ddp_distributed()
         local_rank = rank_info['local_rank']
         world_size = rank_info['world_size']
+        device = rank_info['device']
+        c['device'] = device
         
         # 设置 DDP 日志
         setup_ddp_logging(c.get("ddp", {}).get("log_level", "INFO"))
@@ -82,7 +85,6 @@ if __name__ == "__main__":
     if c["seed"] >= 0:
         set_seed(c["seed"])
     
-    device = c["device"]
     is_multigpu = "," in device
     if is_multigpu and not use_ddp:
         dist.barrier()

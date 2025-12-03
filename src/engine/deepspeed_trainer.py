@@ -53,9 +53,6 @@ class DeepSpeedTrainer:
             is_continue_mode: 是否为继续训练模式
             local_rank: 本地进程排名
         """
-        if not DEEPSPEED_AVAILABLE:
-            raise ImportError("DeepSpeed is not available. Please install deepspeed: pip install deepspeed")
-        
         self.output_dir = output_dir
         self.model = model
         self.local_rank = local_rank

@@ -760,16 +760,21 @@ def get_all_dataloader(use_valid=False):
         valid_drop_last = _safe_bool(valid_drop_raw)
         if valid_drop_last is None:
             valid_drop_last = False
-
-        valid_loader = get_dataloader(
+        
+        # 获取 collate_fn（如果数据集支持）
+        if hasattr(valid_dataset, "get_collate_fn"):
+            valid_collate_fn = valid_dataset.get_collate_fn()
+        else:
+            valid_collate_fn = None
+        
+        valid_loader = DataLoader(
             valid_dataset,
-            sample_ratio=None,
-            max_samples=0,
             batch_size=c["valid"]["batch_size"],
             shuffle=valid_shuffle,
             num_workers=valid_num_workers,
             pin_memory=valid_pin_memory,
             drop_last=valid_drop_last,
+            collate_fn=valid_collate_fn,
         )
     else:
         valid_loader = None

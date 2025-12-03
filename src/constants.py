@@ -66,6 +66,8 @@ class TrainOutputFilenameEnv:
     OUTPUT_BEST_EXT_MODEL_FILENAME = '{train_dir}/weights/best.ext.pt'
     OUTPUT_TEMP_MODEL_FILENAME = '{train_dir}/weights/{model}-{epoch}of{num_epochs}.pt'
     OUTPUT_TEMP_EXT_MODEL_FILENAME = '{train_dir}/weights/{model}-{epoch}of{num_epochs}.ext.pt'
+    OUTPUT_STOP_MODEL_FILENAME = '{train_dir}/weights/stop.pt'
+    OUTPUT_STOP_EXT_MODEL_FILENAME = '{train_dir}/weights/stop.ext.pt'
     # csv
     OUTPUT_TRAIN_EPOCH_LOSS_DETAILS_FILENAME = '{train_dir}/train/train_epoch_loss.csv'
     OUTPUT_VALID_EPOCH_LOSS_DETAILS_FILENAME = '{train_dir}/valid/valid_epoch_loss.csv'
@@ -102,6 +104,7 @@ class TrainOutputFilenameEnv:
     OUTPUT_LR_BY_STEP_IMAGE_FILENAME = '{train_dir}/lr_by_step.png'
     # recovery
     RECOVERY_DIR = '{train_dir}/recovery'
+    STOP_FLAG_FILENAME = '{train_dir}/STOP'
 
     def register(self, **kwargs):
         for k,v in kwargs.items():
@@ -219,6 +222,15 @@ class TrainOutputFilenameEnv:
     @property
     def recovery_dir(self) -> Path:
         return Path(self.RECOVERY_DIR.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_stop_model_filename(self) -> Path:
+        return Path(self.OUTPUT_STOP_MODEL_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_stop_ext_model_filename(self) -> Path:
+        return Path(self.OUTPUT_STOP_EXT_MODEL_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def stop_flag_file(self) -> Path:
+        return Path(self.STOP_FLAG_FILENAME.format(train_dir=getattr(self, "train_dir")))
 
 class TestOutputFilenameEnv:
     def __new__(cls):
