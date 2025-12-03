@@ -78,6 +78,11 @@ from .monitor_utils import (
     detect_performance_anomalies
 )
 
+from .experiment_manager import (
+    discover_experiments,
+    load_experiment_snapshot,
+)
+
 # Web监控（可选，需要flask_socketio）
 try:
     from .web_monitor import WebMonitor, create_web_monitor
@@ -120,6 +125,8 @@ __all__ = [
     'generate_monitor_report',
     'analyze_performance_trends',
     'detect_performance_anomalies',
+    'discover_experiments',
+    'load_experiment_snapshot',
     
     # Web监控
     'WebMonitor',

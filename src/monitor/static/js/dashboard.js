@@ -7,6 +7,10 @@ class MonitorDashboard {
         this.systemChart = null;
         this.isConnected = false;
         this.updateInterval = null;
+        this.liveMode = true;
+        this.currentExperimentId = null;
+        this.experiments = [];
+        this.loadingModal = null;
         
         this.init();
     }
@@ -15,6 +19,7 @@ class MonitorDashboard {
         this.setupSocket();
         this.setupCharts();
         this.setupEventListeners();
+        this.loadExperiments();
         this.startDataUpdates();
     }
     
@@ -24,13 +29,17 @@ class MonitorDashboard {
         this.socket.on('connect', () => {
             console.log('Connected to server');
             this.isConnected = true;
-            this.updateStatusIndicator('Connected', 'success');
+            if (this.liveMode) {
+                this.updateStatusIndicator('Connected', 'success');
+            }
         });
         
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
             this.isConnected = false;
-            this.updateStatusIndicator('Disconnected', 'danger');
+            if (this.liveMode) {
+                this.updateStatusIndicator('Disconnected', 'danger');
+            }
         });
         
         this.socket.on('training_update', (data) => {
@@ -222,11 +231,15 @@ class MonitorDashboard {
         document.getElementById('export-btn').addEventListener('click', () => {
             this.exportData();
         });
+
+        document.getElementById('experiment-select').addEventListener('change', (event) => {
+            this.handleExperimentChange(event.target.value);
+        });
     }
     
     startDataUpdates() {
         this.updateInterval = setInterval(() => {
-            if (this.isConnected) {
+            if (this.liveMode && this.isConnected) {
                 this.socket.emit('request_update');
             }
         }, 2000); // Update every 2 seconds
@@ -235,7 +248,16 @@ class MonitorDashboard {
     async refreshData() {
         try {
             this.showLoading(true);
-            
+
+            if (!this.liveMode && this.currentExperimentId) {
+                const snapshot = await this.fetchExperimentSnapshot(this.currentExperimentId);
+                if (snapshot) {
+                    this.applyExperimentSnapshot(snapshot);
+                }
+                await this.loadExperiments();
+                return;
+            }
+
             // Fetch all data
             const [status, training, system, progress, alerts, performance] = await Promise.all([
                 this.fetchData('/api/status'),
@@ -253,6 +275,7 @@ class MonitorDashboard {
             this.updateProgress(progress);
             this.updateAlerts(alerts);
             this.updatePerformanceStats(performance);
+            this.loadExperiments();
             
         } catch (error) {
             console.error('Error refreshing data:', error);
@@ -276,7 +299,14 @@ class MonitorDashboard {
     }
     
     updateTrainingChart(data) {
-        if (!data || data.length === 0) return;
+        if (!data || data.length === 0) {
+            this.trainingChart.data.labels = [];
+            this.trainingChart.data.datasets.forEach(dataset => {
+                dataset.data = [];
+            });
+            this.trainingChart.update('none');
+            return;
+        }
         
         const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString());
         const lossData = data.map(d => d.loss);
@@ -291,7 +321,14 @@ class MonitorDashboard {
     }
     
     updateSystemChart(data) {
-        if (!data || data.length === 0) return;
+        if (!data || data.length === 0) {
+            this.systemChart.data.labels = [];
+            this.systemChart.data.datasets.forEach(dataset => {
+                dataset.data = [];
+            });
+            this.systemChart.update('none');
+            return;
+        }
         
         const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString());
         const cpuData = data.map(d => d.cpu_percent);
@@ -304,7 +341,18 @@ class MonitorDashboard {
     }
     
     updateProgress(data) {
-        if (!data || Object.keys(data).length === 0) return;
+        if (!data || Object.keys(data).length === 0) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            document.getElementById('progress-percent').textContent = '0%';
+            document.getElementById('current-epoch').textContent = '0';
+            document.getElementById('current-step').textContent = '0';
+            document.getElementById('eta-time').textContent = '--:--';
+            document.getElementById('throughput-value').textContent = '0';
+            return;
+        }
         
         const progressPercent = data.total_progress || 0;
         const progressBar = document.getElementById('progress-bar');
@@ -345,19 +393,21 @@ class MonitorDashboard {
     }
     
     updatePerformanceStats(data) {
-        if (!data || Object.keys(data).length === 0) return;
-        
-        document.getElementById('avg-step-time').textContent = 
-            data.avg_step_time ? `${data.avg_step_time.toFixed(3)}s` : '0.000s';
-        document.getElementById('avg-epoch-time').textContent = 
-            data.avg_epoch_time ? `${data.avg_epoch_time.toFixed(3)}s` : '0.000s';
-        document.getElementById('avg-throughput').textContent = 
-            data.avg_throughput ? data.avg_throughput.toFixed(1) : '0.0';
-        document.getElementById('min-throughput').textContent = 
-            data.min_throughput ? data.min_throughput.toFixed(1) : '0.0';
+        const avgStep = data && data.avg_step_time ? `${data.avg_step_time.toFixed(3)}s` : '0.000s';
+        const avgEpoch = data && data.avg_epoch_time ? `${data.avg_epoch_time.toFixed(3)}s` : '0.000s';
+        const avgThroughput = data && data.avg_throughput ? data.avg_throughput.toFixed(1) : '0.0';
+        const minThroughput = data && data.min_throughput ? data.min_throughput.toFixed(1) : '0.0';
+
+        document.getElementById('avg-step-time').textContent = avgStep;
+        document.getElementById('avg-epoch-time').textContent = avgEpoch;
+        document.getElementById('avg-throughput').textContent = avgThroughput;
+        document.getElementById('min-throughput').textContent = minThroughput;
     }
     
     updateTrainingData(data) {
+        if (!this.liveMode) {
+            return;
+        }
         // Add new data point to training chart
         const timeLabel = new Date(data.timestamp).toLocaleTimeString();
         
@@ -376,6 +426,9 @@ class MonitorDashboard {
     }
     
     updateSystemData(data) {
+        if (!this.liveMode) {
+            return;
+        }
         // Add new data point to system chart
         const timeLabel = new Date(data.timestamp).toLocaleTimeString();
         
@@ -393,10 +446,16 @@ class MonitorDashboard {
     }
     
     updateProgressData(data) {
+        if (!this.liveMode) {
+            return;
+        }
         this.updateProgress(data);
     }
     
     addAlert(alert) {
+        if (!this.liveMode) {
+            return;
+        }
         const alertsList = document.getElementById('alerts-list');
         
         // Remove "No alerts" message if present
@@ -433,7 +492,14 @@ class MonitorDashboard {
     }
     
     showLoading(show) {
-        const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+        if (!this.loadingModal) {
+            const modalEl = document.getElementById('loadingModal');
+            if (!modalEl) {
+                return;
+            }
+            this.loadingModal = new bootstrap.Modal(modalEl);
+        }
+        const modal = this.loadingModal;
         if (show) {
             modal.show();
         } else {
@@ -463,6 +529,7 @@ class MonitorDashboard {
     }
     
     async startMonitoring() {
+        this.switchToLive(false);
         try {
             await this.fetchData('/api/control/start');
             this.showAlert('Monitoring started', 'success');
@@ -473,6 +540,7 @@ class MonitorDashboard {
     }
     
     async stopMonitoring() {
+        this.switchToLive(false);
         try {
             await this.fetchData('/api/control/stop');
             this.showAlert('Monitoring stopped', 'info');
@@ -483,6 +551,7 @@ class MonitorDashboard {
     }
     
     async resetMonitoring() {
+        this.switchToLive(false);
         if (confirm('Are you sure you want to reset all monitoring data?')) {
             try {
                 await this.fetchData('/api/control/reset');
@@ -495,6 +564,7 @@ class MonitorDashboard {
     }
     
     async exportData() {
+        this.switchToLive(false);
         try {
             const response = await fetch('/api/export/json');
             const data = await response.json();
@@ -508,6 +578,144 @@ class MonitorDashboard {
         } catch (error) {
             this.showAlert('Error exporting data: ' + error.message, 'danger');
         }
+    }
+
+    async loadExperiments() {
+        try {
+            const data = await this.fetchData('/api/experiments');
+            this.experiments = data.experiments || [];
+            this.populateExperimentSelector();
+        } catch (error) {
+            console.error('Failed to load experiments:', error);
+        }
+    }
+
+    populateExperimentSelector() {
+        const select = document.getElementById('experiment-select');
+        if (!select) {
+            return;
+        }
+
+        const previous = select.value;
+        select.innerHTML = '';
+
+        const liveOption = document.createElement('option');
+        liveOption.value = '__live__';
+        liveOption.textContent = 'Live Monitor';
+        select.appendChild(liveOption);
+
+        this.experiments.forEach((exp) => {
+            const option = document.createElement('option');
+            option.value = exp.id;
+            const relativeDir = exp.relative_dir && exp.relative_dir !== '.' ? ` / ${exp.relative_dir}` : '';
+            option.textContent = `${exp.project} / ${exp.run_id}${relativeDir}`;
+            if (exp.updated_at) {
+                option.dataset.updatedAt = exp.updated_at;
+            }
+            select.appendChild(option);
+        });
+
+        if (previous && Array.from(select.options).some(opt => opt.value === previous)) {
+            select.value = previous;
+        } else {
+            select.value = '__live__';
+            this.switchToLive(false);
+        }
+    }
+
+    handleExperimentChange(value) {
+        if (!value || value === '__live__') {
+            this.switchToLive();
+            return;
+        }
+        this.switchToExperiment(value);
+        this.refreshData();
+    }
+
+    switchToLive(refresh = true) {
+        this.liveMode = true;
+        this.currentExperimentId = null;
+
+        const select = document.getElementById('experiment-select');
+        if (select && select.value !== '__live__') {
+            select.value = '__live__';
+        }
+
+        if (this.isConnected) {
+            this.updateStatusIndicator('Connected', 'success');
+        } else {
+            this.updateStatusIndicator('Disconnected', 'danger');
+        }
+
+        if (refresh) {
+            this.refreshData();
+        }
+    }
+
+    switchToExperiment(experimentId) {
+        this.liveMode = false;
+        this.currentExperimentId = experimentId;
+
+        const select = document.getElementById('experiment-select');
+        if (select && select.value !== experimentId) {
+            select.value = experimentId;
+        }
+
+        const selected = this.experiments.find(exp => exp.id === experimentId);
+        if (selected && selected.updated_at) {
+            this.updateStatusIndicator(`Snapshot (${selected.updated_at})`, 'info');
+        } else {
+            this.updateStatusIndicator('Snapshot', 'info');
+        }
+    }
+
+    async fetchExperimentSnapshot(experimentId) {
+        try {
+            const url = `/api/experiments/${this.encodeExperimentId(experimentId)}`;
+            return await this.fetchData(url);
+        } catch (error) {
+            this.showAlert('Failed to load experiment: ' + error.message, 'danger');
+            return null;
+        }
+    }
+
+    encodeExperimentId(experimentId) {
+        return experimentId
+            .split('/')
+            .map(encodeURIComponent)
+            .join('/');
+    }
+
+    applyExperimentSnapshot(snapshot) {
+        if (!snapshot) {
+            return;
+        }
+
+        const { status, training_metrics, system_metrics, progress, alerts, performance } = snapshot;
+
+        if (status) {
+            const statusText = status.project
+                ? `${status.project} / ${status.run_id}`
+                : 'Snapshot';
+            const monitorStatusEl = document.getElementById('monitor-status');
+            if (monitorStatusEl) {
+                monitorStatusEl.textContent = statusText;
+            }
+
+            const indicatorLabel = status.updated_at ? `Snapshot (${status.updated_at})` : 'Snapshot';
+            this.updateStatusIndicator(indicatorLabel, 'info');
+
+            const alertCountEl = document.getElementById('alert-count');
+            if (alertCountEl) {
+                alertCountEl.textContent = alerts ? alerts.length : 0;
+            }
+        }
+
+        this.updateTrainingChart(training_metrics || []);
+        this.updateSystemChart(system_metrics || []);
+        this.updateProgress(progress || {});
+        this.updateAlerts(alerts || []);
+        this.updatePerformanceStats(performance || {});
     }
 }
 

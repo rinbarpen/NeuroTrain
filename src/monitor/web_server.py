@@ -24,6 +24,10 @@ from .monitor_utils import (
     plot_training_metrics, plot_system_metrics, plot_progress_tracker,
     analyze_performance_trends, detect_performance_anomalies
 )
+from .experiment_manager import (
+    discover_experiments,
+    load_experiment_snapshot,
+)
 
 
 class WebMonitorServer:
@@ -323,6 +327,25 @@ class WebMonitorServer:
             if self.alert_system:
                 self.alert_system.reset()
             return jsonify({'success': True})
+
+        @self.app.route('/api/experiments')
+        def list_experiments():
+            """列出 runs 目录下的实验"""
+            runs_root = Path("runs")
+            experiments = discover_experiments(runs_root)
+            return jsonify({
+                'runs_root': str(runs_root.resolve()),
+                'experiments': experiments
+            })
+
+        @self.app.route('/api/experiments/<path:experiment_id>')
+        def get_experiment(experiment_id: str):
+            """读取指定实验的监控数据快照"""
+            runs_root = Path("runs")
+            snapshot = load_experiment_snapshot(runs_root, experiment_id)
+            if snapshot is None:
+                return jsonify({'error': 'Experiment not found'}), 404
+            return jsonify(snapshot)
     
     def _setup_socket_events(self):
         """设置SocketIO事件"""
