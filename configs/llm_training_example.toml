@@ -1,0 +1,143 @@
+# LLM/VLM 训练示例配置
+# 展示从预训练到 SFT 到 DPO 的完整流程
+
+task_name = "llama2_7b_sft_dpo"
+seed = 42
+base_output_dir = "runs/llm"
+use_wandb = false
+wandb_project = "neurotrain-llm"
+
+# ==================== 模型配置 ====================
+[model]
+model_name_or_path = "meta-llama/Llama-2-7b-hf"
+model_type = "llm"  # llm 或 vlm
+device = "auto"
+dtype = "bfloat16"  # float16, bfloat16, float32
+trust_remote_code = true
+
+# LoRA 配置
+use_lora = true
+[model.lora_config]
+r = 16
+lora_alpha = 32
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+lora_dropout = 0.05
+bias = "none"
+task_type = "CAUSAL_LM"
+
+# 量化配置(可选)
+load_in_8bit = false
+load_in_4bit = true
+[model.bnb_config]
+use_double_quant = true
+quant_type = "nf4"
+
+# 其他模型参数
+gradient_checkpointing = true
+use_flash_attention = false
+
+# ==================== 数据集配置 ====================
+
+# Stage 1: SFT 数据集
+[datasets.sft]
+dataset_path = "data/sft_dataset.jsonl"  # 或使用 HF: dataset_name = "tatsu-lab/alpaca"
+dataset_split = "train"
+max_length = 2048
+prompt_field = "instruction"
+response_field = "output"
+text_field = "text"
+preprocessing_num_workers = 4
+num_samples = 10000  # 限制样本数量(可选)
+
+# Stage 2: DPO 数据集
+[datasets.dpo]
+dataset_path = "data/dpo_dataset.jsonl"  # 或使用 HF: dataset_name = "Anthropic/hh-rlhf"
+dataset_split = "train"
+max_length = 2048
+prompt_field = "prompt"
+chosen_field = "chosen"
+rejected_field = "rejected"
+preprocessing_num_workers = 4
+
+# ==================== 训练阶段配置 ====================
+
+# Stage 1: SFT
+[[stages]]
+stage_type = "sft"
+stage_name = "sft_stage"
+load_from = ""  # 留空则从 model.model_name_or_path 加载
+output_dir = ""  # 留空则自动生成
+
+# 训练参数
+num_train_epochs = 3
+per_device_train_batch_size = 4
+per_device_eval_batch_size = 4
+gradient_accumulation_steps = 4
+learning_rate = 2e-5
+warmup_steps = 100
+logging_steps = 10
+save_steps = 500
+eval_steps = 500
+max_steps = -1
+
+# 优化器
+optimizer = "adamw_torch"
+weight_decay = 0.01
+max_grad_norm = 1.0
+lr_scheduler_type = "cosine"
+
+# 混合精度
+fp16 = false
+bf16 = true
+
+# 评估
+do_eval = true
+eval_strategy = "steps"
+
+# 保存
+save_strategy = "steps"
+save_total_limit = 3
+
+# DeepSpeed(可选)
+# deepspeed = "configs/deepspeed/ds_config_zero2.json"
+
+# 阶段特定参数
+[stages.stage_kwargs]
+packing = false  # 是否使用 packing 优化
+
+
+# Stage 2: DPO
+[[stages]]
+stage_type = "dpo"
+stage_name = "dpo_stage"
+load_from = ""  # 留空则从上一阶段加载
+output_dir = ""
+
+# 训练参数
+num_train_epochs = 2
+per_device_train_batch_size = 2
+per_device_eval_batch_size = 2
+gradient_accumulation_steps = 8
+learning_rate = 5e-6
+warmup_steps = 50
+logging_steps = 10
+save_steps = 500
+eval_steps = 500
+
+optimizer = "adamw_torch"
+weight_decay = 0.01
+max_grad_norm = 1.0
+lr_scheduler_type = "cosine"
+
+fp16 = false
+bf16 = true
+
+do_eval = true
+eval_strategy = "steps"
+save_strategy = "steps"
+save_total_limit = 2
+
+# DPO 专用参数
+dpo_beta = 0.1
+reference_model_path = ""  # 留空则使用初始模型作为 reference
+

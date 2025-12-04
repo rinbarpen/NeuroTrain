@@ -16,11 +16,11 @@ import numpy as np
 import nibabel as nib
 import torch
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Callable
 import logging
 from pathlib import Path
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +63,16 @@ class BraTS2020Dataset(CustomDataset):
                  'BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/*/BraTS2020_*.nii.gz'),
         'valid': ('BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData/*/BraTS2020_*.nii.gz',
                  'BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData/*/BraTS2020_*.nii.gz'),
-        'test':  ('BraTS2020_TestingData/MICCAI_BraTS2020_TestingData/*/BraTS2020_*.nii.gz',
-                 None),
+        'test':  ('BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData/*/BraTS2020_*.nii.gz',
+                 'BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData/*/BraTS2020_*.nii.gz'),
     }
     
     def __init__(
         self,
         root_dir: Path,
         split: str = 'train',
-        modalities: List[str] = None,
-        transform: Optional[callable] = None,
+        modalities: List[str] = ['t1', 't1ce', 't2', 'flair'],
+        transform: Optional[Callable] = None,
         load_seg: bool = True,
         cache_data: bool = False,
         normalize: bool = True,
@@ -83,7 +83,7 @@ class BraTS2020Dataset(CustomDataset):
         
         # BraTS2020特定参数
         self.modalities = modalities or self.MODALITIES
-        self.transform = transform
+        self.transform = transform or mtf.Compose()
         self.load_seg = load_seg and (split == 'train')  # Only training has segmentation
         self.cache_data = cache_data
         self.normalize = normalize
@@ -119,11 +119,11 @@ class BraTS2020Dataset(CustomDataset):
     def _get_data_paths(self) -> List[Dict[str, str]]:
         """获取指定分割的所有数据文件路径"""
         if self.split == 'train':
-            data_dir = self.root_dir / 'BraTS2020_TrainingData' / 'MICCAI_BraTS2020_TrainingData'
+            data_dir = self.root_dir / self.MAPPING[self.split][0]
         elif self.split == 'valid':
-            data_dir = self.root_dir / 'BraTS2020_ValidationData' / 'MICCAI_BraTS2020_ValidationData'
+            data_dir = self.root_dir / self.MAPPING[self.split][1]
         else:  # test
-            data_dir = self.root_dir / 'BraTS2020_TestingData' / 'MICCAI_BraTS2020_TestingData'
+            data_dir = self.root_dir / self.MAPPING[self.split][1]
         
         if not data_dir.exists():
             raise FileNotFoundError(f"Data directory not found: {data_dir}")
@@ -259,59 +259,38 @@ class BraTS2020Dataset(CustomDataset):
         
         return sample
     
-    # 实现CustomDataset的抽象方法
-    def to_numpy(self, idx: int) -> Dict[str, np.ndarray]:
-        """将指定索引的数据转换为numpy格式"""
-        sample = self.__getitem__(idx)
-        return {
-            'image': sample['image'].numpy(),
-            'seg': sample['seg'].numpy() if sample['seg'] is not None else None,
-            'subject_id': sample['subject_id'],
-            'modalities': sample['modalities']
-        }
-    
-    @property
     def name(self) -> str:
         """返回数据集名称"""
-        return f"BraTS2020_{self.dataset_type}"
+        return f"BraTS2020_{self.split}"
     
     def get_train_dataset(self) -> 'BraTS2020Dataset':
         """获取训练数据集"""
         return BraTS2020Dataset(
-            base_dir=self.base_dir,
-            dataset_type='train',
-            desired_n=0,
+            root_dir=self.root_dir,
+            split='train',
             modalities=self.modalities,
             transform=self.transform,
-            load_seg=True,
-            cache_data=self.cache_data,
-            normalize=self.normalize
+            load_seg=True
         )
     
     def get_valid_dataset(self) -> 'BraTS2020Dataset':
         """获取验证数据集"""
         return BraTS2020Dataset(
-            base_dir=self.base_dir,
-            dataset_type='valid',
-            desired_n=0,
+            root_dir=self.root_dir,
+            split='valid',
             modalities=self.modalities,
             transform=self.transform,
-            load_seg=False,  # 验证集通常没有分割标签
-            cache_data=self.cache_data,
-            normalize=self.normalize
+            load_seg=True
         )
     
     def get_test_dataset(self) -> 'BraTS2020Dataset':
         """获取测试数据集"""
         return BraTS2020Dataset(
-            base_dir=self.base_dir,
-            dataset_type='test',
-            desired_n=0,
+            root_dir=self.root_dir,
+            split='test',
             modalities=self.modalities,
             transform=self.transform,
-            load_seg=False,  # 测试集没有分割标签
-            cache_data=self.cache_data,
-            normalize=self.normalize
+            load_seg=True
         )
     
     def get_class_weights(self) -> torch.Tensor:
@@ -367,89 +346,6 @@ class BraTS2020Dataset(CustomDataset):
         
         return stats
 
-
-class BraTS2020DataLoader:
-    """
-    DataLoader wrapper for BraTS2020Dataset with common configurations
-    """
-    
-    @staticmethod
-    def create_dataloader(
-        dataset: BraTS2020Dataset,
-        batch_size: int = 1,
-        shuffle: bool = True,
-        num_workers: int = 4,
-        pin_memory: bool = True,
-        **kwargs
-    ) -> DataLoader:
-        """
-        Create DataLoader for BraTS2020Dataset
-        
-        Args:
-            dataset: BraTS2020Dataset instance
-            batch_size: Batch size (default: 1 for 3D medical images)
-            shuffle: Whether to shuffle data
-            num_workers: Number of worker processes
-            pin_memory: Whether to pin memory for faster GPU transfer
-            **kwargs: Additional DataLoader arguments
-        
-        Returns:
-            DataLoader instance
-        """
-        return DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            **kwargs
-        )
-    
-    @staticmethod
-    def create_train_val_loaders(
-        base_dir: str,
-        batch_size: int = 1,
-        num_workers: int = 4,
-        modalities: List[str] = None,
-        transform_train: Optional[callable] = None,
-        transform_val: Optional[callable] = None,
-        **kwargs
-    ) -> Tuple[DataLoader, DataLoader]:
-        """创建训练和验证数据加载器"""
-        base_path = Path(base_dir)
-        
-        # 创建训练数据集
-        train_dataset = BraTS2020Dataset(
-            base_dir=base_path,
-            dataset_type='train',
-            modalities=modalities,
-            transform=transform_train,
-            load_seg=True,
-            **kwargs
-        )
-        
-        # 创建验证数据集
-        val_dataset = BraTS2020Dataset(
-            base_dir=base_path,
-            dataset_type='valid',
-            modalities=modalities,
-            transform=transform_val,
-            load_seg=False,
-            **kwargs
-        )
-        
-        # 创建数据加载器
-        train_loader = BraTS2020DataLoader.create_dataloader(
-            train_dataset, batch_size=batch_size, shuffle=True, 
-            num_workers=num_workers, **kwargs
-        )
-        
-        val_loader = BraTS2020DataLoader.create_dataloader(
-            val_dataset, batch_size=batch_size, shuffle=False, 
-            num_workers=num_workers, **kwargs
-        )
-        
-        return train_loader, val_loader
 
 
 if __name__ == "__main__":

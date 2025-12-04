@@ -1,0 +1,77 @@
+# VLM(视觉语言模型) 训练示例配置
+# 展示 LLaVA 风格模型的 SFT 训练
+
+task_name = "llava_sft"
+seed = 42
+base_output_dir = "runs/vlm"
+use_wandb = false
+
+# ==================== 模型配置 ====================
+[model]
+model_name_or_path = "llava-hf/llava-1.5-7b-hf"
+model_type = "vlm"  # 视觉语言模型
+device = "auto"
+dtype = "bfloat16"
+trust_remote_code = true
+
+# LoRA 配置
+use_lora = true
+[model.lora_config]
+r = 16
+lora_alpha = 32
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+lora_dropout = 0.05
+bias = "none"
+task_type = "CAUSAL_LM"
+
+# 量化
+load_in_4bit = true
+[model.bnb_config]
+use_double_quant = true
+quant_type = "nf4"
+
+gradient_checkpointing = true
+
+# ==================== 数据集配置 ====================
+[datasets.vlm_sft]
+dataset_path = "data/vlm_instruction.jsonl"
+dataset_split = "train"
+max_length = 2048
+
+# VLM 特有字段
+prompt_field = "conversations"  # 对话格式
+image_field = "image"  # 图像路径或 base64
+
+preprocessing_num_workers = 4
+num_samples = 5000
+
+# ==================== 训练阶段 ====================
+[[stages]]
+stage_type = "sft"
+stage_name = "vlm_sft"
+output_dir = ""
+
+num_train_epochs = 1
+per_device_train_batch_size = 2
+per_device_eval_batch_size = 2
+gradient_accumulation_steps = 8
+learning_rate = 2e-5
+warmup_steps = 100
+logging_steps = 10
+save_steps = 1000
+eval_steps = 1000
+
+optimizer = "adamw_torch"
+weight_decay = 0.01
+max_grad_norm = 1.0
+lr_scheduler_type = "cosine"
+
+bf16 = true
+do_eval = true
+eval_strategy = "steps"
+save_strategy = "steps"
+save_total_limit = 2
+
+[stages.stage_kwargs]
+packing = false
+

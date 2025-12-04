@@ -74,11 +74,18 @@ class VisionTransformersBuilder:
     def build(self) -> transforms.Compose:
         return transforms.Compose(self._transforms)
 
-def get_transforms() -> transforms.Compose:
+def get_transforms(config: dict | None = None) -> transforms.Compose:
     from src.config import get_config
-    c = get_config()
+
+    cfg = config or get_config()
+    transform_conf = cfg.get('transform') or {}
+
     builder = VisionTransformersBuilder()
-    for k, v in c['transform'].items():
+    if not transform_conf:
+        builder = builder.to_tensor()
+        return builder.build()
+
+    for k, v in transform_conf.items():
         match k.upper():
             case 'RESIZE':
                 builder = builder.resize(tuple(v))

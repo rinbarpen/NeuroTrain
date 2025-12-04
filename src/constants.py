@@ -59,6 +59,10 @@ class TrainOutputFilenameEnv:
     OUTPUT_TRAIN_EPOCH_LOSS_IMAGE_FILENAME = '{train_dir}/train/train_epoch_loss.png'
     OUTPUT_VALID_EPOCH_LOSS_IMAGE_FILENAME = '{train_dir}/valid/valid_epoch_loss.png'
     OUTPUT_TRAIN_STEP_LOSS_IMAGE_FILENAME = '{train_dir}/train/train_step_loss.png'
+    OUTPUT_TRAIN_STEP_LOSS_COMPONENTS_FILENAME = '{train_dir}/train/train_step_loss_components.csv'
+    OUTPUT_VALID_STEP_LOSS_COMPONENTS_FILENAME = '{train_dir}/valid/valid_step_loss_components.csv'
+    OUTPUT_TRAIN_EPOCH_LOSS_COMPONENTS_FILENAME = '{train_dir}/train/train_epoch_loss_components.csv'
+    OUTPUT_VALID_EPOCH_LOSS_COMPONENTS_FILENAME = '{train_dir}/valid/valid_epoch_loss_components.csv'
     # checkpoint
     OUTPUT_LAST_MODEL_FILENAME = '{train_dir}/weights/last.pt'
     OUTPUT_BEST_MODEL_FILENAME = '{train_dir}/weights/best.pt'
@@ -148,6 +152,18 @@ class TrainOutputFilenameEnv:
     @property
     def output_valid_epoch_loss_details_filename(self) -> Path:
         return Path(self.OUTPUT_VALID_EPOCH_LOSS_DETAILS_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_train_step_loss_components_filename(self) -> Path:
+        return Path(self.OUTPUT_TRAIN_STEP_LOSS_COMPONENTS_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_valid_step_loss_components_filename(self) -> Path:
+        return Path(self.OUTPUT_VALID_STEP_LOSS_COMPONENTS_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_train_epoch_loss_components_filename(self) -> Path:
+        return Path(self.OUTPUT_TRAIN_EPOCH_LOSS_COMPONENTS_FILENAME.format(train_dir=getattr(self, "train_dir")))
+    @property
+    def output_valid_epoch_loss_components_filename(self) -> Path:
+        return Path(self.OUTPUT_VALID_EPOCH_LOSS_COMPONENTS_FILENAME.format(train_dir=getattr(self, "train_dir")))
     # lr csv files
     @property
     def output_lr_by_epoch_filename(self) -> Path:

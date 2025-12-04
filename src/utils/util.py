@@ -7,6 +7,7 @@ import time
 import math
 import random
 import subprocess
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
@@ -153,9 +154,106 @@ def save_model(path: FilePath, model: nn.Module, *,
             ext_path = ext_path.parent / (ext_path.stem +
                                 time.strftime("%Y%m%d_%H%M%S", time.localtime()))
             torch.save(ext_cp, ext_path)
+def check_model_load_space(model_path: FilePath, map_location: str = 'cuda', 
+                          min_disk_space_gb: float = 1.0, min_gpu_space_gb: float = 0.5) -> Tuple[bool, str]:
+    """
+    检查是否有足够的空间加载模型
+    
+    Args:
+        model_path: 模型文件路径
+        map_location: 模型加载位置 ('cuda' 或 'cpu')
+        min_disk_space_gb: 最小需要的磁盘空间（GB），默认1GB
+        min_gpu_space_gb: 最小需要的GPU空间（GB），默认0.5GB
+    
+    Returns:
+        (is_sufficient, message): 是否有足够空间，以及提示信息
+    """
+    path = Path(model_path)
+    messages = []
+    
+    # 检查文件是否存在
+    if not path.exists():
+        return False, f"Model file not found: {model_path}"
+    
+    # 获取模型文件大小
+    try:
+        model_size_bytes = path.stat().st_size
+        model_size_gb = model_size_bytes / (1024 ** 3)
+    except Exception as e:
+        return False, f"Failed to get model file size: {e}"
+    
+    # 检查磁盘空间
+    try:
+        disk_usage = shutil.disk_usage(path.parent)
+        free_disk_gb = disk_usage.free / (1024 ** 3)
+        if free_disk_gb < min_disk_space_gb:
+            messages.append(
+                f"Insufficient disk space: {free_disk_gb:.2f} GB available, "
+                f"need at least {min_disk_space_gb:.2f} GB. Model size: {model_size_gb:.2f} GB"
+            )
+    except Exception as e:
+        messages.append(f"Failed to check disk space: {e}")
+    
+    # 检查GPU内存
+    if map_location == 'cuda' and torch.cuda.is_available():
+        try:
+            free_gpu_mem, total_gpu_mem = torch.cuda.mem_get_info()
+            free_gpu_gb = free_gpu_mem / (1024 ** 3)
+            # 估算模型加载后需要的内存（模型大小 * 2，因为需要加载和运行）
+            estimated_needed_gb = model_size_gb * 2
+            
+            if free_gpu_gb < max(min_gpu_space_gb, estimated_needed_gb):
+                messages.append(
+                    f"Insufficient GPU memory: {free_gpu_gb:.2f} GB available, "
+                    f"estimated need {estimated_needed_gb:.2f} GB. Model size: {model_size_gb:.2f} GB"
+                )
+        except Exception as e:
+            messages.append(f"Failed to check GPU memory: {e}")
+    
+    # 检查CPU内存
+    if map_location == 'cpu':
+        try:
+            memory = psutil.virtual_memory()
+            free_cpu_gb = memory.available / (1024 ** 3)
+            estimated_needed_gb = model_size_gb * 2
+            
+            if free_cpu_gb < max(min_disk_space_gb, estimated_needed_gb):
+                messages.append(
+                    f"Insufficient CPU memory: {free_cpu_gb:.2f} GB available, "
+                    f"estimated need {estimated_needed_gb:.2f} GB. Model size: {model_size_gb:.2f} GB"
+                )
+        except Exception as e:
+            messages.append(f"Failed to check CPU memory: {e}")
+    
+    if messages:
+        return False, " | ".join(messages)
+    
+    return True, f"Sufficient space available. Model size: {model_size_gb:.2f} GB"
+
 def load_model(path: FilePath, map_location: str = 'cuda'):
+    """加载模型，加载前会检查是否有足够的空间"""
+    path = Path(path)
+    
+    # 检查空间
+    is_sufficient, message = check_model_load_space(path, map_location)
+    if not is_sufficient:
+        logging.error(f"Cannot load model: {message}")
+        raise RuntimeError(f"Insufficient space to load model: {message}")
+    
+    logging.info(f"Space check passed: {message}")
     return torch.load(path, map_location)
+
 def load_model_ext(ext_path: FilePath, map_location: str = 'cuda'):
+    """加载扩展模型（包含optimizer等），加载前会检查是否有足够的空间"""
+    ext_path = Path(ext_path)
+    
+    # 检查空间
+    is_sufficient, message = check_model_load_space(ext_path, map_location)
+    if not is_sufficient:
+        logging.error(f"Cannot load model extension: {message}")
+        raise RuntimeError(f"Insufficient space to load model extension: {message}")
+    
+    logging.info(f"Space check passed: {message}")
     return torch.load(ext_path, map_location)
 
 def save_numpy_data(path: FilePath, data: np.ndarray | torch.Tensor):
@@ -340,9 +438,16 @@ def log_memory_cost(stage: str, logger: Optional[logging.Logger] = None):
     logger.info(f"{stage} Memory Cost | " + " | ".join(parts))
 
 
-def tensor_print(tensor: torch.Tensor, name: str=''):
-    print(f'{name}: {tensor.shape} {tensor.dtype} {tensor.device} | {tensor}')
-    print()
+def tensor_print(tensor: torch.Tensor, name: str='', print_tensor=False, logger: logging.Logger | None = None):
+    if print_tensor:
+        print_str = f'{name}: {tensor.shape} {tensor.dtype} {tensor.device} | {tensor}'
+    else:
+        print_str = f'{name}: {tensor.shape} {tensor.dtype} {tensor.device}'
+    if logger is None:
+        if not os.environ.get('DEBUG', False):
+            print(print_str)
+    else: 
+        logger.info(print_str)
 
 def is_dist_avail_and_initialized():
     if not dist.is_available():

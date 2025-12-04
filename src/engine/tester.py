@@ -10,7 +10,7 @@ from rich.table import Table
 from rich.console import Console
 import numpy as np
 
-from src.config import get_config, ALL_STYLES
+from src.config import get_config, get_style_sequence
 from src.utils import (
     select_postprocess_fn,
     Timer,
@@ -121,11 +121,12 @@ class Tester:
             mc1_std[metric] = {cls: cm1_std[cls][metric] for cls in class_labels}
         test_metric_class_scores = (mc1_mean, mc1_std)
         
-        styles = ALL_STYLES
+        metric_styles = get_style_sequence('test.metric_table', len(metric_labels), fallback='default.metric_table')
+        summary_styles = get_style_sequence('test.summary_table', len(metric_labels), fallback='default.summary_table')
         console = Console()
         table = Table(title='Metric Class Mean Score(Test)')
         table.add_column("Class/Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
+        for metric, style in zip(metric_labels, metric_styles):
             table.add_column(metric, justify="center", style=style)
         for class_label in class_labels:
             mean_scores = test_metric_class_scores[0]
@@ -134,7 +135,7 @@ class Tester:
         console.print(table)
         table = Table(title='Summary of Metric(Test)')
         table.add_column("Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
+        for metric, style in zip(metric_labels, summary_styles):
             table.add_column(metric, justify="center", style=style)
         table.add_row("Test", *[f'{score:.3f}' for score in test_mean_scores.values()])
         console.print(table)

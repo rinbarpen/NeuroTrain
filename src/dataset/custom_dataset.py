@@ -7,13 +7,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 import logging
 
-logger = logging.getLogger(__name__)
+from utils.annotation import unimplemented
 
-# 保留Betweens类型定义，因为其他地方可能还在使用
-class Betweens(TypedDict):
-    train: tuple[float, float]
-    valid: tuple[float, float]
-    test: tuple[float, float]
+logger = logging.getLogger(__name__)
 
 class CustomDataset(Dataset):
     """数据集基类，提供标准化的数据集接口"""
@@ -238,18 +234,18 @@ class CustomDataset(Dataset):
         """返回数据集样本数量"""
         return self.n
 
-    @abstractmethod
+    @unimplemented
     def __getitem__(self, index) -> Any:
         """获取指定索引的数据样本"""
         ...
 
     @staticmethod
-    @abstractmethod
+    @unimplemented
     def name() -> str:
         """返回数据集名称"""
         ...
     
-    @staticmethod
+    @unimplemented
     def metadata(**kwargs) -> dict:
         """获取数据集元数据信息
         
@@ -268,19 +264,19 @@ class CustomDataset(Dataset):
         }
 
     @staticmethod
-    @abstractmethod
+    @unimplemented
     def get_train_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取训练数据集"""
         ...
     
     @staticmethod
-    @abstractmethod
+    @unimplemented
     def get_valid_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取验证数据集"""
         ...
     
     @staticmethod
-    @abstractmethod
+    @unimplemented
     def get_test_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
         """获取测试数据集"""
         ...

@@ -464,7 +464,7 @@ class MonitorDashboard {
     
     async startMonitoring() {
         try {
-            await this.fetchData('/api/control/start');
+            await fetch('/api/control/start', { method: 'POST' });
             this.showAlert('Monitoring started', 'success');
             this.refreshData();
         } catch (error) {
@@ -474,7 +474,7 @@ class MonitorDashboard {
     
     async stopMonitoring() {
         try {
-            await this.fetchData('/api/control/stop');
+            await fetch('/api/control/stop', { method: 'POST' });
             this.showAlert('Monitoring stopped', 'info');
             this.refreshData();
         } catch (error) {
@@ -485,7 +485,7 @@ class MonitorDashboard {
     async resetMonitoring() {
         if (confirm('Are you sure you want to reset all monitoring data?')) {
             try {
-                await this.fetchData('/api/control/reset');
+                await fetch('/api/control/reset', { method: 'POST' });
                 this.showAlert('Monitoring data reset', 'warning');
                 this.refreshData();
             } catch (error) {

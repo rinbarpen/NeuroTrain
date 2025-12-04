@@ -89,6 +89,8 @@ except ImportError:
     WebMonitorServer = None
     create_web_monitor = None
 
+from .api_client import MonitorApiClient
+
 # 导出所有主要类和函数
 __all__ = [
     # 核心监控组件
@@ -125,4 +127,5 @@ __all__ = [
     'WebMonitor',
     'WebMonitorServer',
     'create_web_monitor',
+    'MonitorApiClient',
 ]

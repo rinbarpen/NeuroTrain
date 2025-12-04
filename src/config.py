@@ -1,9 +1,12 @@
 # runs/{task_name}/{timestamp}/{train|test|predict}/{classification|detection|segmentation|weights|..}
 import json
+import math
 import yaml
 import toml
 from pathlib import Path
 import logging
+from collections.abc import Mapping
+from typing import Any
 from src.constants import SINGLE_CONFIG_DIR
 
 # GLOBAL CONSTANTS
@@ -14,6 +17,12 @@ ALL_MODE = TRAIN_MODE | TEST_MODE | PREDICT_MODE
 
 ALL_METRIC_LABELS = ['iou', 'accuracy', 'precision', 'recall', 'f1', 'dice']
 ALL_STYLES = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
+DEFAULT_STYLE_CONFIG = {
+    'default': {
+        'metric_table': tuple(ALL_STYLES),
+        'summary_table': tuple(ALL_STYLES),
+    }
+}
 
 CONFIG: dict = {}
 
@@ -96,3 +105,62 @@ def save_config(filename: Path, config: dict):
 
 def dump_config(filename: Path):
     save_config(filename, CONFIG)
+
+
+def _get_nested_value(source: Mapping[str, Any] | None, path: str | None):
+    if not source or not path:
+        return None
+
+    current: Any = source
+    for key in path.split('.'):
+        if not isinstance(current, Mapping) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def get_styles(path: str | None = None, fallback: str | None = 'default.metric_table') -> list[str]:
+    """
+    获取指定路径下的样式列表，支持在配置文件中使用层级结构（例如：styles.train.metric_table）。
+    若未配置则返回默认样式或回退路径对应的样式。
+    """
+    if not path:
+        path = 'default.metric_table'
+
+    styles_cfg = CONFIG.get('styles')
+    palette = _get_nested_value(styles_cfg if isinstance(styles_cfg, Mapping) else None, path)
+
+    if palette is None and fallback:
+        palette = _get_nested_value(styles_cfg if isinstance(styles_cfg, Mapping) else None, fallback)
+
+    if palette is None:
+        palette = _get_nested_value(DEFAULT_STYLE_CONFIG, path)
+
+    if palette is None and fallback:
+        palette = _get_nested_value(DEFAULT_STYLE_CONFIG, fallback)
+
+    if palette is None:
+        palette = ALL_STYLES
+
+    if not isinstance(palette, (list, tuple)):
+        raise ValueError(f"Styles for '{path}' must be a list or tuple, got {type(palette)}")
+    return list(palette)
+
+
+def get_style_sequence(path: str, count: int, fallback: str | None = 'default.metric_table') -> list[str]:
+    """
+    获取指定数量的样式列表。如果配置的样式数量不足，将按顺序循环填充。
+    """
+    if count <= 0:
+        return []
+
+    base_styles = get_styles(path, fallback)
+    if not base_styles:
+        base_styles = list(ALL_STYLES) or ['white']
+
+    if len(base_styles) >= count:
+        return base_styles[:count]
+
+    repeats = math.ceil(count / len(base_styles))
+    expanded = (base_styles * repeats)[:count]
+    return expanded

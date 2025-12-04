@@ -12,6 +12,7 @@
 
 # 数据保存相关
 from .data_saver import DataSaver
+from .loss_tracker import LossTracker
 
 # 指标计量相关
 from .meter import MiniMeter, Meter
@@ -26,6 +27,7 @@ from .meter_recorder import MeterRecorder
 __all__ = [
     # 数据保存
     'DataSaver',
+    'LossTracker',
     
     # 指标计量
     'MiniMeter',

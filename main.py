@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import copy
 import logging
 import os
 import torch
@@ -7,12 +8,13 @@ from torch import nn
 import warnings
 import torch.distributed as dist
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 warnings.filterwarnings("ignore")
 
 from src.config import get_config, dump_config, is_predict, is_train, is_test
 from src.options import parse_args
-from src.engine import Trainer, Tester, Predictor
+from src.engine import Trainer, Tester, Predictor, MultiModelPredictor
 from src.models import get_model
 from src.dataset import get_train_valid_test_dataloader
 from src.utils import (
@@ -33,6 +35,81 @@ from src.utils.ddp_utils import (
     setup_ddp_logging
 )
 from src.constants import TrainOutputFilenameEnv, ProjectFilenameEnv
+
+
+def _should_auto_start_monitor(monitor_conf: dict) -> bool:
+    auto_start_default = monitor_conf.get('enabled', False) or monitor_conf.get('web', False)
+    auto_start = monitor_conf.get('auto_start_latest', auto_start_default)
+    env_toggle = os.environ.get("NEUROTRAIN_MONITOR_AUTO_START")
+    if env_toggle is not None:
+        auto_start = env_toggle.strip().lower() not in {"0", "false", "off", "no"}
+    return bool(auto_start)
+
+
+def _resolve_monitor_base_url(monitor_conf: dict) -> str:
+    base_url = monitor_conf.get('api_base') or os.environ.get("NEUROTRAIN_MONITOR_API")
+    if base_url:
+        return base_url.rstrip("/")
+    return "http://127.0.0.1:5000"
+
+
+def _resolve_monitor_timeout(monitor_conf: dict) -> float:
+    timeout = monitor_conf.get('api_timeout')
+    if timeout is None:
+        timeout_env = os.environ.get("NEUROTRAIN_MONITOR_TIMEOUT")
+        if timeout_env is not None:
+            try:
+                timeout = float(timeout_env)
+            except ValueError:
+                timeout = None
+    if timeout is None:
+        timeout = 2.0
+    return float(timeout)
+
+
+def _notify_monitor_auto_start(config: dict, output_dir: Path) -> None:
+    monitor_conf = config.get('monitor') or {}
+    if not _should_auto_start_monitor(monitor_conf):
+        return
+    try:
+        import requests  # type: ignore
+    except Exception:
+        logging.getLogger('monitor').warning("requests 模块不可用，跳过监控自动通知")
+        return
+
+    base_url = _resolve_monitor_base_url(monitor_conf)
+    start_path = monitor_conf.get('api_start_path', '/api/control/start')
+    url = f"{base_url}{start_path}"
+    timeout = _resolve_monitor_timeout(monitor_conf)
+
+    payload = {
+        "task": config.get("task"),
+        "entity": config.get("entity"),
+        "run_id": config.get("run_id"),
+        "output_dir": str(output_dir),
+        "pid": os.getpid(),
+        "device": config.get("device"),
+        "timestamp": datetime.utcnow().isoformat(),
+        "modes": {
+            "train": is_train(),
+            "test": is_test(),
+            "predict": is_predict(),
+        },
+    }
+
+    train_conf = config.get("train") or {}
+    if train_conf:
+        payload["train"] = {
+            "epoch": train_conf.get("epoch"),
+            "batch_size": train_conf.get("batch_size"),
+        }
+
+    try:
+        response = requests.post(url, json=payload, timeout=timeout)
+        response.raise_for_status()
+        logging.getLogger('monitor').info("已通知监控服务自动启动：%s", url)
+    except Exception as exc:
+        logging.getLogger('monitor').warning("监控自动启动通知失败：%s", exc)
 
 if __name__ == "__main__":
     parse_args()
@@ -81,6 +158,7 @@ if __name__ == "__main__":
     # 准备日志记录器
     if not use_ddp or is_main_process():
         prepare_logger(output_dir, ('train', 'test', 'predict'))
+        _notify_monitor_auto_start(c, output_dir)
 
     if c["seed"] >= 0:
         set_seed(c["seed"])
@@ -285,14 +363,22 @@ if __name__ == "__main__":
                     logger.info(f"Load model: {model_path}")
                 model.load_state_dict(model_params)
 
-        handler = Predictor(predict_dir, model)
+        predict_runtime_conf = copy.deepcopy(c["predict"].get("config") or {})
+        compare_conf = predict_runtime_conf.pop("compare", None)
+        compare_enabled = bool(compare_conf and compare_conf.get("enabled", False))
+
+        if compare_enabled:
+            handler = MultiModelPredictor(predict_dir, compare_conf, base_config=c)
+        else:
+            handler = Predictor(predict_dir, model)
+
         input_path = Path(c["predict"]["input"])
         if input_path.is_dir():
             inputs = [filename for filename in input_path.iterdir()]
-            handler.predict(inputs, **c["predict"]["config"])
+            handler.predict(inputs, **predict_runtime_conf)
         else:
             inputs = [input_path]
-            handler.predict(inputs, **c["predict"]["config"])
+            handler.predict(inputs, **predict_runtime_conf)
 
     # get_input_size
     input_sizes = c["model"]["config"]["input_sizes"] # get a list

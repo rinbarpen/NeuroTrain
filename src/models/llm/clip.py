@@ -5,11 +5,24 @@ import numpy as np
 from PIL import Image
 from curl_cffi import requests
 from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModel
+from transformers.utils import ModelOutput
 from typing import Sequence, List, Tuple, Type
 from pathlib import Path
+from dataclasses import dataclass
 
 from src.config import get_config_value
 from src.constants import PRETRAINED_MODEL_DIR
+
+
+@dataclass
+class CLIPForwardOutput(ModelOutput):
+    loss: float | torch.Tensor | None = None
+    text_loss: float | torch.Tensor | None = None
+    image_loss: float | torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
 
 class CLIP(nn.Module):
     def __init__(self, model_name: str="openai/clip-vit-base-patch32", cache_dir=PRETRAINED_MODEL_DIR, dtype=torch.float16):
@@ -79,15 +92,15 @@ class CLIP(nn.Module):
         image_loss = F.cross_entropy(logits_per_image, labels)
         total_loss = (text_loss + image_loss) / 2
         
-        return {
-            'loss': total_loss.item(),
-            'text_loss': text_loss.item(),
-            'image_loss': image_loss.item(),
-            'logits_per_text': logits_per_text.detach(),
-            'logits_per_image': logits_per_image.detach(),
-            'text_embeds': text_embeds.detach(),
-            'image_embeds': image_embeds.detach()
-        }
+        return CLIPForwardOutput(
+            loss=total_loss.item(),
+            text_loss=text_loss.item(),
+            image_loss=image_loss.item(),
+            logits_per_text=logits_per_text.detach(),
+            logits_per_image=logits_per_image.detach(),
+            text_embeds=text_embeds.detach(),
+            image_embeds=image_embeds.detach(),
+        )
     
     def set_train_mode(self, mode=True):
         """设置模型的训练/评估模式"""

@@ -169,6 +169,14 @@ class DataSaver:
         df = pd.DataFrame({"loss": step_losses})
         self._submit_or_execute(self._save_dataframe, df, csv_filename, parquet_filename)
     
+    def save_loss_components(self, loss_record: Dict[str, Any], filename: str = "loss_components.csv"):
+        """保存包含多个loss分量的记录"""
+        if not loss_record:
+            return
+        csv_filename, parquet_filename = self._get_filenames(filename)
+        df = pd.DataFrame([loss_record])
+        self._submit_or_execute(self._save_dataframe, df, csv_filename, parquet_filename)
+    
     def save_lr_by_epoch(self, lrs: np.ndarray, filename: str = "lr_by_epoch.csv"):
         csv_filename, parquet_filename = self._get_filenames(filename)
         df = pd.DataFrame({"lr": lrs})

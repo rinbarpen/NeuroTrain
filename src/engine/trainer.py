@@ -12,14 +12,14 @@ import json
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Mapping, Sequence
-from typing import Any, Tuple
+from typing import Any, Dict, Tuple
 
 
 class TrainingStopRequested(RuntimeError):
     """Internal exception to unwind control flow when stop is requested."""
     pass
 
-from src.config import get_config, ALL_STYLES
+from src.config import get_config, get_style_sequence
 from src.utils import (
     EarlyStopping,
     save_model,
@@ -31,10 +31,10 @@ from src.utils import (
 )
 from src.utils.ndict import ModelOutput, NDict
 from src.utils.progress_bar import ProgressBar
-from src.recorder import MeterRecorder, DataSaver
+from src.recorder import MeterRecorder, DataSaver, LossTracker
 from src.visualizer.painter import Plot
 from src.constants import TrainOutputFilenameEnv
-from src.monitor import TrainingMonitor, ProgressTracker
+from src.monitor import TrainingMonitor, ProgressTracker, MonitorApiClient
 from src.monitor import create_web_monitor
 
 class Trainer:
@@ -71,17 +71,25 @@ class Trainer:
         self.data_saver = DataSaver()
         self.train_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="train_")
         self.valid_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="valid_")
+        self.loss_tracker = LossTracker(self.data_saver, self.filename_env, logger=self.logger)
 
         postprocess_name = c.get('postprocess', "")
         assert postprocess_name is not None, f"Not supported postprocess function {postprocess_name}, please set 'postprocess' in config file"
 
         self.postprocess = select_postprocess_fn(postprocess_name)
-        monitor_conf = c.get('monitor', {})
+        monitor_conf = c.get('monitor', {}) or {}
         self.monitor = None
         self.progress_tracker = None
         self.web_monitor = None
+        self.monitor_api_client = MonitorApiClient.from_config(monitor_conf, logger=self.logger)
+        self._monitor_run_info = self._build_monitor_run_info(c)
         self.log_interval = max(1, int(c['train'].get('log_interval', 10)))
         self._async_executor = async_executor
+        progress_tracker_needed = (
+            monitor_conf.get('enabled', False)
+            or monitor_conf.get('web', False)
+            or self.monitor_api_client is not None
+        )
 
         if monitor_conf.get('enabled', False):
             try:
@@ -101,6 +109,12 @@ class Trainer:
             except Exception as e:
                 self.logger.warning(f"Web monitor initialization failed: {e}")
                 self.web_monitor = None
+
+        if progress_tracker_needed and self.progress_tracker is None:
+            self.progress_tracker = ProgressTracker()
+
+        if self.monitor_api_client:
+            self.monitor_api_client.update_run_info(self._monitor_run_info)
         if is_continue_mode:
             self._recovery()
 
@@ -128,6 +142,15 @@ class Trainer:
             self.logger.info("No recovery data found")
         except Exception as e:
             self.logger.warning(f"Recovery failed: {e}")
+
+    def _build_monitor_run_info(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "task": config.get("task"),
+            "entity": config.get("entity"),
+            "run_id": config.get("run_id"),
+            "output_dir": str(self.output_dir),
+            "device": config.get("device"),
+        }
     
     def _restore_epoch_meters(self, recorder: MeterRecorder, epoch_scores_data):
         """从恢复数据中重建epoch_meters"""
@@ -221,6 +244,53 @@ class Trainer:
         assert isinstance(loss, torch.Tensor)
         return outputs, loss
 
+    def _to_float(self, value):
+        if value is None:
+            return None
+        if isinstance(value, torch.Tensor):
+            if value.numel() == 0:
+                return None
+            with torch.no_grad():
+                return float(value.detach().mean().item())
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, np.ndarray):
+            if value.size == 0:
+                return None
+            return float(value.mean())
+        return None
+
+    def _extract_loss_components(self, outputs: ModelOutput, loss_tensor: torch.Tensor | None):
+        losses = {}
+        total_loss_value = self._to_float(loss_tensor)
+        if total_loss_value is None:
+            return losses
+        losses['total_loss'] = total_loss_value
+        for key, value in outputs.items():
+            if not isinstance(key, str):
+                continue
+            key_lower = key.lower()
+            if key_lower == 'loss':
+                continue
+            if 'loss' not in key_lower:
+                continue
+            scalar_value = self._to_float(value)
+            if scalar_value is None:
+                continue
+            losses[key] = scalar_value
+        return losses
+
+    def _record_loss_step(self, stage: str, epoch: int, step: int, total_steps: int | None, outputs: ModelOutput, loss_tensor: torch.Tensor | None):
+        if not hasattr(self, 'loss_tracker') or self.loss_tracker is None:
+            return
+        losses = self._extract_loss_components(outputs, loss_tensor)
+        if not losses:
+            return
+        global_step = step
+        if total_steps is not None:
+            global_step = step + epoch * total_steps
+        self.loss_tracker.record_step(stage, epoch, step, global_step, losses)
+
     def _train_epoch(
         self,
         epoch: int,
@@ -238,6 +308,8 @@ class Trainer:
         step_losses = []
         step_lrs = []
         self.model.train()
+        if self.loss_tracker:
+            self.loss_tracker.begin_epoch('train')
 
         total_steps = len(train_dataloader)
         processed_batches = 0
@@ -296,6 +368,7 @@ class Trainer:
             batch_loss = sum_loss
             train_loss += batch_loss
             step_losses.append(batch_loss)
+            self._record_loss_step('train', epoch, batch, total_steps, outputs, loss)
             
             # 收集当前step的学习率
             if self.optimizer is not None:
@@ -333,20 +406,26 @@ class Trainer:
                     batch_size=c['train']['batch_size'],
                     logger=self.logger,
                 )
+            snapshot_for_api = None
             if self.progress_tracker:
                 if batch == 1:
                     self.progress_tracker.start_epoch(epoch)
                 if batch % self.log_interval == 0 or batch == total_steps:
                     self.progress_tracker.start_step(batch)
                     self.progress_tracker.end_step(c['train']['batch_size'])
+                    snapshot_for_api = self.progress_tracker.get_current_progress()
+                    if self.monitor_api_client and snapshot_for_api:
+                        run_async_task(
+                            self._async_executor,
+                            self.monitor_api_client.send_progress_snapshot,
+                            snapshot_for_api,
+                        )
+            step_time_meter = getattr(self, 'step_time_meter', None)
+            throughput = 0.0
+            if step_time_meter is not None and hasattr(step_time_meter, 'avg'):
+                throughput = c['train']['batch_size'] / max(step_time_meter.avg, 1e-6)
             if self.web_monitor:
                 try:
-                    step_time_meter = getattr(self, 'step_time_meter', None)
-                    if step_time_meter is not None and hasattr(step_time_meter, 'avg'):
-                        throughput = c['train']['batch_size'] / max(step_time_meter.avg, 1e-6)
-                    else:
-                        throughput = 0.0
-
                     run_async_task(
                         self._async_executor,
                         self.web_monitor.update_metrics,
@@ -361,6 +440,25 @@ class Trainer:
                 except Exception as exc:
                     self.logger.warning(f"Web monitor update failed: {exc}")
                     self.web_monitor = None
+
+            eta_total_seconds = None
+            if self.progress_tracker:
+                current_snapshot = snapshot_for_api or self.progress_tracker.get_current_progress()
+                if current_snapshot and current_snapshot.eta_total:
+                    eta_total_seconds = current_snapshot.eta_total.total_seconds()
+
+            if self.monitor_api_client:
+                run_async_task(
+                    self._async_executor,
+                    self.monitor_api_client.send_training_metrics,
+                    epoch=epoch,
+                    step=batch,
+                    loss=batch_loss,
+                    learning_rate=current_lr,
+                    batch_size=c['train']['batch_size'],
+                    throughput=throughput,
+                    eta_total_seconds=eta_total_seconds,
+                )
 
             pbar.update()
 
@@ -397,6 +495,8 @@ class Trainer:
         except Exception as e:
             self.logger.warning(f"Failed to save step losses: {e}")
         self.train_metric_recorder.finish_one_epoch()
+        if self.loss_tracker:
+            self.loss_tracker.finish_epoch('train', epoch)
         return train_loss, step_losses, step_lrs
 
     def _valid_epoch(
@@ -410,8 +510,10 @@ class Trainer:
     ):
         self.model.eval()
         valid_loss = 0.0
-
         processed_batches = 0
+        total_steps = len(valid_dataloader)
+        if self.loss_tracker:
+            self.loss_tracker.begin_epoch('valid')
 
         with torch.no_grad():
             step_losses = []
@@ -425,6 +527,7 @@ class Trainer:
                 batch_loss = loss.item()
                 valid_loss += batch_loss
                 step_losses.append(batch_loss)
+                self._record_loss_step('valid', epoch, batch_idx, total_steps, outputs, loss)
 
                 metric_targets = outputs['targets']
                 metric_preds = outputs['preds']
@@ -474,6 +577,8 @@ class Trainer:
             valid_loss = 0.0
         self.logger.info(f'Epoch {epoch}/{num_epochs}, Valid Loss: {valid_loss}')
         self.valid_metric_recorder.finish_one_epoch()
+        if self.loss_tracker:
+            self.loss_tracker.finish_epoch('valid', epoch)
         return valid_loss
 
     def train(self, num_epochs: int, 
@@ -525,6 +630,8 @@ class Trainer:
         steps_per_epoch = len(train_dataloader) if train_dataloader is not None else 0
         if self.progress_tracker:
             self.progress_tracker.start_training(num_epochs - last_epoch, steps_per_epoch)
+        if self.monitor_api_client:
+            self.monitor_api_client.start_monitoring(self._monitor_run_info)
         if self.web_monitor:
             try:
                 self.web_monitor.start_training(num_epochs - last_epoch, steps_per_epoch)
@@ -674,6 +781,8 @@ class Trainer:
                 self.web_monitor.stop()
             except Exception as exc:
                 self.logger.warning(f"Failed to stop web monitor cleanly: {exc}")
+        if self.monitor_api_client:
+            self.monitor_api_client.stop_monitoring()
 
         self._print_table(valid_dataloader is not None)
 
@@ -799,12 +908,13 @@ class Trainer:
                 self.valid_metric_recorder._compute_mc1(np.std)
             )
 
-        styles = ALL_STYLES
+        metric_styles = get_style_sequence('train.metric_table', len(metric_labels), fallback='default.metric_table')
+        summary_styles = get_style_sequence('train.summary_table', len(metric_labels), fallback='default.summary_table')
         console = Console()
 
         table = Table(title='Metric Class Mean Score(Train)')
         table.add_column("Class/Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
+        for metric, style in zip(metric_labels, metric_styles):
             table.add_column(metric, justify="center", style=style)
         for class_label in class_labels:
             mean_scores = train_metric_class_scores[0]
@@ -819,7 +929,7 @@ class Trainer:
 
         table = Table(title='Summary of Metric(Train)')
         table.add_column("Metric", justify="center")
-        for metric, style in zip(metric_labels, styles[:len(metric_labels)]):
+        for metric, style in zip(metric_labels, summary_styles):
             table.add_column(metric, justify="center", style=style)
         table.add_row("Train", *[f'{score:.3f}' for score in train_mean_scores.values()])
         if valid_mean_scores:

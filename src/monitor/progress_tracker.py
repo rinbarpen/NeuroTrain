@@ -6,7 +6,7 @@
 
 import time
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import numpy as np
@@ -259,22 +259,113 @@ class ProgressTracker:
     
     def get_performance_stats(self) -> Dict[str, float]:
         """获取性能统计"""
+        def _safe_float(value: float) -> float:
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                return 0.0
+            if not math.isfinite(value):
+                return 0.0
+            return value
+
+        def _clean_values(values) -> List[float]:
+            cleaned: List[float] = []
+            for item in values:
+                try:
+                    val = float(item)
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(val):
+                    cleaned.append(val)
+            return cleaned
+
+        def _calc_avg(values: List[float]) -> float:
+            if not values:
+                return 0.0
+            return sum(values) / len(values)
+
+        def _calc_std(values: List[float]) -> float:
+            if len(values) <= 1:
+                return 0.0
+            return float(np.std(values))
+
+        step_times = _clean_values(self.step_times)
+        epoch_times = _clean_values(self.epoch_times)
+        throughput_values = _clean_values(self.throughput_meter.vals.tolist())
+
         stats = {
-            'avg_step_time': self.step_time_meter.avg,
-            'min_step_time': min(self.step_times) if self.step_times else 0.0,
-            'max_step_time': max(self.step_times) if self.step_times else 0.0,
-            'std_step_time': np.std(self.step_times) if len(self.step_times) > 1 else 0.0,
-            'avg_epoch_time': self.epoch_time_meter.avg,
-            'min_epoch_time': min(self.epoch_times) if self.epoch_times else 0.0,
-            'max_epoch_time': max(self.epoch_times) if self.epoch_times else 0.0,
-            'std_epoch_time': np.std(self.epoch_times) if len(self.epoch_times) > 1 else 0.0,
-            'avg_throughput': self.throughput_meter.avg,
-            'min_throughput': min(self.throughput_meter.vals) if len(self.throughput_meter.vals) > 0 else 0.0,
-            'max_throughput': max(self.throughput_meter.vals) if len(self.throughput_meter.vals) > 0 else 0.0,
-            'std_throughput': np.std(self.throughput_meter.vals) if len(self.throughput_meter.vals) > 1 else 0.0
+            'avg_step_time': _calc_avg(step_times),
+            'min_step_time': min(step_times) if step_times else 0.0,
+            'max_step_time': max(step_times) if step_times else 0.0,
+            'std_step_time': _calc_std(step_times),
+            'avg_epoch_time': _calc_avg(epoch_times),
+            'min_epoch_time': min(epoch_times) if epoch_times else 0.0,
+            'max_epoch_time': max(epoch_times) if epoch_times else 0.0,
+            'std_epoch_time': _calc_std(epoch_times),
+            'avg_throughput': _calc_avg(throughput_values),
+            'min_throughput': min(throughput_values) if throughput_values else 0.0,
+            'max_throughput': max(throughput_values) if throughput_values else 0.0,
+            'std_throughput': _calc_std(throughput_values)
         }
         
-        return stats
+        return {key: _safe_float(value) for key, value in stats.items()}
+
+    def record_remote_progress(self, data: Dict[str, Any]):
+        """从远程推送的数据记录快照"""
+        timestamp_str = data.get('timestamp')
+        try:
+            timestamp = datetime.fromisoformat(timestamp_str) if timestamp_str else datetime.now()
+        except (TypeError, ValueError):
+            timestamp = datetime.now()
+
+        epoch = int(data.get('epoch', data.get('current_epoch', self.current_epoch)))
+        step = int(data.get('step', data.get('current_step', self.current_step)))
+        total_epochs = int(data.get('total_epochs', self.total_epochs))
+        total_steps = int(data.get('total_steps', self.total_steps))
+        step_time = float(data.get('step_time', 0.0))
+        epoch_time = float(data.get('epoch_time', 0.0))
+        throughput = float(data.get('throughput', 0.0))
+        epoch_progress = float(data.get('epoch_progress', 0.0))
+        total_progress = float(data.get('total_progress', 0.0))
+
+        eta_epoch_seconds = data.get('eta_epoch_seconds')
+        eta_total_seconds = data.get('eta_total_seconds')
+        eta_epoch = timedelta(seconds=float(eta_epoch_seconds)) if eta_epoch_seconds is not None else None
+        eta_total = timedelta(seconds=float(eta_total_seconds)) if eta_total_seconds is not None else None
+
+        snapshot = ProgressSnapshot(
+            timestamp=timestamp,
+            epoch=epoch,
+            step=step,
+            total_steps=total_steps,
+            total_epochs=total_epochs,
+            step_time=step_time,
+            epoch_time=epoch_time,
+            throughput=throughput,
+            epoch_progress=epoch_progress,
+            total_progress=total_progress,
+            eta_epoch=eta_epoch,
+            eta_total=eta_total
+        )
+
+        self.current_epoch = epoch
+        self.current_step = step
+        self.total_epochs = total_epochs
+        self.total_steps = total_steps
+        self.steps_per_epoch = total_steps // total_epochs if total_epochs else self.steps_per_epoch
+
+        self.progress_history.append(snapshot)
+        if len(self.progress_history) > self.config.window_size:
+            self.progress_history = self.progress_history[-self.config.window_size:]
+
+        if step_time:
+            self.step_times.append(step_time)
+            self.step_time_meter.update(step_time)
+        if epoch_time:
+            self.epoch_times.append(epoch_time)
+            self.epoch_time_meter.update(epoch_time)
+        if throughput:
+            self.throughput_meter.update(throughput)
     
     def format_progress_bar(self, width: int = 50, show_eta: bool = True) -> str:
         """格式化进度条"""

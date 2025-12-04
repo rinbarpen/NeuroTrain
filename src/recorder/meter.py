@@ -74,6 +74,8 @@ class Meter:
     
     @property
     def val(self) -> np.float64:
+        if not self._vals:
+            return np.float64(0.0)
         return np.float64(self._vals[-1])
     
     @property
@@ -82,10 +84,14 @@ class Meter:
 
     @property
     def avg(self) -> np.float64:
+        if not self._vals:
+            return np.float64(0.0)
         return np.float64(np.mean(self._vals))
     
     @property
     def sum(self) -> np.float64:
+        if not self._vals:
+            return np.float64(0.0)
         return np.float64(np.sum(self._vals))
     
     @property

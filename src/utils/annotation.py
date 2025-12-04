@@ -31,6 +31,14 @@ def supported_in_future(f):
         return f(*args, **kwargs)
     return wrapper
 
+def unimplemented(f):
+    """
+    标记需要由子类覆盖实现的方法。
+
+    该装饰器不会改变原有行为，仅用于提高可读性和 IDE 标记。
+    """
+    setattr(f, "__unimplemented__", True)
+    return f
 
 @singleton
 class Register:
