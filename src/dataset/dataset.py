@@ -1,24 +1,23 @@
 import logging
 from pathlib import Path
-from typing import Literal, Optional, List, Tuple, Union, Dict
-from torch.utils.data import DataLoader, Subset
+from typing import Any, Literal, Optional, List, Tuple, Union, Dict, Sequence
+from torch.utils.data import DataLoader
 
 
 from src.config import get_config_value, get_config
 
 # from src.utils.transform import get_transforms
-from .custom_dataset import CustomDataset
 from .hybrid_dataset import HybridDataset, create_hybrid_dataset_from_config
 from .diffusion_dataset import (
     DiffusionDataset,
-    UnconditionalDiffusionDataset,
-    ConditionalDiffusionDataset,
-    TextToImageDiffusionDataset,
     create_diffusion_dataset,
     get_mnist_diffusion_dataset,
     get_cifar10_diffusion_dataset,
     get_imagenet_diffusion_dataset,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # 数据集注册表：记录所有可用数据集及其信息
@@ -253,6 +252,176 @@ DATASET_REGISTRY = {
 }
 
 
+def _resolve_mode_value(value: Any, mode: str) -> Any:
+    if not isinstance(value, dict):
+        return value
+
+    mode_lower = mode.lower()
+    candidates = [mode, mode_lower]
+    alias_map = {
+        "train": [],
+        "valid": ["val", "validation"],
+        "val": ["valid", "validation"],
+        "test": ["testing", "eval", "evaluation"],
+        "predict": ["inference"],
+    }
+    candidates.extend(alias_map.get(mode_lower, []))
+
+    for key in candidates:
+        if key in value:
+            return value[key]
+
+    for fallback in ("default", "all", "*", "global"):
+        if fallback in value:
+            return value[fallback]
+
+    return None
+
+
+def _safe_float(value: Any, key: str) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        logger.warning("%s=%r 无法转换为浮点数，将忽略该配置", key, value)
+        return None
+    if result <= 0:
+        logger.warning("%s=%.4f 非法（需 > 0），将忽略该配置", key, result)
+        return None
+    return result
+
+
+def _safe_int(value: Any, key: str) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        logger.warning("%s=%r 无法转换为整数，将忽略该配置", key, value)
+        return None
+    if result <= 0:
+        logger.warning("%s=%d 非法（需 > 0），将忽略该配置", key, result)
+        return None
+    return result
+
+
+def _safe_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _safe_non_negative_int(value: Any, key: str, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        logger.warning("%s=%r 无法转换为非负整数，将使用默认值 %d", key, value, default)
+        return default
+    if result < 0:
+        logger.warning("%s=%d 小于0，将使用默认值 %d", key, result, default)
+        return default
+    return result
+
+
+def _extract_sampling_options(
+    dataset_cfg: Dict[str, Any], config: Dict[str, Any], mode: str
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    sampling_options: Dict[str, Any] = {}
+    config = config.copy()
+
+    sources: List[Dict[str, Any]] = []
+    for source in (
+        dataset_cfg,
+        dataset_cfg.get("sampling"),
+        config,
+        config.get("sampling"),
+    ):
+        if isinstance(source, dict):
+            sources.append(source)
+
+    for source in sources:
+        if "sample_ratio" in source:
+            resolved = _resolve_mode_value(source["sample_ratio"], mode)
+            ratio = _safe_float(resolved, "sample_ratio")
+            if ratio is not None:
+                sampling_options["sample_ratio"] = ratio
+        if "max_samples" in source:
+            resolved = _resolve_mode_value(source["max_samples"], mode)
+            max_samples = _safe_int(resolved, "max_samples")
+            if max_samples is not None:
+                sampling_options["max_samples"] = max_samples
+        if "sample_shuffle" in source:
+            resolved = _resolve_mode_value(source["sample_shuffle"], mode)
+            shuffle = _safe_bool(resolved)
+            if shuffle is not None:
+                sampling_options["sample_shuffle"] = shuffle
+
+    # 移除已消费的配置，避免传递给数据集构造函数
+    for key in ("sample_ratio", "max_samples", "sample_shuffle"):
+        if key in config:
+            config.pop(key)
+    config.pop("sampling", None)
+
+    return config, sampling_options
+
+
+def _apply_sampling_to_dataset(
+    dataset: Any, sampling_options: Dict[str, Any], mode: str
+) -> Any:
+    if not dataset or not sampling_options:
+        return dataset
+
+    sample_ratio = sampling_options.get("sample_ratio")
+    max_samples = sampling_options.get("max_samples")
+    if sample_ratio is None and max_samples is None:
+        return dataset
+
+    random_sample = sampling_options.get("sample_shuffle")
+    if random_sample is None:
+        random_sample = mode == "train"
+
+    mininalize_fn = getattr(dataset, "mininalize", None)
+    if not callable(mininalize_fn):
+        logger.warning(
+            "数据集 %s 不支持 mininalize，忽略采样配置",
+            dataset.__class__.__name__,
+        )
+        return dataset
+
+    try:
+        if sample_ratio is not None:
+            mininalize_fn(sample_ratio, random_sample)
+        elif max_samples is not None:
+            mininalize_fn(max_samples, random_sample)
+    except Exception as exc:
+        logger.warning(
+            "应用采样配置到数据集 %s 时失败: %s",
+            dataset.__class__.__name__,
+            exc,
+        )
+
+    return dataset
+
+
+def _resolve_dataloader_option(
+    dataloader_cfg: Dict[str, Any], key: str, mode: str, default: Any
+) -> Any:
+    if not isinstance(dataloader_cfg, dict):
+        return default
+    value = dataloader_cfg.get(key, default)
+    resolved = _resolve_mode_value(value, mode)
+    return default if resolved is None else resolved
+
+
 def _get_dataset_by_case(dataset_name: str):
     """根据数据集名称返回对应的数据集类"""
     name = dataset_name.lower()
@@ -396,7 +565,8 @@ def get_train_dataset(
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_train_dataset(root_dir, **kwargs)
+    dataset_builder: Any = DatasetClass
+    return dataset_builder.get_train_dataset(root_dir, **kwargs)
 
 
 def get_valid_dataset(
@@ -406,7 +576,8 @@ def get_valid_dataset(
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_valid_dataset(root_dir, **kwargs)
+    dataset_builder: Any = DatasetClass
+    return dataset_builder.get_valid_dataset(root_dir, **kwargs)
 
 
 def get_test_dataset(
@@ -416,7 +587,8 @@ def get_test_dataset(
     DatasetClass = _get_dataset_by_case(dataset_name)
     if DatasetClass is None:
         return None
-    return DatasetClass.get_test_dataset(root_dir, **kwargs)
+    dataset_builder: Any = DatasetClass
+    return dataset_builder.get_test_dataset(root_dir, **kwargs)
 
 
 def get_dataset(mode: str):
@@ -431,7 +603,9 @@ def get_dataset(mode: str):
         full_config = get_config()
         return create_hybrid_dataset_from_config(c_dataset, mode, full_config)
 
-    config = c_dataset.get("config", {}).copy()
+    raw_config = c_dataset.get("config", {})
+    config = raw_config.copy() if isinstance(raw_config, dict) else {}
+    config, sampling_options = _extract_sampling_options(c_dataset, config, mode)
     dataset_name = c_dataset["name"]
     root_dir = Path(c_dataset["root_dir"])
 
@@ -458,7 +632,8 @@ def get_dataset(mode: str):
             DatasetClass = _get_dataset_by_case(dataset_name)
             if DatasetClass is None:
                 return None
-            dataset0 = DatasetClass.get_dataset(
+            dataset_builder: Any = DatasetClass
+            dataset0 = dataset_builder.get_dataset(
                 root_dir, 
                 **config
             )
@@ -466,289 +641,149 @@ def get_dataset(mode: str):
     if not dataset0:
         logging.error(f"{dataset_name} is empty!")
 
+    _apply_sampling_to_dataset(dataset0, sampling_options, mode)
+
     return dataset0
 
 
-def random_sample(
-    dataset: CustomDataset,
-    sample_ratio: float = 0.1,
-    num_samples: int = 0,
-    *,
-    generator=None,
-    output_dataloader: bool = True,
+def get_dataloader(
+    dataset: Any,
+    sample_ratio: Optional[float] = None,
+    max_samples: int = 0,
     batch_size: int = 1,
+    shuffle: bool = False,
+    *,
+    num_workers: int = 0,
+    pin_memory: bool = True,
+    drop_last: bool = False,
 ):
-    """随机采样数据集的一部分样本索引"""
-    from torch.utils.data import RandomSampler
+    if dataset is None:
+        return None
 
-    if num_samples <= 0:
-        num_samples = int(sample_ratio * len(dataset))
-    elif num_samples > len(dataset):
-        num_samples = len(dataset)
-    sampler = RandomSampler(dataset, num_samples=num_samples, generator=generator)
-    if output_dataloader:
-        c = get_config()
-        num_workers = c["dataloader"]["num_workers"]
-        if c["dataloader"]["shuffle"]:
-            print("Random sampler used, set shuffle to False")
-        return DataLoader(
-            dataset,
-            batch_size=batch_size,
-            sampler=sampler,
-            num_workers=num_workers,
-            shuffle=False,
-        )
-    else:
-        return sampler
-
-
-def get_train_valid_test_dataloader(use_valid=False):
-    """根据全局配置构建训练/验证/测试的DataLoader
-
-    增强功能：
-    - 支持 train_valid_test_split 配置驱动的数据集分割
-    - 支持 kfold 配置驱动的交叉验证（返回首折的train/valid/test）
-
-    配置格式:
-        [dataset.split]
-        type = "train_valid_test_split" # 或 "kfold"
-        train = 0.8
-        valid = 0.1
-        test = 0.1
-        shuffle = true
-        random_state = 42
-
-        # 仅当 type = "kfold" 时生效
-        n_splits = 5
-        include_test = false
-        test_ratio = 0.0
-    """
-    # 检查是否启用了配置驱动的数据集分割
-    split_config = get_config_value("dataset.split", default=None)
-
-    if split_config is not None:
-        # 配置驱动模式：使用split配置进行数据集分割
-        return _get_dataloader_with_split_config(split_config, use_valid)
-    else:
-        # 传统模式：直接获取预定义的train/valid/test数据集
-        return _get_dataloader_traditional_mode(use_valid)
+    if sample_ratio is not None:
+        mininalize_fn = getattr(dataset, "mininalize", None)
+        if callable(mininalize_fn):
+            dataset = mininalize_fn(dataset_size=sample_ratio, random_sample=shuffle)
+        else:
+            logger.warning(
+                "数据集 %s 不支持 mininalize，忽略 sample_ratio",
+                dataset.__class__.__name__,
+            )
+    elif max_samples > 0:
+        mininalize_fn = getattr(dataset, "mininalize", None)
+        if callable(mininalize_fn):
+            dataset = mininalize_fn(dataset_size=max_samples, random_sample=shuffle)
+        else:
+            logger.warning(
+                "数据集 %s 不支持 mininalize，忽略 max_samples",
+                dataset.__class__.__name__,
+            )
+    return dataset.dataloader(
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=drop_last,
+    )
 
 
-def _get_dataloader_traditional_mode(use_valid: bool):
-    """传统模式：直接获取预定义的train/valid/test数据集并构建DataLoader"""
+def get_all_dataloader(use_valid=False):
     c = get_config()
 
     train_dataset = get_dataset("train")
     test_dataset = get_dataset("test")
-    num_workers = c["dataloader"]["num_workers"]
-    shuffle = c["dataloader"]["shuffle"]
+    dataloader_cfg = c.get("dataloader", {})
 
-    # 检查数据集是否有get_collate_fn方法
-    train_collate_fn = None
-    test_collate_fn = None
-    valid_collate_fn = None
+    train_shuffle_raw = _resolve_dataloader_option(dataloader_cfg, "shuffle", "train", True)
+    train_shuffle = _safe_bool(train_shuffle_raw)
+    if train_shuffle is None:
+        train_shuffle = True
+    train_workers_raw = _resolve_dataloader_option(dataloader_cfg, "num_workers", "train", 0)
+    train_num_workers = _safe_non_negative_int(train_workers_raw, "num_workers[train]", 0)
+    train_pin_raw = _resolve_dataloader_option(dataloader_cfg, "pin_memory", "train", True)
+    train_pin_memory = _safe_bool(train_pin_raw)
+    if train_pin_memory is None:
+        train_pin_memory = True
+    train_drop_raw = _resolve_dataloader_option(dataloader_cfg, "drop_last", "train", False)
+    train_drop_last = _safe_bool(train_drop_raw)
+    if train_drop_last is None:
+        train_drop_last = False
 
-    if hasattr(train_dataset, "get_collate_fn"):
-        train_collate_fn = train_dataset.get_collate_fn()
-    if hasattr(test_dataset, "get_collate_fn"):
-        test_collate_fn = test_dataset.get_collate_fn()
+    test_shuffle_raw = _resolve_dataloader_option(dataloader_cfg, "shuffle", "test", False)
+    test_shuffle = _safe_bool(test_shuffle_raw)
+    if test_shuffle is None:
+        test_shuffle = False
+    test_workers_raw = _resolve_dataloader_option(dataloader_cfg, "num_workers", "test", train_num_workers)
+    test_num_workers = _safe_non_negative_int(test_workers_raw, "num_workers[test]", train_num_workers)
+    test_pin_raw = _resolve_dataloader_option(dataloader_cfg, "pin_memory", "test", train_pin_memory)
+    test_pin_memory = _safe_bool(test_pin_raw)
+    if test_pin_memory is None:
+        test_pin_memory = train_pin_memory
+    test_drop_raw = _resolve_dataloader_option(dataloader_cfg, "drop_last", "test", False)
+    test_drop_last = _safe_bool(test_drop_raw)
+    if test_drop_last is None:
+        test_drop_last = False
 
-    train_loader = DataLoader(
+    train_loader = get_dataloader(
         train_dataset,
+        sample_ratio=None,
+        max_samples=0,
         batch_size=c["train"]["batch_size"],
-        pin_memory=True,
-        num_workers=num_workers,
-        shuffle=shuffle,
-        collate_fn=train_collate_fn,
+        shuffle=train_shuffle,
+        num_workers=train_num_workers,
+        pin_memory=train_pin_memory,
+        drop_last=train_drop_last,
     )
-    test_loader = DataLoader(
+    test_loader = get_dataloader(
         test_dataset,
+        sample_ratio=None,
+        max_samples=0,
         batch_size=c["test"]["batch_size"],
-        pin_memory=True,
-        num_workers=num_workers,
-        shuffle=shuffle,
-        collate_fn=test_collate_fn,
+        shuffle=test_shuffle,
+        num_workers=test_num_workers,
+        pin_memory=test_pin_memory,
+        drop_last=test_drop_last,
     )
     if use_valid and "valid" in c:
         valid_dataset = get_dataset("valid")
+        valid_shuffle_raw = _resolve_dataloader_option(dataloader_cfg, "shuffle", "valid", False)
+        valid_shuffle = _safe_bool(valid_shuffle_raw)
+        if valid_shuffle is None:
+            valid_shuffle = False
+        valid_workers_raw = _resolve_dataloader_option(dataloader_cfg, "num_workers", "valid", train_num_workers)
+        valid_num_workers = _safe_non_negative_int(valid_workers_raw, "num_workers[valid]", train_num_workers)
+        valid_pin_raw = _resolve_dataloader_option(dataloader_cfg, "pin_memory", "valid", train_pin_memory)
+        valid_pin_memory = _safe_bool(valid_pin_raw)
+        if valid_pin_memory is None:
+            valid_pin_memory = train_pin_memory
+        valid_drop_raw = _resolve_dataloader_option(dataloader_cfg, "drop_last", "valid", False)
+        valid_drop_last = _safe_bool(valid_drop_raw)
+        if valid_drop_last is None:
+            valid_drop_last = False
+        
+        # 获取 collate_fn（如果数据集支持）
         if hasattr(valid_dataset, "get_collate_fn"):
             valid_collate_fn = valid_dataset.get_collate_fn()
         else:
             valid_collate_fn = None
+        
         valid_loader = DataLoader(
             valid_dataset,
             batch_size=c["valid"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=shuffle,
+            shuffle=valid_shuffle,
+            num_workers=valid_num_workers,
+            pin_memory=valid_pin_memory,
+            drop_last=valid_drop_last,
             collate_fn=valid_collate_fn,
         )
-
-        return train_loader, valid_loader, test_loader
-
-    return train_loader, None, test_loader
-
-
-def _get_dataloader_with_split_config(split_config: dict, use_valid: bool):
-    """配置驱动模式：根据split配置进行数据集分割并构建DataLoader"""
-    c = get_config()
-
-    split_type = split_config.get("type", "train_valid_test_split")
-
-    if split_type == "train_valid_test_split":
-        return _get_dataloader_with_train_valid_test_split(split_config, use_valid)
-    elif split_type == "kfold":
-        return _get_dataloader_with_kfold(split_config, use_valid)
     else:
-        raise ValueError(
-            f"不支持的split类型: {split_type}，仅支持 'train_valid_test_split' 或 'kfold'"
-        )
+        valid_loader = None
+
+    return train_loader, valid_loader, test_loader
 
 
-def _get_dataloader_with_train_valid_test_split(split_config: dict, use_valid: bool):
-    """基于train_valid_test_split配置进行数据集分割"""
-    c = get_config()
-
-    # 获取完整数据集（通常使用train模式获取最大的数据集）
-    full_dataset = get_dataset("train")
-    if not full_dataset:
-        logging.error("无法获取完整数据集进行分割")
-        return None, None, None
-
-    # 解析分割参数
-    train_ratio = split_config.get("train", 0.8)
-    valid_ratio = split_config.get("valid", 0.1)
-    test_ratio = split_config.get("test", 0.1)
-    shuffle = split_config.get("shuffle", True)
-    random_state = split_config.get("random_state", None)
-
-    # 执行数据集分割
-    train_subset, valid_subset, test_subset = full_dataset.train_valid_test_split(
-        train=train_ratio,
-        valid=valid_ratio,
-        test=test_ratio,
-        shuffle=shuffle,
-        random_state=random_state,
-    )
-
-    # 构建DataLoader
-    num_workers = c["dataloader"]["num_workers"]
-    dataloader_shuffle = c["dataloader"]["shuffle"]
-
-    train_loader = (
-        DataLoader(
-            train_subset,
-            batch_size=c["train"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        if train_subset
-        else None
-    )
-
-    test_loader = (
-        DataLoader(
-            test_subset,
-            batch_size=c["test"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        if test_subset
-        else None
-    )
-
-    if use_valid and valid_subset:
-        valid_loader = DataLoader(
-            valid_subset,
-            batch_size=c["valid"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        return train_loader, valid_loader, test_loader
-
-    return train_loader, None, test_loader
-
-
-def _get_dataloader_with_kfold(split_config: dict, use_valid: bool):
-    """基于kfold配置进行交叉验证分割（返回第一折的结果）
-
-    注意：该函数仅返回第一折的DataLoader，完整的kfold训练循环需要在上层实现
-    """
-    c = get_config()
-
-    # 获取完整数据集
-    full_dataset = get_dataset("train")
-    if not full_dataset:
-        logging.error("无法获取完整数据集进行kfold分割")
-        return None, None, None
-
-    # 解析kfold参数
-    n_splits = split_config.get("n_splits", 5)
-    shuffle = split_config.get("shuffle", True)
-    random_state = split_config.get("random_state", None)
-    include_test = split_config.get("include_test", False)
-    test_ratio = split_config.get("test_ratio", 0.0)
-
-    # 执行kfold分割
-    fold_results = CustomDataset.kfold(
-        dataset=full_dataset,
-        n_splits=n_splits,
-        shuffle=shuffle,
-        random_state=random_state,
-        include_test=include_test,
-        test_ratio=test_ratio,
-    )
-
-    if not fold_results:
-        logging.error("kfold分割失败")
-        return None, None, None
-
-    # 使用第一折的结果
-    train_subset, valid_subset, test_subset = fold_results[0]
-
-    # 构建DataLoader
-    num_workers = c["dataloader"]["num_workers"]
-    dataloader_shuffle = c["dataloader"]["shuffle"]
-
-    train_loader = (
-        DataLoader(
-            train_subset,
-            batch_size=c["train"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        if train_subset
-        else None
-    )
-
-    test_loader = (
-        DataLoader(
-            test_subset,
-            batch_size=c["test"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        if test_subset
-        else None
-    )
-
-    if use_valid and valid_subset:
-        valid_loader = DataLoader(
-            valid_subset,
-            batch_size=c["valid"]["batch_size"],
-            pin_memory=True,
-            num_workers=num_workers,
-            shuffle=dataloader_shuffle,
-        )
-        return train_loader, valid_loader, test_loader
-
-    return train_loader, None, test_loader
-
+def get_train_valid_test_dataloader(use_valid=False):
+    return get_all_dataloader(use_valid=use_valid)
 
 def get_kfold_dataloaders(
     n_splits: Optional[int] = None,
@@ -757,98 +792,10 @@ def get_kfold_dataloaders(
     include_test: Optional[bool] = None,
     test_ratio: Optional[float] = None,
 ) -> List[Tuple[DataLoader, DataLoader, Optional[DataLoader]]]:
-    """获取所有折的DataLoader列表，用于完整的kfold交叉验证训练
-
-    参数优先级：函数参数 > 配置文件 > 默认值
-
-    返回:
-        List[Tuple[train_loader, valid_loader, test_loader]]，长度为n_splits
-    """
-    c = get_config()
-    split_config = get_config_value("dataset.split", default={})
-
-    # 参数合并：函数参数 > 配置文件 > 默认值
-    final_n_splits = (
-        n_splits if n_splits is not None else split_config.get("n_splits", 5)
-    )
-    final_shuffle = (
-        shuffle if shuffle is not None else split_config.get("shuffle", True)
-    )
-    final_random_state = (
-        random_state
-        if random_state is not None
-        else split_config.get("random_state", None)
-    )
-    final_include_test = (
-        include_test
-        if include_test is not None
-        else split_config.get("include_test", False)
-    )
-    final_test_ratio = (
-        test_ratio if test_ratio is not None else split_config.get("test_ratio", 0.0)
-    )
-
-    # 获取完整数据集
-    full_dataset = get_dataset("train")
-    if not full_dataset:
-        logging.error("无法获取完整数据集进行kfold分割")
-        return []
-
-    # 执行kfold分割
-    fold_results = CustomDataset.kfold(
-        dataset=full_dataset,
-        n_splits=final_n_splits,
-        shuffle=final_shuffle,
-        random_state=final_random_state,
-        include_test=final_include_test,
-        test_ratio=final_test_ratio,
-    )
-
-    # 为每一折构建DataLoader
-    dataloaders = []
-    num_workers = c["dataloader"]["num_workers"]
-    dataloader_shuffle = c["dataloader"]["shuffle"]
-
-    for train_subset, valid_subset, test_subset in fold_results:
-        train_loader = (
-            DataLoader(
-                train_subset,
-                batch_size=c["train"]["batch_size"],
-                pin_memory=True,
-                num_workers=num_workers,
-                shuffle=dataloader_shuffle,
-            )
-            if train_subset
-            else None
-        )
-
-        valid_loader = (
-            DataLoader(
-                valid_subset,
-                batch_size=c["valid"]["batch_size"],
-                pin_memory=True,
-                num_workers=num_workers,
-                shuffle=dataloader_shuffle,
-            )
-            if valid_subset
-            else None
-        )
-
-        test_loader = (
-            DataLoader(
-                test_subset,
-                batch_size=c["test"]["batch_size"],
-                pin_memory=True,
-                num_workers=num_workers,
-                shuffle=dataloader_shuffle,
-            )
-            if test_subset
-            else None
-        )
-
-        dataloaders.append((train_loader, valid_loader, test_loader))
-
-    return dataloaders
+    """暂未实现的kfold数据加载接口。"""
+    message = "当前版本暂不支持 k-fold 数据加载，请使用常规数据加载流程。"
+    logger.warning(message)
+    raise NotImplementedError(message)
 
 
 def support_datasets(task_type: str) -> List[str]:
@@ -895,7 +842,7 @@ def supported_tasks(dataset_name: str) -> List[str]:
     return []
 
 
-def get_datasets_by_task(task_type: str) -> List[Dict[str, any]]:
+def get_datasets_by_task(task_type: str) -> List[Dict[str, Any]]:
     """根据任务类型获取数据集详细信息列表（保留用于向后兼容）
 
     Args:
@@ -935,7 +882,7 @@ def get_all_task_types() -> List[str]:
     return sorted(list(all_tasks))
 
 
-def get_dataset_info(dataset_name: str) -> Optional[Dict[str, any]]:
+def get_dataset_info(dataset_name: str) -> Optional[Dict[str, Any]]:
     """获取指定数据集的详细信息
 
     Args:
@@ -1060,7 +1007,7 @@ def print_dataset_task_matrix():
 
 def create_hybrid_dataset(
     dataset_names: List[str],
-    root_dirs: Optional[Union[List[Path], List[str]]] = None,
+    root_dirs: Optional[Sequence[Union[Path, str]]] = None,
     split: str = "train",
     ratios: Optional[List[float]] = None,
     priorities: Optional[List[int]] = None,
@@ -1140,7 +1087,11 @@ def create_hybrid_dataset(
 
     # 创建数据集列表
     datasets = []
-    for i, (ds_name, root_dir) in enumerate(zip(dataset_names, root_dirs)):
+    normalized_root_dirs: List[Path] = [
+        Path(rd) if isinstance(rd, str) else rd for rd in root_dirs
+    ]
+
+    for i, (ds_name, root_dir) in enumerate(zip(dataset_names, normalized_root_dirs)):
         # 获取该数据集的特定参数
         ds_specific_kwargs = dataset_kwargs.get(ds_name, {})
 

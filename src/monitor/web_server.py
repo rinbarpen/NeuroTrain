@@ -27,6 +27,10 @@ from .monitor_utils import (
 )
 from .progress_tracker import ProgressTracker
 from .training_monitor import TrainingMonitor
+from .experiment_manager import (
+    discover_experiments,
+    load_experiment_snapshot,
+)
 
 
 class WebMonitorServer:
@@ -370,7 +374,28 @@ class WebMonitorServer:
                 self.alert_system.reset()
             return {"success": True}
 
+        @self.app.get("/api/experiments")
+        async def list_experiments():
+            """列出 runs 目录下的实验"""
+            runs_root = Path("runs")
+            experiments = discover_experiments(runs_root)
+            return {
+                "runs_root": str(runs_root.resolve()),
+                "experiments": experiments,
+            }
+
+        @self.app.get("/api/experiments/{experiment_id:path}")
+        async def get_experiment(experiment_id: str):
+            """读取指定实验的监控数据快照"""
+            runs_root = Path("runs")
+            snapshot = load_experiment_snapshot(runs_root, experiment_id)
+            if snapshot is None:
+                raise HTTPException(status_code=404, detail="Experiment not found")
+            return snapshot
+
     def _setup_socket_events(self) -> None:
+        """设置SocketIO事件"""
+        
         @self.socketio.event
         async def connect(sid, environ, auth=None):
             print(f"Client connected: {sid}")
@@ -384,14 +409,13 @@ class WebMonitorServer:
         async def disconnect(sid):
             print(f"Client disconnected: {sid}")
 
-        async def handle_update_request(sid):
+        @self.socketio.event
+        async def request_update(sid):
+            """处理更新请求"""
             await self._emit_latest_data()
 
-        register_update_handler = self.socketio.on("request_update")
-        if register_update_handler:
-            register_update_handler(handle_update_request)
-
     async def _emit_latest_data(self) -> None:
+        """发送最新数据"""
         try:
             if self.monitor and self.monitor.training_metrics_history:
                 latest_training = self.monitor.training_metrics_history[-1]
