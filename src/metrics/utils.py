@@ -49,6 +49,16 @@ def metric(metric_fn, *, use_meter: bool = True):
         # 如果指定了权重，强制启用类别分割
         if weights is not None:
             class_split = True
+
+        # 针对分类/分割 logits，先在类别维上取 argmax，避免 flatten 后长度不一致
+        if y_pred.ndim > y_true.ndim:
+            # 规范化 class_axis
+            ca = class_axis
+            if ca < 0:
+                ca = y_pred.ndim + ca
+            y_pred = np.argmax(y_pred, axis=ca)
+            # 取完 argmax 后，不再按类别拆分
+            class_split = False
         
         if class_split:
             # 将类别轴交换到第0轴，然后对每个类别分别计算基础指标

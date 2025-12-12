@@ -80,8 +80,6 @@ def parse_args():
     args = parser.parse_args()
 
     config_file = Path(args.config)
-    if not config_file.exists():
-        config_file = Path(SINGLE_CONFIG_DIR) / args.config
     CONFIG = load_config(config_file)
 
     if args.seed:

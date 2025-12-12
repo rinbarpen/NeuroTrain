@@ -11,3 +11,5 @@ def stack_conv(n: int, conv: Type[nn.Module], bn: Type[nn.Module] = nn.BatchNorm
         modules.append(act())
     return nn.Sequential(*modules)
 
+def chunk(m: Type[nn.Module], n: int=1, **kwargs) -> nn.Sequential:
+    return nn.Sequential(*[m(**kwargs) for _ in range(n)])

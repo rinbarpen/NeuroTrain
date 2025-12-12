@@ -201,15 +201,19 @@ class Trainer:
 
         model_input = inputs_obj
         if isinstance(inputs_obj, Mapping):
-            model_input = inputs_obj
+            # 规范化：如果包含'inputs'键，则将其作为模型输入，避免将NDict整体传入模型
+            if 'inputs' in inputs_obj:
+                model_input = inputs_obj['inputs']
+            else:
+                model_input = inputs_obj
             targets = inputs_obj.get('targets', targets)
         else:
             model_input = inputs_obj
 
         result = self.model(model_input)
-        model_loss: Any = None
+        loss: torch.Tensor | None = None
         if isinstance(result, tuple) and len(result) == 2:
-            outputs_raw, model_loss = result
+            outputs_raw, loss = result
         else:
             outputs_raw = result
 
@@ -223,23 +227,14 @@ class Trainer:
         if 'targets' not in outputs and targets is not None:
             outputs['targets'] = targets
 
-        loss: torch.Tensor | None = None
-        if model_loss is not None:
-            loss = model_loss if isinstance(model_loss, torch.Tensor) else torch.as_tensor(model_loss, device=self.device)
-        elif 'loss' in outputs:
-            candidate = outputs['loss']
-            loss = candidate if isinstance(candidate, torch.Tensor) else torch.as_tensor(candidate, device=self.device)
-        elif self.criterion is not None:
+        if self.criterion is not None:
             preds = outputs.get('preds')
-            final_targets = outputs.get('targets')
-            if isinstance(preds, torch.Tensor) and isinstance(final_targets, torch.Tensor):
-                loss = self.criterion(final_targets, preds)
+            targets = outputs.get('targets')
+            if isinstance(preds, torch.Tensor) and isinstance(targets, torch.Tensor):
+                loss = self.criterion(targets, preds)
 
         if loss is None:
             raise ValueError("Unable to compute loss: ensure model or criterion provides it.")
-
-        if not isinstance(loss, torch.Tensor):
-            loss = torch.as_tensor(loss, device=self.device)
 
         assert isinstance(loss, torch.Tensor)
         return outputs, loss

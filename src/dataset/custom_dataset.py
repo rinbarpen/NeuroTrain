@@ -439,7 +439,12 @@ class CustomDataset(Dataset):
 
     @staticmethod
     def collate_fn(batch: List[Any]) -> Any:
-        return batch
+        """
+        默认使用 PyTorch 的 default_collate 将批次中的张量/NDict 自动堆叠。
+        对于自定义需要返回原始列表的场景，可在子类中重写。
+        """
+        from torch.utils.data import default_collate
+        return default_collate(batch)
 
     def dataloader(
         self, 

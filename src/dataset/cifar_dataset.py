@@ -7,7 +7,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import Subset
 import logging
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 
 
 class CIFARDataset(CustomDataset):
@@ -192,17 +192,18 @@ class CIFARDataset(CustomDataset):
         if self.return_image_only:
             return image, label
         
-        # 返回完整格式
-        return {
-            'image': image,
-            'label': torch.tensor(label, dtype=torch.long),
-            'metadata': {
+        # 返回标准化 Sample，便于训练流程自动识别 inputs/targets
+        from src.utils.ndict import Sample
+        return Sample(
+            inputs=image,
+            targets=torch.tensor(label, dtype=torch.long),
+            metadata={
                 'index': index,
                 'class_name': self.get_class_name(label),
                 'split': self.split,
                 'cifar_type': self.cifar_type
             }
-        }
+        )
     
     def get_class_name(self, label: int) -> str:
         """获取类别名称"""

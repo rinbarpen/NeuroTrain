@@ -214,12 +214,15 @@ class MeterRecorder:
         # 获取指标函数
         metric_fns = get_metric_fns(self.metric_labels)
         
-        # 计算指标
+        # 分类场景：targets 为 1D 标签，outputs 为 logits/probs（B, C）
+        # 此时不按类别拆分，留给指标内部处理（如 topk）
+        class_split_flag = not (targets.ndim == 1 and outputs.ndim == 2)
+
         metrics = many_metrics(
-            metric_fns, 
-            targets, 
-            outputs, 
-            class_split=True,
+            metric_fns,
+            targets,
+            outputs,
+            class_split=class_split_flag,
             class_axis=1
         )
         

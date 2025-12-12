@@ -50,7 +50,21 @@ def get_metric_fns(metrics: list[str]) -> list:
         >>> get_metric_fns(['dice', 'accuracy'])
         [<function dice at 0x...>, <function accuracy at 0x...>]
     """
-    return [globals()[metric] for metric in metrics]
+    alias = {
+        # Top-K 常用别名
+        "top1": "top1_accuracy",
+        "top5": "top5_accuracy",
+        "top3": "top3_accuracy",
+        "top10": "top10_accuracy",
+    }
+
+    resolved = []
+    for metric in metrics:
+        name = alias.get(metric, metric)
+        if name not in globals():
+            raise KeyError(f"Metric '{metric}' not found (resolved to '{name}').")
+        resolved.append(globals()[name])
+    return resolved
 
 
 detection_metrics = get_metric_fns([

@@ -2,7 +2,7 @@ from pathlib import Path
 from PIL import Image
 from typing import Literal
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 from src.utils.ndict import Sample
 
 class DriveDataset(CustomDataset):
@@ -28,7 +28,6 @@ class DriveDataset(CustomDataset):
         else:
             image_glob, label_glob = self.mapping[split]
 
-        # 默认的图像变换，仅进行张量化
         self.transforms = self._get_transforms()
         self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
 

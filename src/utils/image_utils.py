@@ -295,3 +295,14 @@ def mask_to_center_point(mask: np.ndarray) -> tuple[int, int]:
         return None
     center = np.mean(points, axis=0)
     return (int(center[1]), int(center[0]))
+
+def zoom_image(image: Image.Image, zoom: float = 2.0) -> Image.Image:
+    """
+    Zoom an image by a zoom factor.
+
+    :param image: The image to zoom.
+    :param zoom: The zoom factor.
+    :return: The zoomed image.
+    """
+    width, height = image.size
+    return image.resize((int(width * zoom), int(height * zoom)), Image.Resampling.LANCZOS)

@@ -1,0 +1,74 @@
+output_dir = "./runs"
+task = "ImageCls"
+entity = "Lab"
+run_id = ""            # 运行时自动生成
+device = "cuda"
+seed = 42
+classes = ["cifar10"]
+metrics = ['accuracy', 'top1', 'top5']
+postprocess = "classification"
+
+[model]
+name = "torchvision"
+[model.config]
+arch = "resnet50"
+pretrained = true
+n_classes = 10         # CIFAR-10
+n_channels = 3
+
+[[criterion]]
+type = "cross_entropy"
+weight = 1.0
+config = {}
+
+[transform]
+RESIZE = [224, 224]
+PIL_TO_TENSOR = []
+CONVERT_IMAGE_DTYPE = ['float32']
+NORMALIZE = [false]    # 使用默认ImageNet均值方差（见 utils/transform.py 中 normalize）
+
+[dataset]
+name = "cifar10"
+root_dir = "./data/cifar10"
+config = {}
+
+[dataloader]
+batch_size = 64
+num_workers = 4
+shuffle = true
+pin_memory = true
+
+[train]
+batch_size = 64
+epoch = 40
+save_period = 0.2
+save_recovery_period = 0.2
+grad_accumulation_steps = 0
+
+[train.optimizer]
+type = "adamw"
+learning_rate = 3e-4
+weight_decay = 1e-4
+
+[train.lr_scheduler]
+type = "cosine"
+warmup = 5
+warmup_lr = 1e-5
+
+[test]
+batch_size = 128
+
+[predict]
+input = ""
+[predict.config]
+
+[private]
+wandb = false
+mode = 0
+
+[private.log]
+verbose = true
+debug = false
+log_file_format = '%Y-%m-%d %H_%M_%S'
+log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'
+

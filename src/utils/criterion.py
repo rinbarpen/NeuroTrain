@@ -77,7 +77,7 @@ class Loss(nn.Module):
     def forward(self, targets: torch.Tensor, preds: torch.Tensor) -> torch.Tensor:
         if self.loss_fn is None:
             raise NotImplementedError("Loss function is not defined.")
-        return self.loss_fn(targets, preds) * self.weight
+        return self.loss_fn(preds, targets) * self.weight
 
 
 class DiceLoss(Loss):
@@ -415,7 +415,11 @@ def get_criterion(c: dict):
         return DiceLoss(weight, **cc)
     elif 'bce' in c_type:
         return Loss(nn.BCEWithLogitsLoss(**cc), weight)
-    elif 'ce' in c_type:
+    elif (
+        c_type.startswith('ce')
+        or 'cross_entropy' in c_type
+        or 'crossentropy' in c_type
+    ):
         return Loss(nn.CrossEntropyLoss(**cc), weight)
     
     # 分割相关损失函数
