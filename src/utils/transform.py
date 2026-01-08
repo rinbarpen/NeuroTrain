@@ -1,5 +1,5 @@
 import torch
-from torchvision import transforms
+from torchvision import transforms as mtf
 from torchvision.transforms import InterpolationMode
 from typing import List, Sequence
 
@@ -11,68 +11,68 @@ class VisionTransformersBuilder:
         self._transforms = []
 
     def resize(self, size: tuple[int, int]):
-        self._transforms.append(transforms.Resize(size))
+        self._transforms.append(mtf.Resize(size))
         return self
     def crop(self, size: tuple[int, int], *args):
-        self._transforms.append(transforms.RandomCrop(size, *args))
+        self._transforms.append(mtf.RandomCrop(size, *args))
         return self
 
     def random_rotation(self, degrees: float):
-        self._transforms.append(transforms.RandomRotation(degrees=degrees))
+        self._transforms.append(mtf.RandomRotation(degrees=degrees))
         return self
     def random_horizontal_flip(self, p: float):
-        self._transforms.append(transforms.RandomHorizontalFlip(p=p))
+        self._transforms.append(mtf.RandomHorizontalFlip(p=p))
         return self
     def random_vertical_flip(self, p: float):
-        self._transforms.append(transforms.RandomVerticalFlip(p=p))
+        self._transforms.append(mtf.RandomVerticalFlip(p=p))
         return self
     def random_invert(self, p: float):
-        self._transforms.append(transforms.RandomInvert(p=p))
+        self._transforms.append(mtf.RandomInvert(p=p))
         return self
 
     def PIL_to_tensor(self):
-        self._transforms.append(transforms.PILToTensor())
+        self._transforms.append(mtf.PILToTensor())
         return self
     def to_tensor(self):
-        self._transforms.append(transforms.ToTensor())
+        self._transforms.append(mtf.ToTensor())
         return self
     def to_pil_image(self):
-        self._transforms.append(transforms.ToPILImage())
+        self._transforms.append(mtf.ToPILImage())
         return self
     def convert_image_dtype(self, ttype: torch.dtype=torch.float32):
-        self._transforms.append(transforms.ConvertImageDtype(ttype))
+        self._transforms.append(mtf.ConvertImageDtype(ttype))
         return self
 
     def gray_scale(self, num_output_channels: int=1):
-        self._transforms.append(transforms.Grayscale(num_output_channels=num_output_channels))
+        self._transforms.append(mtf.Grayscale(num_output_channels=num_output_channels))
         return self
 
     def color_jitter(self, brightness: float|tuple[float, float] = 0,
         contrast: float|tuple[float, float] = 0,
         saturation: float|tuple[float, float] = 0,
         hue: float|tuple[float, float] = 0):
-        self._transforms.append(transforms.ColorJitter(brightness, contrast, saturation, hue))
+        self._transforms.append(mtf.ColorJitter(brightness, contrast, saturation, hue))
         return self
 
     def gaussian_blur(self, kernel_size: int|Sequence[int], sigma: float|tuple[float, float]=(0.1, 2.0)):
-        self._transforms.append(transforms.GaussianBlur(kernel_size, sigma))
+        self._transforms.append(mtf.GaussianBlur(kernel_size, sigma))
         return self
 
     def normalize(self, is_rgb: bool):
         if is_rgb:
             self._transforms.append(
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
+                mtf.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         else:
             self._transforms.append(
-                transforms.Normalize(mean=[0.5], std=[0.5]))
+                mtf.Normalize(mean=[0.5], std=[0.5]))
         return self
 
     def aug_mix(self, severity: int=3, mixture_width: int=3, chain_depth: int=-1, alpha: float=1, all_ops: bool=True, interpolation: InterpolationMode=InterpolationMode.BILINEAR, fill: list[float]|None=None):
-        self._transforms.append(transforms.AugMix(severity, mixture_width, chain_depth, alpha, all_ops, interpolation, fill))
+        self._transforms.append(mtf.AugMix(severity, mixture_width, chain_depth, alpha, all_ops, interpolation, fill))
         return self
 
-    def build(self) -> transforms.Compose:
-        return transforms.Compose(self._transforms)
+    def build(self) -> mtf.Compose:
+        return mtf.Compose(self._transforms)
 
 def get_transforms(config: dict | None = None) -> transforms.Compose:
     from src.config import get_config
@@ -129,7 +129,7 @@ def build_image_transforms(resize: tuple[int, int]|None=None,
                            is_pil_image: bool=False,
                            ttype: torch.dtype=torch.float32,
                            norm: bool=False,
-                           is_rgb: bool=False, **kwargs) -> transforms.Compose:
+                           is_rgb: bool=False, **kwargs) -> mtf.Compose:
     builder = VisionTransformersBuilder()
     if gray_scale:
         builder = builder.gray_scale()
@@ -159,3 +159,5 @@ def build_image_transforms(resize: tuple[int, int]|None=None,
 
     return builder.build()
 
+def build_default_image_transforms(resize: tuple[int, int]=(224, 224), norm=True, is_rgb=True, ttype=torch.float32, **kwargs) -> mtf.Compose:
+    return build_image_transforms(resize=resize, is_pil_image=True, norm=norm, is_rgb=is_rgb, ttype=ttype, **kwargs)

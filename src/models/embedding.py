@@ -122,3 +122,11 @@ class PatchEmbedding3DWithPE(nn.Module):
             x = torch.cat([cls_tokens, x], dim=1)  # (B, N+1, D)
         x = self.pe(x)
         return x
+
+if __name__ == '__main__':
+    x = torch.randn(1, 3, 224, 224)
+    embed2d = PatchEmbeddingWithPE(3, 128, (16, 16), 196, use_learnable=True, use_cls_token=True)
+    embed3d = PatchEmbedding3DWithPE(3, 128, (16, 16, 16), 196, use_learnable=True, use_cls_token=True)
+    print(embed2d(x).shape)
+    print(embed3d(x).shape)
+    
