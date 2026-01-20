@@ -612,3 +612,35 @@ class SwinTransformer(nn.Module):
         flops += self.num_features * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
         flops += self.num_features * self.num_classes
         return flops
+
+# Swin Transformer Variants
+
+def swin_tiny_patch4_window7_224(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        patch_size=4, window_size=7, embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
+        num_classes=num_classes, **kwargs)
+
+def swin_small_patch4_window7_224(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        patch_size=4, window_size=7, embed_dim=96, depths=[2, 2, 18, 2], num_heads=[3, 6, 12, 24],
+        num_classes=num_classes, **kwargs)
+
+def swin_base_patch4_window7_224(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        patch_size=4, window_size=7, embed_dim=128, depths=[2, 2, 18, 2], num_heads=[4, 8, 16, 32],
+        num_classes=num_classes, **kwargs)
+
+def swin_large_patch4_window7_224(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        patch_size=4, window_size=7, embed_dim=192, depths=[2, 2, 18, 2], num_heads=[6, 12, 24, 48],
+        num_classes=num_classes, **kwargs)
+
+def swin_base_patch4_window12_384(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        img_size=384, patch_size=4, window_size=12, embed_dim=128, depths=[2, 2, 18, 2], num_heads=[4, 8, 16, 32],
+        num_classes=num_classes, **kwargs)
+
+def swin_large_patch4_window12_384(num_classes=1000, **kwargs):
+    return SwinTransformer(
+        img_size=384, patch_size=4, window_size=12, embed_dim=192, depths=[2, 2, 18, 2], num_heads=[6, 12, 24, 48],
+        num_classes=num_classes, **kwargs)

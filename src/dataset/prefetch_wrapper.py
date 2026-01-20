@@ -30,7 +30,8 @@ class PrefetchDataset(Dataset):
         self,
         dataset: Dataset,
         buffer_size: int = 2,
-        enable_prefetch: bool = True
+        enable_prefetch: bool = True,
+        max_samples_in_memory: Optional[int] = None
     ):
         """
         初始化预读取数据集
@@ -39,10 +40,13 @@ class PrefetchDataset(Dataset):
             dataset: 原始数据集
             buffer_size: 预读取缓冲区大小（提前加载多少个样本）
             enable_prefetch: 是否启用预读取
+            max_samples_in_memory: 内存中允许的最大样本数（可选，用于严格限制内存）
         """
         self.dataset = dataset
-        self.buffer_size = max(1, buffer_size)
+        # 严格限制缓冲区大小，对于大数据集，默认值不宜过大
+        self.buffer_size = max(1, min(buffer_size, 16)) 
         self.enable_prefetch = enable_prefetch
+        self.max_samples_in_memory = max_samples_in_memory or self.buffer_size
         
         # 预读取相关
         self._prefetch_queue = None
@@ -52,6 +56,8 @@ class PrefetchDataset(Dataset):
         self._lock = threading.Lock()
         
         if self.enable_prefetch:
+            if self.buffer_size > 8:
+                logger.warning(f"预读取缓冲区大小设为 {self.buffer_size}，如果每个样本很大，可能会消耗大量内存。")
             self._init_prefetch()
             logger.info(f"预读取已启用，缓冲区大小: {self.buffer_size}")
         else:
@@ -213,7 +219,8 @@ class SequentialPrefetchDataset(Dataset):
         self,
         dataset: Dataset,
         buffer_size: int = 4,
-        enable_prefetch: bool = True
+        enable_prefetch: bool = True,
+        max_buffer_size: int = 16
     ):
         """
         初始化顺序预读取数据集
@@ -222,9 +229,10 @@ class SequentialPrefetchDataset(Dataset):
             dataset: 原始数据集
             buffer_size: 预读取缓冲区大小
             enable_prefetch: 是否启用预读取
+            max_buffer_size: 最大允许的缓冲区大小，防止内存溢出
         """
         self.dataset = dataset
-        self.buffer_size = max(1, buffer_size)
+        self.buffer_size = max(1, min(buffer_size, max_buffer_size))
         self.enable_prefetch = enable_prefetch
         
         # 预读取缓冲

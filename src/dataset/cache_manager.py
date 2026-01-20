@@ -10,7 +10,7 @@ import json
 import hashlib
 import logging
 from pathlib import Path
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Optional, Dict, Callable, List
 import torch
 from datetime import datetime
 import shutil
@@ -192,6 +192,103 @@ class DatasetCacheManager:
         except Exception as e:
             logger.error(f"保存缓存失败: {e}")
             return False
+
+    def save_chunked(
+        self,
+        data_list: List[Any],
+        split: str,
+        chunk_size: int,
+        config: Optional[Dict] = None,
+        format: str = "pkl",
+        metadata: Optional[Dict] = None
+    ) -> bool:
+        """分片保存大数据集缓存
+        
+        Args:
+            data_list: 数据列表
+            split: 数据集划分
+            chunk_size: 每个分片的样本数量
+            config: 数据集配置
+            format: 缓存格式
+            metadata: 额外的元数据
+        """
+        if not self.enable_cache:
+            return False
+            
+        num_chunks = (len(data_list) + chunk_size - 1) // chunk_size
+        logger.info(f"开始分片保存缓存: 共 {len(data_list)} 条数据, 分为 {num_chunks} 个分片")
+        
+        success_count = 0
+        base_config = config or {}
+        
+        for i in range(num_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, len(data_list))
+            chunk_data = data_list[start_idx:end_idx]
+            
+            chunk_config = base_config.copy()
+            chunk_config["_chunk_index"] = i
+            chunk_config["_chunk_range"] = (start_idx, end_idx)
+            
+            chunk_meta = metadata.copy() if metadata else {}
+            chunk_meta.update({
+                "chunk_index": i,
+                "chunk_total": num_chunks,
+                "range": (start_idx, end_idx)
+            })
+            
+            if self.save(chunk_data, split, chunk_config, format, metadata=chunk_meta):
+                success_count += 1
+                
+        # 保存主元数据文件，记录分片信息
+        master_config = base_config.copy()
+        master_config["_is_master"] = True
+        master_meta = metadata.copy() if metadata else {}
+        master_meta.update({
+            "is_chunked": True,
+            "num_chunks": num_chunks,
+            "chunk_size": chunk_size,
+            "total_samples": len(data_list)
+        })
+        self.save({"chunk_info": master_meta}, split, master_config, "json", metadata=master_meta)
+        
+        return success_count == num_chunks
+
+    def load_chunked(
+        self,
+        split: str,
+        config: Optional[Dict] = None,
+        format: str = "pkl"
+    ) -> Optional[List[Any]]:
+        """从分片缓存加载数据"""
+        if not self.enable_cache:
+            return None
+            
+        base_config = config or {}
+        master_config = base_config.copy()
+        master_config["_is_master"] = True
+        
+        master_data = self.load(split, master_config, "json")
+        if not master_data or "chunk_info" not in master_data:
+            logger.debug("未找到分片缓存主文件")
+            return None
+            
+        chunk_info = master_data["chunk_info"]
+        num_chunks = chunk_info["num_chunks"]
+        
+        all_data = []
+        for i in range(num_chunks):
+            chunk_config = base_config.copy()
+            chunk_config["_chunk_index"] = i
+            # 我们不严格检查 _chunk_range，因为哈希键主要由 _chunk_index 决定
+            
+            chunk_data = self.load(split, chunk_config, format)
+            if chunk_data is None:
+                logger.error(f"加载缓存分片 {i} 失败")
+                return None
+            all_data.extend(chunk_data)
+            
+        return all_data
     
     def load(
         self,

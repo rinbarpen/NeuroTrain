@@ -7,14 +7,106 @@ def get_model(model_name: str, config: dict):
     
     match model_name.lower():
         case "clip":
-            from .llm.clip import CLIP
+            from .like.llm.clip import CLIP
+            from .like.llm.transformers import MODEL_ID_CATALOG
+            
+            variant = config.get('variant', 'base').lower()
+            model_id = config.get('model_name')
+            
+            if model_id is None:
+                variants = {
+                    'base': MODEL_ID_CATALOG['image_encoder']['clip'][0],
+                    'base-p16': MODEL_ID_CATALOG['image_encoder']['clip'][1],
+                    'large-p14': MODEL_ID_CATALOG['image_encoder']['clip'][2],
+                    'medclip': MODEL_ID_CATALOG['biomedical']['medclip'][0],
+                    'biomedclip': MODEL_ID_CATALOG['biomedical']['biomedclip'][0],
+                }
+                model_id = variants.get(variant, variants['base'])
+
             model = CLIP(
-                model_name=config.get('model_name', 'openai/clip-vit-base-patch32'), 
+                model_name=model_id, 
                 cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
-                device=config.get('device', 'cuda'), 
                 dtype=config.get('dtype', default_dtype)
             )
             return model
+        
+        case 'dino':
+            from .like.llm.clip import CLIP  # CLIP wrapper can often be used for DINO features too if compatible, or use a generic wrapper
+            from .like.llm.transformers import MODEL_ID_CATALOG
+            
+            variant = config.get('variant', 'v1-base').lower()
+            model_id = config.get('model_name')
+            
+            if model_id is None:
+                variants = {
+                    'v1-base': MODEL_ID_CATALOG['image_encoder']['dino'][0],
+                    'v2-base': MODEL_ID_CATALOG['image_encoder']['dinov2'][0],
+                    'v2-large': MODEL_ID_CATALOG['image_encoder']['dinov2'][1],
+                    'v3-s16': MODEL_ID_CATALOG['image_encoder']['dinov3'][0],
+                    'v3-b16': MODEL_ID_CATALOG['image_encoder']['dinov3'][1],
+                    'v3-l16': MODEL_ID_CATALOG['image_encoder']['dinov3'][2],
+                }
+                model_id = variants.get(variant, variants['v1-base'])
+            
+            # Using CLIP wrapper as a generic transformer wrapper if applicable, 
+            # or we might need a specific DINO wrapper if one exists.
+            # For now, let's assume the user can use 'huggingface' case for generic HF models.
+            # But let's provide a specific dino case if possible.
+            from .like.llm.transformers import build_transformers
+            model, tokenizer, processor = build_transformers(
+                model_id=model_id,
+                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                device=config.get('device', 'cuda'),
+                torch_dtype=config.get('dtype', default_dtype)
+            )
+            return {"model": model, "tokenizer": tokenizer, "processor": processor}
+
+        case 'vlm':
+            from .like.llm.transformers import MODEL_ID_CATALOG, build_transformers
+            
+            variant = config.get('variant', 'llava').lower()
+            model_id = config.get('model_name')
+            
+            if model_id is None:
+                variants = {
+                    'llava': MODEL_ID_CATALOG['vlm']['llava'][0],
+                    'llava-13b': MODEL_ID_CATALOG['vlm']['llava'][1],
+                    'qwen2-vl': MODEL_ID_CATALOG['vlm']['qwen2_vl'][0],
+                    'phi3.5-vision': MODEL_ID_CATALOG['vlm']['phi_vision'][0],
+                    'florence2': MODEL_ID_CATALOG['vlm']['florence2'][0],
+                }
+                model_id = variants.get(variant, variants['llava'])
+            
+            model, tokenizer, processor = build_transformers(
+                model_id=model_id,
+                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                device=config.get('device', 'auto'),
+                torch_dtype=config.get('dtype', default_dtype)
+            )
+            return {"model": model, "tokenizer": tokenizer, "processor": processor}
+
+        case 'llm':
+            from .like.llm.transformers import MODEL_ID_CATALOG, build_transformers
+            
+            variant = config.get('variant', 'llama3.1-8b').lower()
+            model_id = config.get('model_name')
+            
+            if model_id is None:
+                variants = {
+                    'llama3-8b': MODEL_ID_CATALOG['llm']['llama3'][0],
+                    'llama3.1-8b': MODEL_ID_CATALOG['llm']['llama3.1'][0],
+                    'llama3.2-1b': MODEL_ID_CATALOG['llm']['llama3.2'][0],
+                    'llama3.2-3b': MODEL_ID_CATALOG['llm']['llama3.2'][2],
+                }
+                model_id = variants.get(variant, variants['llama3.1-8b'])
+            
+            model, tokenizer, _ = build_transformers(
+                model_id=model_id,
+                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                device=config.get('device', 'auto'),
+                torch_dtype=config.get('dtype', default_dtype)
+            )
+            return {"model": model, "tokenizer": tokenizer}
         case 'unet':
             from .sample.unet import UNet
             model = UNet(config['n_channels'], config['n_classes'], bilinear=False)
@@ -22,6 +114,107 @@ def get_model(model_name: str, config: dict):
         case 'simple-net':
             from .sample.simple_net import SimpleNet
             model = SimpleNet()
+            return model
+        case 'vit':
+            from .sample.ViT import (
+                ViT, 
+                vit_tiny_patch16_224, 
+                vit_small_patch16_224,
+                vit_base_patch16_224, 
+                vit_base_patch32_224,
+                vit_large_patch16_224, 
+                vit_huge_patch14_224
+            )
+            
+            variant = config.get('variant', 'base').lower()
+            n_classes = config.get('n_classes', 1000)
+            
+            variants = {
+                'tiny': vit_tiny_patch16_224,
+                'small': vit_small_patch16_224,
+                'base': vit_base_patch16_224,
+                'base-p16': vit_base_patch16_224,
+                'base-p32': vit_base_patch32_224,
+                'large': vit_large_patch16_224,
+                'huge': vit_huge_patch14_224,
+            }
+            
+            if variant in variants:
+                model = variants[variant](num_classes=n_classes, **config.get('kwargs', {}))
+            else:
+                model = ViT(
+                    image_size=config.get('image_size', 224),
+                    patch_size=config.get('patch_size', 16),
+                    num_classes=n_classes,
+                    dim=config.get('dim', 768),
+                    depth=config.get('depth', 12),
+                    heads=config.get('heads', 12),
+                    mlp_dim=config.get('mlp_dim', 3072),
+                    **config.get('kwargs', {})
+                )
+            return model
+        case 'swin':
+            from .transformer.swin_transformers.swin_transformer import (
+                SwinTransformer,
+                swin_tiny_patch4_window7_224,
+                swin_small_patch4_window7_224,
+                swin_base_patch4_window7_224,
+                swin_large_patch4_window7_224,
+                swin_base_patch4_window12_384,
+                swin_large_patch4_window12_384
+            )
+            variant = config.get('variant', 'tiny').lower()
+            n_classes = config.get('n_classes', 1000)
+            variants = {
+                'tiny': swin_tiny_patch4_window7_224,
+                'small': swin_small_patch4_window7_224,
+                'base': swin_base_patch4_window7_224,
+                'large': swin_large_patch4_window7_224,
+                'base-384': swin_base_patch4_window12_384,
+                'large-384': swin_large_patch4_window12_384,
+            }
+            if variant in variants:
+                model = variants[variant](num_classes=n_classes, **config.get('kwargs', {}))
+            else:
+                model = SwinTransformer(num_classes=n_classes, **config.get('kwargs', {}))
+            return model
+        case 'resnet':
+            from .sample.resnet import (
+                resnet18, resnet34, resnet50, resnet101
+            )
+            variant = config.get('variant', '18').lower()
+            n_classes = config.get('n_classes', 1000)
+            variants = {
+                '18': resnet18,
+                '34': resnet34,
+                '50': resnet50,
+                '101': resnet101,
+            }
+            if variant in variants:
+                model = variants[variant](num_classes=n_classes, **config.get('kwargs', {}))
+            else:
+                model = resnet18(num_classes=n_classes, **config.get('kwargs', {}))
+            return model
+        case 'vgg':
+            from .sample.vgg import (
+                vgg11, vgg11_bn, vgg13, vgg13_bn, vgg16, vgg16_bn, vgg19, vgg19_bn
+            )
+            variant = config.get('variant', '16').lower()
+            n_classes = config.get('n_classes', 1000)
+            variants = {
+                '11': vgg11,
+                '11_bn': vgg11_bn,
+                '13': vgg13,
+                '13_bn': vgg13_bn,
+                '16': vgg16,
+                '16_bn': vgg16_bn,
+                '19': vgg19,
+                '19_bn': vgg19_bn,
+            }
+            if variant in variants:
+                model = variants[variant](num_classes=n_classes, **config.get('kwargs', {}))
+            else:
+                model = vgg16(num_classes=n_classes, **config.get('kwargs', {}))
             return model
         case 'torchvision':
             import torchvision.models as models
