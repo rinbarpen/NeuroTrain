@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, Subset
 from pathlib import Path
 from abc import abstractmethod
-from typing import TypedDict, Optional, List, Sequence, Any, Dict
+from typing import TypedDict, Optional, List, Sequence, Any, Dict, Union
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
@@ -18,12 +18,12 @@ class CustomDataset(Dataset):
     # 标记是否需要缓存处理（子类可以重写）
     _cacheable = True
     
-    def __init__(self, root_dir: Path, split: str, desired_n: int = 0, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: str, desired_n: int = 0, **kwargs):
         """
         初始化数据集基类
         
         Args:
-            root_dir: 数据集根目录
+            root_dir: 数据集根目录（可以是字符串或Path对象）
             split: 数据集类型 ('train', 'test', 'valid', 'val', 'xx')
             desired_n: 期望的样本数量，默认0
             **kwargs: 其他扩展参数
@@ -36,7 +36,7 @@ class CustomDataset(Dataset):
         super(Dataset, self).__init__()
 
         self.split = split
-        self.root_dir = root_dir
+        self.root_dir = Path(root_dir)
         self.n = desired_n  # 数据集样本数量
         
         # 缓存相关配置（默认启用）
@@ -265,19 +265,19 @@ class CustomDataset(Dataset):
 
     @staticmethod
     @unimplemented
-    def get_train_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs) -> "CustomDataset":
         """获取训练数据集"""
         ...
     
     @staticmethod
     @unimplemented
-    def get_valid_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs) -> "CustomDataset":
         """获取验证数据集"""
         ...
     
     @staticmethod
     @unimplemented
-    def get_test_dataset(root_dir: Path, **kwargs) -> "CustomDataset":
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs) -> "CustomDataset":
         """获取测试数据集"""
         ...
 
@@ -528,7 +528,7 @@ class CustomDataset(Dataset):
         return self.get_dataset(['train', 'test'], **kwargs)
 
 class TransformersDataset(CustomDataset):
-    def __init__(self, root_dir: Path, split: str, desired_n: int=0, processor=None, tokenizer=None, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: str, desired_n: int=0, processor=None, tokenizer=None, **kwargs):
         self.tokenizer = tokenizer
         self.processor = processor
         self.tokenizer_args = kwargs.pop('tokenizer', {})

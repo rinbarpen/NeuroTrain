@@ -30,7 +30,7 @@ class BrainMRIClipDataset(CustomDataset):
         └── annotations.json
     """
     
-    def __init__(self, root_dir: Path, split: str = 'train', transform=None, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: str = 'train', transform=None, **kwargs):
         super().__init__(root_dir, split, transform=transform)
         
         self.split = split
@@ -191,16 +191,16 @@ class BrainMRIClipDataset(CustomDataset):
             }
     
     @classmethod
-    def get_train_dataset(cls, root_dir: Path, **kwargs):
+    def get_train_dataset(cls, root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return cls(root_dir, split='train', **kwargs)
     
     @classmethod
-    def get_valid_dataset(cls, root_dir: Path, **kwargs):
+    def get_valid_dataset(cls, root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return cls(root_dir, split='valid', **kwargs)
     
     @classmethod
-    def get_test_dataset(cls, root_dir: Path, **kwargs):
+    def get_test_dataset(cls, root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         return cls(root_dir, split='test', **kwargs)

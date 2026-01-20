@@ -1,7 +1,7 @@
 import json
 import torch
 from pathlib import Path
-from typing import Literal, Optional, Dict, List
+from typing import Literal, Optional, Dict, List, Union
 from PIL import Image
 import numpy as np
 import logging
@@ -22,7 +22,7 @@ class RefCOCODataset(CustomDataset):
         'test': 'test'
     }
     """RefCOCO数据集"""
-    def __init__(self, root_dir: Path, split: Literal['train', 'val', 'test', 'valid'], **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'val', 'test', 'valid'], **kwargs):
         super(RefCOCODataset, self).__init__(root_dir, split, **kwargs)
 
         self.root_dir = Path(root_dir)

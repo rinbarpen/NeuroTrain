@@ -1,6 +1,6 @@
 from pathlib import Path
 from PIL import Image
-from typing import Literal
+from typing import Literal, Union
 
 from .custom_dataset import CustomDataset
 from src.utils.ndict import Sample
@@ -11,7 +11,7 @@ class DriveDataset(CustomDataset):
         "test": ("test/images/*.png", "test/1st_manual/*.png"),
     }
 
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
         """
         DRIVE 数据集实现
         
@@ -31,8 +31,8 @@ class DriveDataset(CustomDataset):
         self.transforms = self._get_transforms()
         self.config = {"is_rgb": is_rgb, "source": image_glob, "target": label_glob}
 
-        images = [p for p in root_dir.glob(image_glob)]
-        masks = [p for p in root_dir.glob(label_glob)]
+        images = [p for p in self.root_dir.glob(image_glob)]
+        masks = [p for p in self.root_dir.glob(label_glob)]
 
         self.images = sorted(images)
         self.masks = sorted(masks)
@@ -75,15 +75,15 @@ class DriveDataset(CustomDataset):
         }
 
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         return DriveDataset(root_dir, 'train', **kwargs)
 
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         return DriveDataset(root_dir, 'test', **kwargs)
 
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         return DriveDataset(root_dir, 'test', **kwargs)
 
     def _get_transforms(self):

@@ -7,7 +7,7 @@ COCO Region Alignment Dataset
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -62,7 +62,7 @@ class COCO2017RegionAlignment(CustomDataset):
     
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: Literal['train', 'val', 'test', 'valid'],
         transform=None,
         tokenizer='openai/clip-vit-base-patch32',
@@ -171,15 +171,15 @@ class COCO2017RegionAlignment(CustomDataset):
         }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):  # type: ignore[override]
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):  # type: ignore[override]
         return COCO2017RegionAlignment(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):  # type: ignore[override]
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):  # type: ignore[override]
         return COCO2017RegionAlignment(root_dir, 'val', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):  # type: ignore[override]
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):  # type: ignore[override]
         logger.warning("COCO2017 test set annotations are not publicly available, using validation set instead")
         return COCO2017RegionAlignment(root_dir, 'val', **kwargs)
     

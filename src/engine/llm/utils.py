@@ -18,7 +18,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-from src.training.llm.config import ModelConfig
+from src.engine.llm.config import ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ def get_reward_function(
         
         # 加载 reward 模型
         if model_config is None:
-            from src.training.llm.config import ModelConfig
+            from src.engine.llm.config import ModelConfig
             model_config = ModelConfig(model_name_or_path=reward_model_path)
         
         reward_model, reward_tokenizer = load_model_and_tokenizer(

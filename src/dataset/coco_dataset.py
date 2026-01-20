@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 import numpy as np
 import yaml
-from typing import Literal, Optional, List, Dict, Tuple
+from typing import Literal, Optional, List, Dict, Tuple, Union
 import json
 from PIL import Image
 import logging
@@ -75,7 +75,7 @@ class COCODataset(CustomDataset):
     
     def __init__(
         self, 
-        root_dir: Path, 
+        root_dir: Union[str, Path], 
         split: Literal['train', 'val', 'test'],
         year: str = '2017',
         task: Literal['detection', 'segmentation', 'keypoint', 'caption'] = 'detection',
@@ -371,17 +371,17 @@ class COCODataset(CustomDataset):
             }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return COCODataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return COCODataset(root_dir, 'val', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         # COCO没有官方测试集标注，使用验证集
         logging.warning("COCO test set annotations are not publicly available, using validation set instead")
@@ -478,7 +478,7 @@ class COCOSegmentationDataset(CustomDataset):
     
     def __init__(
         self, 
-        root_dir: Path, 
+        root_dir: Union[str, Path], 
         split: Literal['train', 'val', 'test', 'valid'],
         year: str = '2017',
         use_crowd: bool = True,
@@ -667,17 +667,17 @@ class COCOSegmentationDataset(CustomDataset):
         }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return COCOSegmentationDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return COCOSegmentationDataset(root_dir, 'val', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         logging.warning("COCO test set annotations are not publicly available, using validation set instead")
         return COCOSegmentationDataset(root_dir, 'val', **kwargs)

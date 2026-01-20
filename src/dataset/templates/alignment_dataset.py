@@ -76,7 +76,7 @@ class AlignmentDatasetBase(CustomDataset):
 
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: str,
         *,
         manifest_path: Union[str, Path, None] = None,
@@ -392,7 +392,7 @@ class RegionAlignmentDatasetTemplate(AlignmentDatasetBase):
 
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: str,
         *,
         manifest_region_key: str = "regions",

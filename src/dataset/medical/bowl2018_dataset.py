@@ -4,7 +4,7 @@ import yaml
 from PIL import Image
 import numpy as np
 from torchvision import transforms
-from typing import Literal
+from typing import Literal, Union
 
 from ..custom_dataset import CustomDataset, Betweens
 
@@ -24,7 +24,7 @@ class BOWL2018Dataset(CustomDataset):
         """
         return transforms.ToTensor()
 
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], is_rgb: bool = False, **kwargs):
         """
         BOWL2018 实例分割数据集
         
@@ -51,8 +51,8 @@ class BOWL2018Dataset(CustomDataset):
             c = get_config()
             self.config["n_instance"] = len(c["classes"])  # 类别数即实例掩码数量
 
-        images = [p for p in root_dir.glob(image_glob)]
-        masks = [p for p in root_dir.glob(label_glob)]
+        images = [p for p in self.root_dir.glob(image_glob)]
+        masks = [p for p in self.root_dir.glob(label_glob)]
         # 将掩码按每个样本的实例数进行分组
         masks = [masks[i:i + self.config["n_instance"]] for i in range(0, len(masks), self.config["n_instance"])]
 
@@ -87,7 +87,7 @@ class BOWL2018Dataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Path, betweens: Betweens, **kwargs):
+    def to_numpy(save_dir: Path, root_dir: Union[str, Path], betweens: Betweens, **kwargs):
         """
         导出为numpy文件
         - 兼容保留 betweens 形参，但内部不再进行切片
@@ -147,16 +147,16 @@ class BOWL2018Dataset(CustomDataset):
         }
 
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练集实例"""
         return BOWL2018Dataset(root_dir, 'train', **kwargs)
 
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证集实例"""
         return BOWL2018Dataset(root_dir, 'valid', **kwargs)
 
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs): 
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs): 
         """获取测试集实例"""
         return BOWL2018Dataset(root_dir, 'test', **kwargs)

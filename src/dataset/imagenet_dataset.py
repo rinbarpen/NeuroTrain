@@ -1,7 +1,7 @@
 import torch
 from pathlib import Path
 import numpy as np
-from typing import Literal, Optional, List, Dict, Tuple
+from typing import Literal, Optional, List, Dict, Tuple, Union
 from PIL import Image
 import logging
 import json
@@ -56,7 +56,7 @@ class ImageNet1KDataset(CustomDataset):
     
     def __init__(
         self, 
-        root_dir: Path, 
+        root_dir: Union[str, Path], 
         split: Literal['train', 'val', 'test', 'valid'],
         transform=None,
         target_transform=None,
@@ -249,17 +249,17 @@ class ImageNet1KDataset(CustomDataset):
         }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return ImageNet1KDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return ImageNet1KDataset(root_dir, 'val', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         return ImageNet1KDataset(root_dir, 'test', **kwargs)
     

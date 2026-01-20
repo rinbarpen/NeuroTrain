@@ -18,14 +18,14 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 
-from src.training.llm.config import (
+from src.engine.llm.config import (
     ModelConfig,
     DatasetConfig,
     StageConfig,
     TrainingPlan,
     TrainingStageType,
 )
-from src.training.llm.utils import (
+from src.engine.llm.utils import (
     load_model_and_tokenizer,
     save_model_and_tokenizer,
     resolve_callable,
@@ -35,14 +35,29 @@ from src.training.llm.utils import (
 logger = logging.getLogger(__name__)
 
 
-class LLMVLMTrainingPipeline:
+class LLMTrainer:
     """
-    LLM/VLM 训练管线
-    按阶段顺序执行预训练、SFT、DPO、PPO、GRPO等训练流程
+    LLM/VLM 训练器
+    支持预训练、SFT、DPO、PPO、GRPO等多阶段训练流程
+    
+    使用示例:
+        # 方式1: 使用训练计划执行多阶段训练
+        >>> from src.engine.llm import LLMTrainer, load_training_plan_from_dict
+        >>> config_dict = {...}  # 训练配置
+        >>> plan = load_training_plan_from_dict(config_dict)
+        >>> trainer = LLMTrainer(plan)
+        >>> trainer.train()
+        
+        # 方式2: 直接调用单个训练方法
+        >>> trainer = LLMTrainer(plan)
+        >>> trainer.sft()  # 执行SFT训练
+        >>> trainer.dpo()  # 执行DPO训练
     """
     
     def __init__(self, plan: TrainingPlan):
         """
+        初始化训练器
+        
         Args:
             plan: 训练计划配置
         """
@@ -60,13 +75,13 @@ class LLMVLMTrainingPipeline:
         self.base_output_dir = Path(plan.base_output_dir) / plan.task_name / timestamp
         self.base_output_dir.mkdir(parents=True, exist_ok=True)
         
-        self.logger.info(f"Training pipeline initialized for task: {plan.task_name}")
+        self.logger.info(f"LLM Trainer initialized for task: {plan.task_name}")
         self.logger.info(f"Output directory: {self.base_output_dir}")
         
         # 阶段间传递的模型路径
         self._current_model_path: Optional[str] = None
     
-    def run(self):
+    def train(self):
         """执行完整训练计划"""
         self.logger.info(f"Starting training plan with {len(self.plan.stages)} stages")
         
@@ -83,6 +98,140 @@ class LLMVLMTrainingPipeline:
         
         self.logger.info("Training plan completed successfully!")
         self.logger.info(f"All outputs saved to: {self.base_output_dir}")
+    
+    # ==================== 公开的训练方法 ====================
+    
+    def sft(
+        self,
+        dataset_config: Optional[DatasetConfig] = None,
+        stage_config: Optional[StageConfig] = None,
+        **kwargs
+    ):
+        """
+        执行 SFT (Supervised Fine-Tuning) 训练
+        
+        Args:
+            dataset_config: 数据集配置，如果为None则从plan中获取
+            stage_config: 阶段配置，如果为None则创建默认配置
+            **kwargs: 传递给StageConfig的其他参数
+        """
+        if stage_config is None:
+            stage_config = StageConfig(
+                stage_type=TrainingStageType.SFT,
+                stage_name="sft",
+                **kwargs
+            )
+        if dataset_config is None:
+            dataset_config = self.plan.dataset_configs.get("sft") or DatasetConfig()
+            self.plan.dataset_configs["sft"] = dataset_config
+        
+        self._run_sft(stage_config)
+    
+    def dpo(
+        self,
+        dataset_config: Optional[DatasetConfig] = None,
+        stage_config: Optional[StageConfig] = None,
+        **kwargs
+    ):
+        """
+        执行 DPO (Direct Preference Optimization) 训练
+        
+        Args:
+            dataset_config: 数据集配置，如果为None则从plan中获取
+            stage_config: 阶段配置，如果为None则创建默认配置
+            **kwargs: 传递给StageConfig的其他参数
+        """
+        if stage_config is None:
+            stage_config = StageConfig(
+                stage_type=TrainingStageType.DPO,
+                stage_name="dpo",
+                **kwargs
+            )
+        if dataset_config is None:
+            dataset_config = self.plan.dataset_configs.get("dpo") or DatasetConfig()
+            self.plan.dataset_configs["dpo"] = dataset_config
+        
+        self._run_dpo(stage_config)
+    
+    def pretrain(
+        self,
+        dataset_config: Optional[DatasetConfig] = None,
+        stage_config: Optional[StageConfig] = None,
+        **kwargs
+    ):
+        """
+        执行预训练
+        
+        Args:
+            dataset_config: 数据集配置，如果为None则从plan中获取
+            stage_config: 阶段配置，如果为None则创建默认配置
+            **kwargs: 传递给StageConfig的其他参数
+        """
+        if stage_config is None:
+            stage_config = StageConfig(
+                stage_type=TrainingStageType.PRETRAIN,
+                stage_name="pretrain",
+                **kwargs
+            )
+        if dataset_config is None:
+            dataset_config = self.plan.dataset_configs.get("pretrain") or DatasetConfig()
+            self.plan.dataset_configs["pretrain"] = dataset_config
+        
+        self._run_pretrain(stage_config)
+    
+    def ppo(
+        self,
+        dataset_config: Optional[DatasetConfig] = None,
+        stage_config: Optional[StageConfig] = None,
+        **kwargs
+    ):
+        """
+        执行 PPO (Proximal Policy Optimization) 训练
+        
+        Args:
+            dataset_config: 数据集配置，如果为None则从plan中获取
+            stage_config: 阶段配置，如果为None则创建默认配置
+            **kwargs: 传递给StageConfig的其他参数
+        """
+        if stage_config is None:
+            stage_config = StageConfig(
+                stage_type=TrainingStageType.PPO,
+                stage_name="ppo",
+                **kwargs
+            )
+        if dataset_config is None:
+            dataset_config = self.plan.dataset_configs.get("ppo") or DatasetConfig()
+            self.plan.dataset_configs["ppo"] = dataset_config
+        
+        self._run_ppo(stage_config)
+    
+    def grpo(
+        self,
+        dataset_config: Optional[DatasetConfig] = None,
+        stage_config: Optional[StageConfig] = None,
+        **kwargs
+    ):
+        """
+        执行 GRPO (Group Relative Policy Optimization) 训练
+        
+        Args:
+            dataset_config: 数据集配置，如果为None则从plan中获取
+            stage_config: 阶段配置，如果为None则创建默认配置
+            **kwargs: 传递给StageConfig的其他参数
+        """
+        if stage_config is None:
+            stage_config = StageConfig(
+                stage_type=TrainingStageType.GRPO,
+                stage_name="grpo",
+                **kwargs
+            )
+        if dataset_config is None:
+            dataset_config = self.plan.dataset_configs.get("grpo") or DatasetConfig()
+            self.plan.dataset_configs["grpo"] = dataset_config
+        
+        self._run_grpo(stage_config)
+    
+    # ==================== 内部方法 ====================
     
     def _run_stage(self, stage_config: StageConfig):
         """执行单个训练阶段"""
@@ -162,6 +311,21 @@ class LLMVLMTrainingPipeline:
                         split=dataset_config.dataset_split,
                         **dataset_config.dataset_kwargs,
                     )
+                elif suffix == ".txt":
+                    # 支持自定义分隔符的txt文件
+                    if dataset_config.txt_delimiter and dataset_config.txt_field_names:
+                        dataset = self._load_txt_with_delimiter(
+                            dataset_path, dataset_config
+                        )
+                    else:
+                        # 默认使用tab分隔符，尝试作为CSV加载
+                        dataset = load_dataset(
+                            "csv",
+                            data_files=str(dataset_path),
+                            split=dataset_config.dataset_split,
+                            delimiter="\t",
+                            **dataset_config.dataset_kwargs,
+                        )
                 else:
                     raise ValueError(f"Unsupported dataset format: {suffix}")
         else:
@@ -172,6 +336,50 @@ class LLMVLMTrainingPipeline:
             dataset = dataset.select(range(min(dataset_config.num_samples, len(dataset))))
         
         self.logger.info(f"Dataset loaded: {len(dataset)} samples")
+        return dataset
+    
+    def _load_txt_with_delimiter(
+        self, dataset_path: Path, dataset_config
+    ) -> Dataset:
+        """
+        加载使用自定义分隔符的txt文件
+        
+        Args:
+            dataset_path: 数据集文件路径
+            dataset_config: 数据集配置
+            
+        Returns:
+            Dataset对象
+        """
+        delimiter = dataset_config.txt_delimiter
+        field_names = dataset_config.txt_field_names
+        
+        self.logger.info(
+            f"Loading txt file with delimiter '{delimiter}' and fields: {field_names}"
+        )
+        
+        examples = []
+        with open(dataset_path, "r", encoding="utf-8") as f:
+            for line_idx, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:  # 跳过空行
+                    continue
+                
+                parts = line.split(delimiter)
+                if len(parts) != len(field_names):
+                    self.logger.warning(
+                        f"Line {line_idx}: Expected {len(field_names)} fields, "
+                        f"got {len(parts)}. Skipping."
+                    )
+                    continue
+                
+                example = {field: part.strip() for field, part in zip(field_names, parts)}
+                examples.append(example)
+        
+        self.logger.info(f"Loaded {len(examples)} examples from txt file")
+        
+        # 转换为HuggingFace Dataset
+        dataset = Dataset.from_list(examples)
         return dataset
     
     def _build_training_arguments(
@@ -521,5 +729,8 @@ class LLMVLMTrainingPipeline:
         self.logger.info(f"GRPO completed. Model saved to {output_dir}")
 
 
-__all__ = ["LLMVLMTrainingPipeline"]
+# 为了向后兼容，保留 LLMVLMTrainingPipeline 作为别名
+LLMVLMTrainingPipeline = LLMTrainer
+
+__all__ = ["LLMTrainer", "LLMVLMTrainingPipeline"]
 

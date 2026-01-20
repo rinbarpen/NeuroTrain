@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 import yaml
-from typing import Literal
+from typing import Literal, Union
 import torchvision.transforms as T
 
 from ..custom_dataset import CustomDataset, Betweens
@@ -17,7 +17,7 @@ class ISIC2018Dataset(CustomDataset):
                "valid": ("ISIC2018_Task1-2_Validation_Input/*.jpg", "ISIC2018_Task1_Validation_GroundTruth/*.jpg"),
                "test":  ("ISIC2018_Task1-2_Test_Input/*.jpg", "ISIC2018_Task1_Test_GroundTruth/*.jpg")}
     
-    def __init__(self, root_dir: Path, split: Literal['train', 'test', 'valid'], is_rgb=False, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test', 'valid'], is_rgb=False, **kwargs):
         """
         初始化ISIC2018数据集
         
@@ -91,17 +91,17 @@ class ISIC2018Dataset(CustomDataset):
         }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return ISIC2018Dataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return ISIC2018Dataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         return ISIC2018Dataset(root_dir, 'test', **kwargs)
 

@@ -1,7 +1,7 @@
 from .custom_dataset import CustomDataset
 from .isic2016_dataset import ISIC2016Dataset
 
-from typing import Literal
+from typing import Literal, Union
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -99,7 +99,7 @@ def collate_fn(batch, processor):
         'gt_masks': [item['mask'] for item in batch],
     }
 
-def get_isic2016_reasoning_seg_dataloader(root_dir: Path, processor, batch_size: int, split: Literal['train', 'test', 'valid']='train', num_workers: int = 4):
+def get_isic2016_reasoning_seg_dataloader(root_dir: Union[str, Path], processor, batch_size: int, split: Literal['train', 'test', 'valid']='train', num_workers: int = 4):
     dataset = ISIC2016ReasoningSegDataset(root_dir, split)
     dataloader = dataset.dataloader(batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=lambda x: collate_fn(x, processor))
     return dataloader

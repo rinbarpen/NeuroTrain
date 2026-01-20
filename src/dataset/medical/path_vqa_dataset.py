@@ -4,7 +4,7 @@ from PIL import Image
 import io
 from fastparquet import ParquetFile
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Union
 import glob
 
 from ..custom_dataset import CustomDataset
@@ -18,7 +18,7 @@ class PathVQADataset(CustomDataset):
         'test': 'data/test-*.parquet',
         'valid': 'data/valid-*.parquet'
     }
-    def __init__(self, root_dir: Path, split: Literal['train', 'test', 'valid']):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test', 'valid']):
         """
         初始化 PathVQADataset。
 
@@ -27,7 +27,7 @@ class PathVQADataset(CustomDataset):
             split (Literal['train', 'test', 'valid']): 数据集划分（训练、测试或验证）。
         """
         super(PathVQADataset, self).__init__(root_dir, split)
-        data_path_pattern = root_dir / self.mapping[split]
+        data_path_pattern = self.root_dir / self.mapping[split]
         data_files = glob.glob(str(data_path_pattern))
         
         dfs = [ParquetFile(f).to_pandas() for f in data_files]
@@ -120,7 +120,7 @@ def collate_fn(batch, processor):
         'labels': labels,
     }
 
-def get_pathvqa_dataloader(root_dir: Path, processor, batch_size: int, split: Literal['train', 'test', 'valid']='train', num_workers: int = 4):
+def get_pathvqa_dataloader(root_dir: Union[str, Path], processor, batch_size: int, split: Literal['train', 'test', 'valid']='train', num_workers: int = 4):
     """
     获取 PathVQA 数据集的 Dataloader。
 

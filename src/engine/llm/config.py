@@ -83,6 +83,10 @@ class DatasetConfig:
     streaming: bool = False
     num_samples: Optional[int] = None  # 限制样本数
     dataset_kwargs: Dict[str, Any] = field(default_factory=dict)
+    
+    # 自定义文本文件格式（用于txt文件）
+    txt_delimiter: Optional[str] = None  # 分隔符，如 "|", "\t", ","
+    txt_field_names: Optional[List[str]] = None  # 字段名称列表，如 ["prompt", "response"]
 
 
 @dataclass

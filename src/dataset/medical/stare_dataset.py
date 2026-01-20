@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 import yaml
 import numpy as np
-from typing import Literal
+from typing import Literal, Union
 
 from ..custom_dataset import CustomDataset, Betweens
 
@@ -23,7 +23,7 @@ class StareDataset(CustomDataset):
         """
         return transforms.ToTensor()
 
-    def __init__(self, root_dir: Path, split: Literal['train', 'test'], is_rgb: bool = False, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test'], is_rgb: bool = False, **kwargs):
         """
         STARE 数据集
         
@@ -92,16 +92,16 @@ class StareDataset(CustomDataset):
         }
 
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练集实例"""
         return StareDataset(root_dir, 'train', **kwargs)
 
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """STARE 无验证集，返回 None"""
         return None
 
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试集实例"""
         return StareDataset(root_dir, 'test', **kwargs)

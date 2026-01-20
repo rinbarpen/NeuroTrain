@@ -29,7 +29,7 @@ class DiffusionDataset(CustomDataset):
     
     def __init__(
         self, 
-        root_dir: Path, 
+        root_dir: Union[str, Path], 
         split: str, 
         desired_n: int = 0,
         conditional: bool = False,
@@ -45,7 +45,8 @@ class DiffusionDataset(CustomDataset):
             condition_type: 条件类型 ('label': 类别标签, 'text': 文本描述, 'custom': 自定义)
             **kwargs: 其他扩展参数
         """
-        super().__init__(root_dir, split, desired_n, **kwargs)
+        root_path = Path(root_dir)
+        super().__init__(root_path, split, desired_n, **kwargs)
         self.conditional = conditional
         self.condition_type = condition_type
         
@@ -146,21 +147,21 @@ class UnconditionalDiffusionDataset(DiffusionDataset):
         return "unconditional_diffusion"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取训练数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
         return UnconditionalDiffusionDataset(base_dataset, **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取验证数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
         return UnconditionalDiffusionDataset(base_dataset, **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取测试数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
@@ -242,21 +243,21 @@ class ConditionalDiffusionDataset(DiffusionDataset):
         return "conditional_diffusion"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取训练数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
         return ConditionalDiffusionDataset(base_dataset, **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取验证数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
         return ConditionalDiffusionDataset(base_dataset, **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, base_dataset: CustomDataset = None, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], base_dataset: CustomDataset = None, **kwargs):
         """获取测试数据集"""
         if base_dataset is None:
             raise ValueError("必须提供 base_dataset 参数")
@@ -271,7 +272,7 @@ class TextToImageDiffusionDataset(DiffusionDataset):
     
     def __init__(
         self, 
-        root_dir: Path, 
+        root_dir: Union[str, Path], 
         split: str,
         image_paths: List[Path],
         captions: List[str],
@@ -342,17 +343,17 @@ class TextToImageDiffusionDataset(DiffusionDataset):
         return "text_to_image_diffusion"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return TextToImageDiffusionDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return TextToImageDiffusionDataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         return TextToImageDiffusionDataset(root_dir, 'test', **kwargs)
 
@@ -404,7 +405,7 @@ def create_diffusion_dataset(
 
 # 常用数据集的diffusion包装器
 def get_mnist_diffusion_dataset(
-    root_dir: Path,
+    root_dir: Union[str, Path],
     split: str = 'train',
     conditional: bool = False,
     **kwargs
@@ -431,7 +432,7 @@ def get_mnist_diffusion_dataset(
 
 
 def get_cifar10_diffusion_dataset(
-    root_dir: Path,
+    root_dir: Union[str, Path],
     split: str = 'train',
     conditional: bool = False,
     **kwargs
@@ -458,7 +459,7 @@ def get_cifar10_diffusion_dataset(
 
 
 def get_imagenet_diffusion_dataset(
-    root_dir: Path,
+    root_dir: Union[str, Path],
     split: str = 'train',
     conditional: bool = True,  # ImageNet通常用于条件生成
     **kwargs

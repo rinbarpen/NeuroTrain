@@ -4,7 +4,7 @@ from PIL import Image
 import io
 from fastparquet import ParquetFile
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Union
 
 from ..custom_dataset import CustomDataset
 
@@ -13,9 +13,9 @@ class VQARadDataset(CustomDataset):
         'train': 'data/train-00000-of-00001-eb8844602202be60.parquet',
         'test': 'data/test-00000-of-00001-e5bc3d208bb4deeb.parquet'
     }
-    def __init__(self, root_dir: Path, split: Literal['train', 'test']):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test']):
         super(VQARadDataset, self).__init__(root_dir, split)
-        data_path = root_dir / self.mapping[split]
+        data_path = self.root_dir / self.mapping[split]
         pf = ParquetFile(data_path)
         df = pf.to_pandas()
         self.samples = df
@@ -89,7 +89,7 @@ def collate_fn(batch, processor):
         'labels': labels,
     }
 
-def get_vqarad_dataloader(root_dir: Path, processor, batch_size: int, split: Literal['train', 'test']='train', num_workers: int = 4):
+def get_vqarad_dataloader(root_dir: Union[str, Path], processor, batch_size: int, split: Literal['train', 'test']='train', num_workers: int = 4):
     dataset = VQARadDataset(root_dir, split)
     dataloader = dataset.dataloader(
         batch_size=batch_size,

@@ -83,7 +83,7 @@ class CIFARDataset(CustomDataset):
     
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: Literal['train', 'valid', 'test'],
         cifar_type: Literal['cifar10', 'cifar100'] = 'cifar10',
         download: bool = True,
@@ -107,7 +107,8 @@ class CIFARDataset(CustomDataset):
             return_image_only: 是否只返回图像和标签（简化格式）
             **kwargs: 其他参数
         """
-        super(CIFARDataset, self).__init__(root_dir, split, **kwargs)
+        root_path = Path(root_dir)
+        super(CIFARDataset, self).__init__(root_path, split, **kwargs)
         
         self.cifar_type = cifar_type.lower()
         self.download = download
@@ -132,7 +133,7 @@ class CIFARDataset(CustomDataset):
         if split in ['train', 'valid']:
             # 训练集和验证集都从CIFAR训练数据中分割
             cifar_dataset = self.dataset_class(
-                root=str(root_dir),
+                root=str(self.root_dir),
                 train=True,
                 download=download,
                 transform=None  # 先不应用transform，后面再应用
@@ -152,7 +153,7 @@ class CIFARDataset(CustomDataset):
             
         else:  # test
             self.dataset = self.dataset_class(
-                root=str(root_dir),
+                root=str(self.root_dir),
                 train=False,
                 download=download,
                 transform=None
@@ -221,17 +222,17 @@ class CIFARDataset(CustomDataset):
         return "CIFAR"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs) -> "CIFARDataset":
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs) -> "CIFARDataset":
         """获取训练数据集"""
         return CIFARDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs) -> "CIFARDataset":
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs) -> "CIFARDataset":
         """获取验证数据集"""
         return CIFARDataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs) -> "CIFARDataset":
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs) -> "CIFARDataset":
         """获取测试数据集"""
         return CIFARDataset(root_dir, 'test', **kwargs)
     
@@ -298,7 +299,7 @@ class CIFAR10Dataset(CIFARDataset):
     NUM_CLASSES = 10
     CLASSES = CIFARDataset.CIFAR10_CLASSES
     
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], **kwargs):
         kwargs['cifar_type'] = 'cifar10'
         super().__init__(root_dir, split, **kwargs)
     
@@ -307,15 +308,15 @@ class CIFAR10Dataset(CIFARDataset):
         return "CIFAR10"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR10Dataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR10Dataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR10Dataset(root_dir, 'test', **kwargs)
     
     @staticmethod
@@ -338,7 +339,7 @@ class CIFAR100Dataset(CIFARDataset):
     COARSE_LABELS = CIFARDataset.CIFAR100_COARSE_LABELS
     NUM_COARSE_CLASSES = 20
     
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], **kwargs):
         kwargs['cifar_type'] = 'cifar100'
         super().__init__(root_dir, split, **kwargs)
     
@@ -347,15 +348,15 @@ class CIFAR100Dataset(CIFARDataset):
         return "CIFAR100"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR100Dataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR100Dataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         return CIFAR100Dataset(root_dir, 'test', **kwargs)
     
     @staticmethod

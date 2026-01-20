@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal, Dict, List, Optional
+from typing import Literal, Dict, List, Optional, Union
 from PIL import Image
 import torch
 import numpy as np
@@ -77,7 +77,7 @@ class COCO2017Dataset(CustomDataset):
     
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: Literal['train', 'val', 'test', 'valid'],
         task: Literal['detection', 'segmentation', 'keypoint', 'caption'] = 'detection',
         use_crowd: bool = False,
@@ -291,17 +291,17 @@ class COCO2017Dataset(CustomDataset):
             }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return COCO2017Dataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return COCO2017Dataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         # COCO没有官方测试集标注，使用验证集
         logger.warning("COCO2017 test set annotations are not publicly available, using validation set instead")

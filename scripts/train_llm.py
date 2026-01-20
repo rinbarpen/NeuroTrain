@@ -26,7 +26,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.config import load_config
-from src.training.llm import load_training_plan_from_dict, LLMVLMTrainingPipeline
+from src.engine.llm import LLMTrainer, load_training_plan_from_dict
 
 # 配置日志
 logging.basicConfig(
@@ -109,10 +109,10 @@ def main():
         logger.info(f"  Stage {idx}: {stage.stage_name} ({stage.stage_type.value})")
     
     # 执行训练
-    pipeline = LLMVLMTrainingPipeline(training_plan)
+    trainer = LLMTrainer(training_plan)
     
     try:
-        pipeline.run()
+        trainer.train()
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
         sys.exit(1)

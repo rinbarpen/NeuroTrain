@@ -6,6 +6,8 @@ from torchvision import transforms as mtf
 import os.path as osp
 from pathlib import Path
 
+from typing import Union
+
 from ..custom_dataset import CustomDataset
 
 TEMPALTES = [
@@ -16,14 +18,16 @@ TEMPALTES = [
 
 # "/media/rczx/Data/data/MRI_BRAIN_CLIP"
 class MriBrainClipDataset(CustomDataset):
-    def __init__(self, base_dir: Path, split: str, transform: mtf.Compose = mtf.Compose([
+    def __init__(self, base_dir: Union[str, Path], split: str, transform: mtf.Compose = mtf.Compose([
         mtf.RandomHorizontalFlip(),
         mtf.RandomVerticalFlip(),
         mtf.RandomRotation(degrees=15),
         mtf.PILToTensor(),
         mtf.ConvertImageDtype(torch.float32),
     ])):
-        super().__init__(base_dir, split, transform=transform)
+        base_path = Path(base_dir)
+        super().__init__(base_path, split, transform=transform)
+        self.base_dir = base_path
 
         # {base_dir}/{cancer}/{image_filename}.png | {image_filename}_mask.png
         self.cancer_types = [d.name for d in self.base_dir.iterdir()]
@@ -59,10 +63,10 @@ class MRI_Brain_from_classification(CustomDataset):
     TEMPLATES = [
         "{cancer} is exposed in the {image_source}", 
     ]
-    def __init__(self, base_dir: Path, split: str='train', *, processor=None):
+    def __init__(self, base_dir: Union[str, Path], split: str='train', *, processor=None):
         super().__init__()
-
-        self.data_dir = base_dir / self.mapping[split]
+        base_path = Path(base_dir)
+        self.data_dir = base_path / self.mapping[split]
         self.processor = processor
         self.samples = []
         self.lesions = [x.name for x in self.data_dir.iterdir()]

@@ -4,7 +4,7 @@ import yaml
 from PIL import Image
 import numpy as np
 from torchvision import transforms
-from typing import Literal
+from typing import Literal, Union
 import logging
 
 import nibabel as nib
@@ -12,7 +12,7 @@ import nibabel as nib
 from ..nnunet_dataset import NNUNetDataset
 
 class BTCVDataset(NNUNetDataset):
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=transforms.Compose([transforms.Grayscale()]), use_numpy=False, **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], transforms: transforms.Compose|None=transforms.Compose([transforms.Grayscale()]), use_numpy=False, **kwargs):
         # 调用父类NNUNetDataset的构造函数，保持原始参数名
         super(BTCVDataset, self).__init__(root_dir, split, use_numpy=use_numpy, config_filename='dataset_0.json', **kwargs)
 
@@ -55,13 +55,13 @@ class BTCVDataset(NNUNetDataset):
         }
 
     @staticmethod
-    def get_train_dataset(root_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         return BTCVDataset(root_dir, 'train', **kwargs)
     @staticmethod
-    def get_valid_dataset(root_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         return BTCVDataset(root_dir, 'valid', **kwargs)
     @staticmethod
-    def get_test_dataset(root_dir: Path, between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], between: tuple[float, float]=(0.0, 1.0), use_numpy=False, **kwargs):
         return BTCVDataset(root_dir, 'test', **kwargs)
 
     @staticmethod

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 from monai.transforms.compose import Compose
 from monai.transforms.intensity.array import NormalizeIntensity
@@ -34,7 +34,7 @@ class BraTS2020Dataset(CustomDataset):
 
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: str = "train",
         modalities: Optional[Sequence[str]] = None,
         transform: Optional[Compose] = None,

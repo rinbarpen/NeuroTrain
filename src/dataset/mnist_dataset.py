@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 import numpy as np
 import yaml
-from typing import Literal
+from typing import Literal, Union
 from torchvision import transforms, datasets
 from torch.utils.data import Subset
 
@@ -20,7 +20,7 @@ class MNISTDataset(CustomDataset):
         "test": ("test", "test")
     }
     
-    def __init__(self, root_dir: Path, split: Literal['train', 'test', 'valid'], 
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test', 'valid'], 
                  download=True, **kwargs):
         """
         初始化MNIST数据集
@@ -43,7 +43,7 @@ class MNISTDataset(CustomDataset):
         # 加载MNIST数据集
         if split in ['train', 'valid']:
             # 训练集和验证集都从MNIST训练数据中分割
-            mnist_dataset = datasets.MNIST(root=str(root_dir), train=True, download=download, transform=None)
+            mnist_dataset = datasets.MNIST(root=str(self.root_dir), train=True, download=download, transform=None)
             
             # 分割训练集和验证集 (50000 train, 10000 valid)
             if split == 'train':
@@ -53,7 +53,7 @@ class MNISTDataset(CustomDataset):
                 
             self.dataset = Subset(mnist_dataset, indices)
         else:  # test
-            self.dataset = datasets.MNIST(root=str(root_dir), train=False, download=download, transform=None)
+            self.dataset = datasets.MNIST(root=str(self.root_dir), train=False, download=download, transform=None)
             
         self.n = len(self.dataset)
         
@@ -113,16 +113,16 @@ class MNISTDataset(CustomDataset):
         }
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         """获取训练数据集"""
         return MNISTDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         """获取验证数据集"""
         return MNISTDataset(root_dir, 'valid', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         """获取测试数据集"""
         return MNISTDataset(root_dir, 'test', **kwargs)

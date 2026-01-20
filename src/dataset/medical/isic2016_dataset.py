@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Union
 from PIL import Image
 
 from ..custom_dataset import CustomDataset
@@ -10,11 +10,11 @@ class ISIC2016Dataset(CustomDataset):
         'valid': ('{task_type}/ISBI2016_ISIC_Part1_Test_Data', '{task_type}/ISBI2016_ISIC_Part1_Test_GroundTruth'),
         'test': ('{task_type}/ISBI2016_ISIC_Part1_Test_Data', '{task_type}/ISBI2016_ISIC_Part1_Test_GroundTruth'),
     }
-    def __init__(self, root_dir: Path, split: Literal['train', 'valid', 'test'], task_type: Literal['Task1', 'Task2', 'Task3'], **kwargs):
+    def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'valid', 'test'], task_type: Literal['Task1', 'Task2', 'Task3'], **kwargs):
         super(ISIC2016Dataset, self).__init__(root_dir, split)
         self.task_type = task_type
 
-        self.root_dir = root_dir
+        self.root_dir = Path(root_dir)
         self.image_dir = self.root_dir / self.mapping[split][0].format(task_type=task_type)
         self.mask_dir = self.root_dir / self.mapping[split][1].format(task_type=task_type)
         # 获取所有图像文件并排序
@@ -88,17 +88,17 @@ class ISIC2016Dataset(CustomDataset):
         return "ISIC2016"
 
     @staticmethod
-    def get_train_dataset(root_dir: Path, task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
         """获取训练集实例"""
         return ISIC2016Dataset(root_dir, 'train', task_type, **kwargs)
 
     @staticmethod
-    def get_valid_dataset(root_dir: Path, task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
         """获取验证集实例"""
         return ISIC2016Dataset(root_dir, 'valid', task_type, **kwargs)
 
     @staticmethod
-    def get_test_dataset(root_dir: Path, task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], task_type: Literal['Task1', 'Task2', 'Task3'] = 'Task1', **kwargs):
         """获取测试集实例"""
         return ISIC2016Dataset(root_dir, 'test', task_type, **kwargs)
 

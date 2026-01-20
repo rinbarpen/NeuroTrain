@@ -4,7 +4,7 @@ RefCOCO数据集适配器，用于EMOE Region-Text对齐任务
 """
 import torch
 from pathlib import Path
-from typing import List, Dict, Literal
+from typing import List, Dict, Literal, Union
 from PIL import Image
 import numpy as np
 import logging
@@ -26,7 +26,7 @@ class RefCOCOAlignmentDataset(CustomDataset):
     
     def __init__(
         self,
-        root_dir: Path,
+        root_dir: Union[str, Path],
         split: Literal['train', 'val', 'test', 'valid'],
         dataset_name: str = 'refcoco',
         image_dir: str = 'images',
@@ -173,15 +173,15 @@ class RefCOCOAlignmentDataset(CustomDataset):
         return "RefCOCOAlignment"
     
     @staticmethod
-    def get_train_dataset(root_dir: Path, **kwargs):
+    def get_train_dataset(root_dir: Union[str, Path], **kwargs):
         return RefCOCOAlignmentDataset(root_dir, 'train', **kwargs)
     
     @staticmethod
-    def get_valid_dataset(root_dir: Path, **kwargs):
+    def get_valid_dataset(root_dir: Union[str, Path], **kwargs):
         return RefCOCOAlignmentDataset(root_dir, 'val', **kwargs)
     
     @staticmethod
-    def get_test_dataset(root_dir: Path, **kwargs):
+    def get_test_dataset(root_dir: Union[str, Path], **kwargs):
         return RefCOCOAlignmentDataset(root_dir, 'test', **kwargs)
 
 
