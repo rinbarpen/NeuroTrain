@@ -78,7 +78,8 @@ class Transformer(nn.Module):
             ]))
 
     def forward(self, x):
-        for attn, ff in self.layers:
+        for layer in self.layers:
+            attn, ff = layer # type: ignore
             x = attn(x) + x
             x = ff(x) + x
 
@@ -129,3 +130,77 @@ class ViT(nn.Module):
 
         x = self.to_latent(x)
         return self.mlp_head(x)
+
+# Model factory functions
+
+def vit_tiny_patch16_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=16, 
+        num_classes=num_classes, 
+        dim=192, 
+        depth=12, 
+        heads=3, 
+        mlp_dim=768,
+        **kwargs
+    )
+
+def vit_small_patch16_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=16, 
+        num_classes=num_classes, 
+        dim=384, 
+        depth=12, 
+        heads=6, 
+        mlp_dim=1536,
+        **kwargs
+    )
+
+def vit_base_patch16_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=16, 
+        num_classes=num_classes, 
+        dim=768, 
+        depth=12, 
+        heads=12, 
+        mlp_dim=3072,
+        **kwargs
+    )
+
+def vit_base_patch32_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=32, 
+        num_classes=num_classes, 
+        dim=768, 
+        depth=12, 
+        heads=12, 
+        mlp_dim=3072,
+        **kwargs
+    )
+
+def vit_large_patch16_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=16, 
+        num_classes=num_classes, 
+        dim=1024, 
+        depth=24, 
+        heads=16, 
+        mlp_dim=4096,
+        **kwargs
+    )
+
+def vit_huge_patch14_224(num_classes, **kwargs):
+    return ViT(
+        image_size=224, 
+        patch_size=14, 
+        num_classes=num_classes, 
+        dim=1280, 
+        depth=32, 
+        heads=16, 
+        mlp_dim=5120,
+        **kwargs
+    )

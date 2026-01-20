@@ -1,7 +1,7 @@
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset, Subset, IterableDataset
 from pathlib import Path
 from abc import abstractmethod
-from typing import TypedDict, Optional, List, Sequence, Any, Dict, Union
+from typing import TypedDict, Optional, List, Sequence, Any, Dict, Union, Iterator
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
@@ -323,7 +323,7 @@ class CustomDataset(Dataset):
             test = 1.0 - (train + valid)
 
         rng = np.random.default_rng(random_state)
-        indices = np.arange(n)
+        indices = np.arange(0, n)
         if shuffle:
             rng.shuffle(indices)
 
@@ -350,7 +350,7 @@ class CustomDataset(Dataset):
         random_state: Optional[int] = None,
         include_test: bool = False,
         test_ratio: float = 0.0,
-    ) -> List[tuple[Subset, Subset, Optional[Subset]]]:
+    ) -> List[tuple[Optional[Subset], Optional[Subset], Optional[Subset]]]:
         """对给定数据集执行 K 折交叉验证划分
         
         说明：
@@ -377,14 +377,14 @@ class CustomDataset(Dataset):
             return []
 
         rng = np.random.default_rng(random_state)
-        indices = np.arange(n)
+        indices = np.arange(0, n)
         if shuffle:
             rng.shuffle(indices)
 
         # 将索引均匀切分为 n_splits 份，最后一份可能更长
         folds = np.array_split(indices, n_splits)
 
-        results: List[tuple[Subset, Subset, Optional[Subset]]] = []
+        results: List[tuple[Optional[Subset], Optional[Subset], Optional[Subset]]] = []
         for i in range(n_splits):
             valid_idx = folds[i]
             train_idx = np.concatenate([folds[j] for j in range(n_splits) if j != i])
@@ -509,13 +509,18 @@ class CustomDataset(Dataset):
         
         datasets = []
         for dt in splits:
+            dataset = None
             if dt == 'train':
                 dataset = self.get_train_dataset(**kwargs['train'])
-            elif dt == 'valid' or dt == 'val':
+            elif dt in ['valid', 'val']:
                 dataset = self.get_valid_dataset(**kwargs['valid'])
             elif dt == 'test':
                 dataset = self.get_test_dataset(**kwargs['test'])
-            datasets.append(dataset)
+            
+            if dataset is not None:
+                datasets.append(dataset)
+            else:
+                logger.warning(f"未知的数据集类型: {dt}, 跳过")
         return datasets
 
     def get_train_valid_test_dataset(self, **kwargs):
@@ -526,6 +531,98 @@ class CustomDataset(Dataset):
     
     def get_train_test_dataset(self, **kwargs):
         return self.get_dataset(['train', 'test'], **kwargs)
+
+class LazyCustomDataset(CustomDataset):
+    """延迟加载数据集基类，适用于超大规模数据集 (>100GB)
+    
+    核心思想：
+    - 不将所有样本元数据加载到内存。
+    - 使用磁盘索引（如 Parquet, SQLite, 或内存映射文件）进行随机访问。
+    - 仅在 __getitem__ 时根据索引从磁盘读取必要的元数据。
+    """
+    
+    def __init__(self, root_dir: Path, split: str, desired_n: int = 0, **kwargs):
+        """
+        初始化延迟加载数据集
+        
+        Args:
+            root_dir: 数据集根目录
+            split: 数据集类型
+            desired_n: 期望的样本数量（如果为0，则由索引文件决定）
+            **kwargs: 其他参数
+                - index_path: 索引文件路径（可选）
+        """
+        # 延迟加载的数据集通常不适用传统的缓存机制，除非是针对索引的缓存
+        kwargs['enable_cache'] = kwargs.get('enable_cache', False)
+        super().__init__(root_dir, split, desired_n=desired_n, **kwargs)
+        
+        self.index_path = kwargs.get('index_path')
+        self._index_ready = False
+        
+        # 子类应该在这里初始化索引句柄（但不应加载全部数据）
+        self._setup_index()
+
+    @abstractmethod
+    def _setup_index(self):
+        """初始化索引句柄（磁盘文件句柄等）
+        
+        子类必须实现此方法。应设置 self.n (如果 desired_n 为0)。
+        """
+        ...
+
+    @abstractmethod
+    def _get_metadata(self, index: int) -> Dict[str, Any]:
+        """根据索引获取单条样本的元数据
+        
+        Args:
+            index: 样本索引
+        
+        Returns:
+            元数据字典（包含文件路径、标签等）
+        """
+        ...
+
+    def __getitem__(self, index: int) -> Any:
+        """通用延迟加载获取方法"""
+        if index < 0 or index >= self.n:
+            raise IndexError(f"Index {index} out of range for dataset of size {self.n}")
+            
+        metadata = self._get_metadata(index)
+        return self.load_sample(metadata)
+
+    @abstractmethod
+    def load_sample(self, metadata: Dict[str, Any]) -> Any:
+        """根据元数据加载实际数据内容（图像、张量等）
+        
+        Args:
+            metadata: 由 _get_metadata 返回的元数据
+        """
+        ...
+
+class StreamingCustomDataset(IterableDataset):
+    """流式加载数据集基类，适用于超大规模且仅需顺序访问的数据集
+    
+    核心思想：
+    - 兼容 torch.utils.data.IterableDataset。
+    - 适用于读取分布式文件系统（如 S3, HDFS）上的分片。
+    """
+    def __init__(self, root_dir: Path, split: str, **kwargs):
+        super().__init__()
+        self.root_dir = root_dir
+        self.split = split
+        # 流式数据集通常没有固定的 n，或者 n 很大
+        self.n = kwargs.get('desired_n', 0)
+
+    @abstractmethod
+    def __iter__(self) -> Iterator[Any]:
+        """返回数据集的迭代器"""
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def name() -> str:
+        """返回数据集名称"""
+        ...
 
 class TransformersDataset(CustomDataset):
     def __init__(self, root_dir: Union[str, Path], split: str, desired_n: int=0, processor=None, tokenizer=None, **kwargs):
@@ -541,11 +638,16 @@ class TransformersDataset(CustomDataset):
         
         datasets = []
         for dt in splits:
+            dataset = None
             if dt == 'train':
                 dataset = self.get_train_dataset(**kwargs['train'], tokenizer=tokenizer, processor=processor)
-            elif dt == 'valid' or dt == 'val':
+            elif dt in ['valid', 'val']:
                 dataset = self.get_valid_dataset(**kwargs['valid'], tokenizer=tokenizer, processor=processor)
             elif dt == 'test':
                 dataset = self.get_test_dataset(**kwargs['test'], tokenizer=tokenizer, processor=processor)
-            datasets.append(dataset)
+            
+            if dataset is not None:
+                datasets.append(dataset)
+            else:
+                logger.warning(f"未知的数据集类型: {dt}, 跳过")
         return datasets
