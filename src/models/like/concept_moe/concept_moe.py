@@ -18,18 +18,33 @@ class ObjectConceptMoELayer(nn.Module):
         self.shared_moe = MoEDenseLayer(hidden_dim=hidden_dim, num_experts=shared_concepts, expert_hidden_dim=expert_hidden_dim, dropout=dropout)
         
     def forward(self, x, return_middle_outputs=False):
-        individual_out, individual_middle_outputs = self.individual_moe(x, return_middle_outputs=return_middle_outputs)
-        shared_out, shared_middle_outputs = self.shared_moe(x, return_middle_outputs=return_middle_outputs)
-        x = individual_out + shared_out
+        # MoE层现在返回 (output, aux_loss) 或 (output, aux_loss, middle_outputs)
+        individual_result = self.individual_moe(x, return_middle_outputs=return_middle_outputs)
+        shared_result = self.shared_moe(x, return_middle_outputs=return_middle_outputs)
+        
         if return_middle_outputs:
-            return x, {
+            individual_out, individual_aux_loss, individual_middle_outputs = individual_result
+            shared_out, shared_aux_loss, shared_middle_outputs = shared_result
+        else:
+            individual_out, individual_aux_loss = individual_result
+            shared_out, shared_aux_loss = shared_result
+            individual_middle_outputs = None
+            shared_middle_outputs = None
+        
+        x = individual_out + shared_out
+        total_aux_loss = individual_aux_loss + shared_aux_loss
+        
+        if return_middle_outputs:
+            return x, total_aux_loss, {
                 'individual_out': individual_out,
                 'shared_out': shared_out,
+                'individual_aux_loss': individual_aux_loss,
+                'shared_aux_loss': shared_aux_loss,
                 'individual_middle_outputs': individual_middle_outputs,
                 'shared_middle_outputs': shared_middle_outputs,
             }
         else:
-            return x
+            return x, total_aux_loss
 
 class ObjectConceptMoE(nn.Module):
     def __init__(self, n_layers: int, hidden_dim: int, individual_concepts: int = 32, shared_concepts: int = 4, expert_hidden_dim: Optional[int] = None, k: int = 16, dropout: float = 0.1, num_heads: int = 32, *, n_objs: int):
@@ -52,12 +67,19 @@ class ObjectConceptMoE(nn.Module):
         identity = x
         x = self.norm(x)
         x = x.reshape(B, self.n_objs, N, D)
-        x, obj_concept_middle_outputs = self.obj_concept_moe(x, return_middle_outputs=return_middle_outputs)
+        result = self.obj_concept_moe(x, return_middle_outputs=return_middle_outputs)
+        
+        if return_middle_outputs:
+            x, aux_loss, obj_concept_middle_outputs = result
+        else:
+            x, aux_loss = result
+            obj_concept_middle_outputs = None
+        
         x = x + identity
         if return_middle_outputs:
-            return x, obj_concept_middle_outputs
+            return x, aux_loss, obj_concept_middle_outputs
         else:
-            return x
+            return x, aux_loss
 
 
 class _ObjectConceptMoEWrapper(nn.Module):
@@ -69,10 +91,11 @@ class _ObjectConceptMoEWrapper(nn.Module):
 
     def forward(self, x):
         if self.track_middle_outputs:
-            out, middle_outputs = self.oc_layer(x, return_middle_outputs=True)
+            out, aux_loss, middle_outputs = self.oc_layer(x, return_middle_outputs=True)
             self.last_middle_outputs = middle_outputs
             return out
-        return self.oc_layer(x)
+        out, aux_loss = self.oc_layer(x)
+        return out
 
 
 def _get_transformer_blocks(vit_model: nn.Module):
