@@ -1,6 +1,6 @@
 # from .inference import SegmentPredictor
 from .trainer import Trainer
-from .predictor import Predictor
+from .predictor import Predictor, get_predictor
 from .tester import Tester
 from .deepspeed_trainer import DeepSpeedTrainer
 from .multi_predictor import MultiModelPredictor
@@ -20,6 +20,7 @@ from .llm import (
 __all__ = [
     "Trainer",
     "Predictor",
+    "get_predictor",
     "Tester",
     "DeepSpeedTrainer",
     "MultiModelPredictor",

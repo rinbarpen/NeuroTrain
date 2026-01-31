@@ -1,11 +1,11 @@
- - [ ] Email Alert
+ - [x] Email Alert
  - [x] UV support
- - [ ] Support Continue Mode
- - [ ] support peft
- - [ ] support colab
- - [ ] support web viewer
- - [ ] complete inference and common predictors
- - [ ] manage paths from any modules
+ - [x] Support Continue Mode
+ - [x] support peft
+ - [x] support colab
+ - [x] support web viewer
+ - [x] complete inference and common predictors
+ - [x] manage paths from any modules
 
 Trainer:
  - [x] Record and Show the inference time in one batch and one turn and GLOPS, Parameters after training
@@ -13,15 +13,15 @@ Trainer:
  - [x] Support Painter (nrows, ncols) to be assigned automatically
  - [x] Save all info while training 
  - [x] Optimize the train of Trainer
- - [ ] Support recovery(full) from any last task 
- - [ ] Support Wandb for full-recording and full-alerting
+ - [x] Support recovery(full) from any last task 
+ - [x] Support Wandb for full-recording and full-alerting
 
 Analyzer:
- - [ ] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
- - [ ] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
+ - [x] Output the metric scores as table in console when finishing training, testing and predicting about every class and the mean score of all classes on every metric
+ - [x] Output Model Info about GFLOPS, Parameters, Inference Time Cost, FPS, Model Weight File Size, Model Ext Size
 
 MODEL:
- - [ ] ViT with Grid and Fixed patch size, and to retain spatial info in transformer
+ - [x] ViT with Grid and Fixed patch size, and to retain spatial info in transformer
  - [x] Spatial Embedding
  - [x] Rotator
- - [ ] Pretrained model Manager
+ - [x] Pretrained model Manager

@@ -1,7 +1,10 @@
+# ViT Grid example: fixed patch size, 2D spatial info, no CLS token.
+# Use: uv run python main.py -c configs/single/train-vit_grid-example.toml --train
+
 output_dir = "./runs"
 task = "ImageCls"
 entity = "Lab"
-run_id = ""            # 运行时自动生成
+run_id = ""
 device = "cuda"
 seed = 42
 classes = ["cifar10"]
@@ -9,12 +12,17 @@ metrics = ['accuracy', 'top1', 'top5']
 postprocess = "classification"
 
 [model]
-name = "torchvision"
+name = "vit_grid"
+pretrained = ""
+
 [model.config]
-arch = "resnet50"
-pretrained = true
-n_classes = 10         # CIFAR-10
-n_channels = 3
+variant = "base"
+n_classes = 10
+image_size = 224
+patch_size = 16
+channels = 3
+input_sizes = [[3, 224, 224]]
+dtypes = ["float32"]
 
 [[criterion]]
 type = "cross_entropy"
@@ -25,7 +33,7 @@ config = {}
 RESIZE = [224, 224]
 PIL_TO_TENSOR = []
 CONVERT_IMAGE_DTYPE = ['float32']
-NORMALIZE = [false]    # 使用默认ImageNet均值方差（见 utils/transform.py 中 normalize）
+NORMALIZE = [false]
 
 [dataset]
 name = "cifar10"
@@ -40,9 +48,9 @@ pin_memory = true
 
 [train]
 batch_size = 64
-epoch = 40
-save_period = 0.2
-save_recovery_period = 0.2
+epoch = 20
+save_period = 0.25
+save_recovery_period = 0.25
 grad_accumulation_steps = 0
 
 [train.optimizer]
@@ -52,7 +60,7 @@ weight_decay = 1e-4
 
 [train.lr_scheduler]
 type = "cosine"
-warmup = 5
+warmup = 2
 warmup_lr = 1e-5
 
 [test]
@@ -64,12 +72,8 @@ input = ""
 
 [private]
 wandb = false
-wandb_alerts = true   # when wandb is on, send alerts to W&B on run failure and AlertSystem triggers
 mode = 0
 
 [private.log]
 verbose = true
 debug = false
-log_file_format = '%Y-%m-%d %H_%M_%S'
-log_format = '%(asctime)s %(levelname)s | %(name)s | %(message)s'
-

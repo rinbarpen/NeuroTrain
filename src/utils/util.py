@@ -325,6 +325,124 @@ def model_flops(output_dir: Path, model: nn.Module, input_sizes: Sequence[int]|S
     
     return total_flops
 
+
+def _format_file_size(size_bytes: int) -> str:
+    if size_bytes <= 0:
+        return "N/A"
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    return f"{size_bytes} B"
+
+
+def print_model_info_block(
+    output_dir: Path,
+    model: nn.Module,
+    input_sizes: Sequence[int] | Sequence[Sequence[int]],
+    dtypes: Type | Sequence[Type] | None = None,
+    device: str = "cuda",
+    *,
+    num_warmup: int = 5,
+    num_timed: int = 20,
+    write_file: bool = True,
+) -> None:
+    """
+    Print unified Model Info table: GFLOPs, Parameters, Inference Time, FPS,
+    Model Weight File Size, Model Ext Size. Optionally write to output_dir/model_info.txt.
+    """
+    if isinstance(input_sizes, (list, tuple)) and len(input_sizes) > 0 and isinstance(input_sizes[0], int):
+        input_sizes = [input_sizes]
+    m = model.module if hasattr(model, "module") else model
+    m = m.to(device)
+
+    # GFLOPs and params via existing helpers (no extra rich print)
+    try:
+        total_flops = model_flops(output_dir, m, input_sizes, dtypes=dtypes, device=device, rich_print=False)
+        gflops = total_flops / 1e9
+    except Exception as e:
+        logging.warning("model_flops failed: %s", e)
+        gflops = float("nan")
+    try:
+        model_info(output_dir, m, input_sizes, dtypes=dtypes, device=device, rich_print=False)
+    except Exception as e:
+        logging.warning("model_info failed: %s", e)
+    num_params = sum(p.numel() for p in m.parameters())
+
+    # Inference time and FPS
+    if dtypes is None:
+        dtype = torch.float32
+    elif isinstance(dtypes, type):
+        dtype = dtypes
+    else:
+        dtype = dtypes[0] if dtypes else torch.float32
+    input_tensors = [torch.randn(s, dtype=dtype, device=device) for s in input_sizes]
+    for _ in range(num_warmup):
+        if len(input_tensors) == 1:
+            _ = m(*input_tensors)
+        else:
+            _ = m(input_tensors)
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    start = time.perf_counter()
+    for _ in range(num_timed):
+        if len(input_tensors) == 1:
+            _ = m(*input_tensors)
+        else:
+            _ = m(input_tensors)
+    if device.startswith("cuda"):
+        torch.cuda.synchronize()
+    elapsed = time.perf_counter() - start
+    inference_time_s = elapsed / num_timed
+    batch_size = int(input_sizes[0][0]) if input_sizes else 1
+    time_per_sample = inference_time_s / max(1, batch_size)
+    fps = 1.0 / time_per_sample if time_per_sample > 0 else 0.0
+
+    # Weight file sizes (train/weights under output_dir)
+    weights_dir = output_dir / "train" / "weights"
+    model_weight_size = 0
+    model_ext_size = 0
+    for name in ("best.pt", "last.pt"):
+        p = weights_dir / name
+        if p.exists():
+            model_weight_size = p.stat().st_size
+            break
+    for name in ("best.ext.pt", "last.ext.pt"):
+        p = weights_dir / name
+        if p.exists():
+            model_ext_size = p.stat().st_size
+            break
+
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Model Info")
+    table.add_column("Item", justify="left")
+    table.add_column("Value", justify="right")
+    table.add_row("GFLOPs", f"{gflops:.3f}" if not math.isnan(gflops) else "N/A")
+    table.add_row("Parameters", f"{num_params:,}")
+    table.add_row("Inference Time Cost", f"{time_per_sample * 1000:.2f} ms" if batch_size == 1 else f"{inference_time_s:.4f} s (batch)")
+    table.add_row("FPS", f"{fps:.2f}")
+    table.add_row("Model Weight File Size", _format_file_size(model_weight_size))
+    table.add_row("Model Ext Size", _format_file_size(model_ext_size))
+    console.print(table)
+
+    if write_file:
+        lines = [
+            "Model Info",
+            "==========",
+            f"GFLOPs: {gflops:.3f}" if not math.isnan(gflops) else "GFLOPs: N/A",
+            f"Parameters: {num_params:,}",
+            f"Inference Time Cost: {time_per_sample * 1000:.2f} ms" if batch_size == 1 else f"Inference Time Cost: {inference_time_s:.4f} s (batch)",
+            f"FPS: {fps:.2f}",
+            f"Model Weight File Size: {_format_file_size(model_weight_size)}",
+            f"Model Ext Size: {_format_file_size(model_ext_size)}",
+        ]
+        info_file = output_dir / "model_info.txt"
+        with info_file.open("w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
 # freeze_filter = lambda n: ("clip" in n) or ("bert" in n)
 # c = {"lr": [None, 0.01]}
 

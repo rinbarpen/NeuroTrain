@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import copy
 import logging
@@ -14,7 +15,7 @@ warnings.filterwarnings("ignore")
 
 from src.config import get_config, dump_config, is_predict, is_train, is_test
 from src.options import parse_args
-from src.engine import Trainer, Tester, Predictor, MultiModelPredictor
+from src.engine import Trainer, Tester, Predictor, get_predictor, MultiModelPredictor
 from src.models import get_model
 from src.dataset import get_train_valid_test_dataloader
 from src.utils import (
@@ -24,8 +25,7 @@ from src.utils import (
     load_model_ext,
     prepare_logger,
     set_seed,
-    model_info,
-    model_flops,
+    print_model_info_block,
     str2dtype,
 )
 from src.utils.ddp_utils import (
@@ -35,6 +35,7 @@ from src.utils.ddp_utils import (
     setup_ddp_logging
 )
 from src.constants import TrainOutputFilenameEnv, ProjectFilenameEnv
+from src.pretrained_manager import get_pretrained_path, resolve_pretrained_to_file
 
 
 def _should_auto_start_monitor(monitor_conf: dict) -> bool:
@@ -72,7 +73,7 @@ def _notify_monitor_auto_start(config: dict, output_dir: Path) -> None:
     if not _should_auto_start_monitor(monitor_conf):
         return
     try:
-        import requests  # type: ignore
+            import requests  # type: ignore
     except Exception:
         logging.getLogger('monitor').warning("requests 模块不可用，跳过监控自动通知")
         return
@@ -111,9 +112,20 @@ def _notify_monitor_auto_start(config: dict, output_dir: Path) -> None:
     except Exception as exc:
         logging.getLogger('monitor').warning("监控自动启动通知失败：%s", exc)
 
-if __name__ == "__main__":
-    parse_args()
-    
+def _wandb_alert_on_failure(exc: BaseException) -> None:
+    """Send wandb alert when run fails, if wandb is enabled."""
+    try:
+        from src.config import get_config
+        c = get_config()
+        if c.get("private", {}).get("wandb") and c.get("private", {}).get("wandb_alerts", True):
+            import wandb
+            wandb.alert(title="Run failed", text=str(exc))
+    except Exception:
+        pass
+
+
+def _run_main():
+    """Main execution body; wrapped in try/except for wandb alert on failure."""
     c = get_config()
     async_workers = c['train'].get('async_workers')
     if async_workers is None or async_workers <= 0:
@@ -122,11 +134,11 @@ if __name__ == "__main__":
         max_workers=async_workers,
         thread_name_prefix='trainer_async',
     )
-    
+
     # 检查是否使用 DDP
     use_ddp = c.get("ddp", {}).get("enabled", False)
     device = c["device"]
-    
+
     # 初始化 DDP 分布式环境
     if use_ddp:
         # 初始化分布式环境
@@ -135,10 +147,10 @@ if __name__ == "__main__":
         world_size = rank_info['world_size']
         device = rank_info['device']
         c['device'] = device
-        
+
         # 设置 DDP 日志
         setup_ddp_logging(c.get("ddp", {}).get("log_level", "INFO"))
-        
+
         # 只在主进程创建输出目录
         if is_main_process():
             output_dir = ProjectFilenameEnv().output_dir / c["task"] / c["run_id"]
@@ -162,7 +174,7 @@ if __name__ == "__main__":
 
     if c["seed"] >= 0:
         set_seed(c["seed"])
-    
+
     is_multigpu = "," in device
     if is_multigpu and not use_ddp:
         dist.barrier()
@@ -174,10 +186,24 @@ if __name__ == "__main__":
     pretrained_model = c["model"].get("pretrained")
     continue_checkpoint = c["model"].get("continue_checkpoint")
     if pretrained_model and pretrained_model != "":
-        model_path = Path(pretrained_model)
-        model_params = load_model(model_path, device)
-        logging.info(f"Load model: {model_path}")
-        model.load_state_dict(model_params)
+        p = Path(pretrained_model)
+        if p.is_absolute() or p.exists():
+            path_to_load = p if p.is_file() else resolve_pretrained_to_file(p)
+        else:
+            resolved = get_pretrained_path(
+                pretrained_model,
+                provider=c.get("model", {}).get("pretrained_provider"),
+            )
+            path_to_load = resolved if resolved.is_file() else resolve_pretrained_to_file(resolved)
+        if path_to_load and path_to_load.is_file():
+            model_params = load_model(path_to_load, device)
+            logging.info(f"Load model: {path_to_load}")
+            model.load_state_dict(model_params)
+        else:
+            logging.warning(
+                "Pretrained could not be resolved to a weight file (use key from list_known_models or a .pt path): %s",
+                pretrained_model,
+            )
 
     if continue_checkpoint and continue_checkpoint != "":
         model_path = Path(continue_checkpoint)
@@ -187,52 +213,58 @@ if __name__ == "__main__":
         is_continue_mode = True
 
     train_loader, valid_loader, test_loader = get_train_valid_test_dataloader(use_valid=True)
-    
+
     # 如果没有单独的验证集，使用测试集作为验证集
     if valid_loader is None and test_loader is not None:
         valid_loader = test_loader
         if is_main_process() or not use_ddp:
             logging.info("使用测试集作为验证集进行训练")
-    
+
     if is_train():
         if use_ddp:
             # DDP 训练
             train_dir = output_dir / "train"
             train_dir.mkdir(exist_ok=True)
-            
+
             if is_main_process():
                 dump_config(train_dir / "config.json")
                 dump_config(train_dir / "config.toml")
                 dump_config(train_dir / "config.yaml")
                 logger = logging.getLogger("train")
                 logger.info(f"Dumping config[.json|.yaml|.toml] to the {train_dir}/config[.json|.yaml|.toml]")
-            
+
             # 使用 DDP 包装模型
             model = torch.nn.parallel.DistributedDataParallel(
-                model, 
+                model,
                 device_ids=[local_rank],
                 output_device=local_rank,
                 find_unused_parameters=True
             )
-            
+
+            # recovery_dir for full recovery from any run (e.g. --continue_from)
+            recovery_dir_path = None
+            if c.get("private", {}).get("recovery_dir"):
+                recovery_dir_path = Path(c["private"]["recovery_dir"])
+
             # 创建标准训练器
             handler = Trainer(
                 train_dir,
                 model,
                 is_continue_mode=is_continue_mode,
+                recovery_dir=recovery_dir_path,
                 async_executor=async_executor,
             )
-            
+
             # 获取训练工具
             tools = get_train_tools(model.module if hasattr(model, 'module') else model)
             optimizer = tools["optimizer"]
             lr_scheduler = tools["lr_scheduler"]
             scaler = tools["scaler"]
             criterion = get_train_criterion()
-            
+
             # 设置训练器
             handler.setup_trainer(criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler, scaler=scaler)
-            
+
             # 使用分布式采样器
             from torch.utils.data.distributed import DistributedSampler
             if train_loader is not None:
@@ -245,7 +277,7 @@ if __name__ == "__main__":
                     pin_memory=c["dataloader"].get("pin_memory", True),
                     drop_last=c["dataloader"].get("drop_last", True)
                 )
-            
+
             if valid_loader is not None:
                 valid_sampler = DistributedSampler(valid_loader.dataset, shuffle=False)
                 valid_loader = torch.utils.data.DataLoader(
@@ -256,65 +288,114 @@ if __name__ == "__main__":
                     pin_memory=c["dataloader"].get("pin_memory", True),
                     drop_last=False
                 )
-            
-            handler.train(
-                num_epochs=c["train"]["epoch"],
-                train_dataloader=train_loader,
-                valid_dataloader=valid_loader,
-                early_stop="early_stopping" in c["train"],
-                last_epoch=0
-            )
-        else:
-            # 标准训练
-            train_dir = output_dir / "train"
-            train_dir.mkdir(exist_ok=True)
-            dump_config(train_dir / "config.json")
-            dump_config(train_dir / "config.toml")
-            dump_config(train_dir / "config.yaml")
-            logger = logging.getLogger("train")
-            logger.info(f"Dumping config[.json|.yaml|.toml] to the {train_dir}/config[.json|.yaml|.toml]")
 
             finished_epoch = 0
-            tools = get_train_tools(model)
-            optimizer = tools["optimizer"]
-            lr_scheduler = tools["lr_scheduler"]
-            scaler = tools["scaler"]
-            criterion = get_train_criterion()
-
-            if is_continue_mode and c["model"]["continue_ext_checkpoint"] != "":
+            if is_continue_mode and c["model"].get("continue_ext_checkpoint", ""):
                 model_ext_path = Path(c["model"]["continue_ext_checkpoint"])
-                model_ext_params = load_model_ext(model_ext_path, device)
-                finished_epoch = model_ext_params["epoch"]
-                logger.info(f"Continue Train from {finished_epoch}")
+                if model_ext_path.exists():
+                    model_ext_params = load_model_ext(model_ext_path, device)
+                    finished_epoch = model_ext_params["epoch"]
+                    if is_main_process():
+                        logger = logging.getLogger("train")
+                        logger.info(f"Continue Train from {finished_epoch}")
+                    try:
+                        optimizer.load_state_dict(model_ext_params["optimizer"])
+                        if lr_scheduler and model_ext_params.get("lr_scheduler"):
+                            lr_scheduler.load_state_dict(model_ext_params["lr_scheduler"])
+                        if scaler and model_ext_params.get("scaler"):
+                            scaler.load_state_dict(model_ext_params["scaler"])
+                    except Exception as e:
+                        logger = logging.getLogger("train")
+                        logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
+                elif finished_epoch == 0:
+                    # No ext checkpoint: try recovery_info for last_epoch
+                    recovery_dir = c.get("private", {}).get("recovery_dir") or (str(model_ext_path.parent.parent / "recovery") if model_ext_path.parent else None)
+                    if recovery_dir:
+                        pointer_file = Path(recovery_dir) / "recovery_info.json"
+                        if pointer_file.exists():
+                            try:
+                                with pointer_file.open("r") as f:
+                                    recovery_data = json.load(f)
+                                finished_epoch = int(recovery_data.get("epoch", 0))
+                                if is_main_process():
+                                    logger = logging.getLogger("train")
+                                    logger.info(f"Resumed last_epoch from recovery_info: {finished_epoch}")
+                            except Exception as e:
+                                if is_main_process():
+                                    logging.getLogger("train").warning(f"Could not read epoch from recovery_info: {e}")
 
-                try:
-                    optimizer.load_state_dict(model_ext_params["optimizer"])
-                    if lr_scheduler and model_ext_params["lr_scheduler"]:
-                        lr_scheduler.load_state_dict(model_ext_params["lr_scheduler"])
-                    if scaler and model_ext_params["scaler"]:
-                        scaler.load_state_dict(model_ext_params["scaler"])
-                except Exception as e:
-                    logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
-
-            handler = Trainer(
-                train_dir,
-                model,
-                is_continue_mode=is_continue_mode,
-                async_executor=async_executor,
-            )
-            handler.setup_trainer(criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler, scaler=scaler)
             handler.train(
                 num_epochs=c["train"]["epoch"],
                 train_dataloader=train_loader,
                 valid_dataloader=valid_loader,
                 early_stop="early_stopping" in c["train"],
-                last_epoch=finished_epoch,
+                last_epoch=finished_epoch
             )
+        else:
+                # 标准训练
+                train_dir = output_dir / "train"
+                train_dir.mkdir(exist_ok=True)
+                dump_config(train_dir / "config.json")
+                dump_config(train_dir / "config.toml")
+                dump_config(train_dir / "config.yaml")
+                logger = logging.getLogger("train")
+                logger.info(f"Dumping config[.json|.yaml|.toml] to the {train_dir}/config[.json|.yaml|.toml]")
+
+                finished_epoch = 0
+                tools = get_train_tools(model)
+                optimizer = tools["optimizer"]
+                lr_scheduler = tools["lr_scheduler"]
+                scaler = tools["scaler"]
+                criterion = get_train_criterion()
+
+                if is_continue_mode and c["model"].get("continue_ext_checkpoint", ""):
+                    model_ext_path = Path(c["model"]["continue_ext_checkpoint"])
+                    if model_ext_path.exists():
+                        model_ext_params = load_model_ext(model_ext_path, device)
+                        finished_epoch = model_ext_params["epoch"]
+                        logger.info(f"Continue Train from {finished_epoch}")
+
+                        try:
+                            optimizer.load_state_dict(model_ext_params["optimizer"])
+                            if lr_scheduler and model_ext_params.get("lr_scheduler"):
+                                lr_scheduler.load_state_dict(model_ext_params["lr_scheduler"])
+                            if scaler and model_ext_params.get("scaler"):
+                                scaler.load_state_dict(model_ext_params["scaler"])
+                        except Exception as e:
+                            logger.error(f"{e} WHILE LOADING EXT CHECKPOINT")
+                    elif finished_epoch == 0:
+                        recovery_dir = c.get("private", {}).get("recovery_dir") or str(model_ext_path.parent.parent / "recovery")
+                        pointer_file = Path(recovery_dir) / "recovery_info.json"
+                        if pointer_file.exists():
+                            try:
+                                with pointer_file.open("r") as f:
+                                    recovery_data = json.load(f)
+                                finished_epoch = int(recovery_data.get("epoch", 0))
+                                logger.info(f"Resumed last_epoch from recovery_info: {finished_epoch}")
+                            except Exception as e:
+                                logger.warning(f"Could not read epoch from recovery_info: {e}")
+
+                recovery_dir_path = Path(c["private"]["recovery_dir"]) if c.get("private", {}).get("recovery_dir") else None
+                handler = Trainer(
+                    train_dir,
+                    model,
+                    is_continue_mode=is_continue_mode,
+                    recovery_dir=recovery_dir_path,
+                    async_executor=async_executor,
+                )
+                handler.setup_trainer(criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler, scaler=scaler)
+                handler.train(
+                    num_epochs=c["train"]["epoch"],
+                    train_dataloader=train_loader,
+                    valid_dataloader=valid_loader,
+                    early_stop="early_stopping" in c["train"],
+                    last_epoch=finished_epoch,
+                )
 
     if is_test():
         test_dir = output_dir / "test"
         test_dir.mkdir(exist_ok=True)
-        
+
         if is_main_process() or not use_ddp:
             dump_config(test_dir / "config.json")
             dump_config(test_dir / "config.yaml")
@@ -328,7 +409,7 @@ if __name__ == "__main__":
             model_path = env.output_best_model_filename
             if not model_path.exists():
                 model_path = env.output_last_model_filename
-            
+
             if model_path.exists():
                 model_params = load_model(model_path, device)
                 if is_main_process() or not use_ddp:
@@ -342,7 +423,7 @@ if __name__ == "__main__":
     if is_predict():
         predict_dir = output_dir / "predict"
         predict_dir.mkdir(exist_ok=True)
-        
+
         if is_main_process() or not use_ddp:
             dump_config(predict_dir / "config.json")
             dump_config(predict_dir / "config.toml")
@@ -356,7 +437,7 @@ if __name__ == "__main__":
             model_path = env.output_best_model_filename
             if not model_path.exists():
                 model_path = env.output_last_model_filename
-            
+
             if model_path.exists():
                 model_params = load_model(model_path, device)
                 if is_main_process() or not use_ddp:
@@ -370,7 +451,7 @@ if __name__ == "__main__":
         if compare_enabled:
             handler = MultiModelPredictor(predict_dir, compare_conf, base_config=c)
         else:
-            handler = Predictor(predict_dir, model)
+            handler = get_predictor(predict_dir, model, **predict_runtime_conf)
 
         input_path = Path(c["predict"]["input"])
         if input_path.is_dir():
@@ -381,7 +462,7 @@ if __name__ == "__main__":
             handler.predict(inputs, **predict_runtime_conf)
 
     # get_input_size
-    input_sizes = c["model"]["config"]["input_sizes"] # get a list
+    input_sizes = c["model"]["config"]["input_sizes"]
     dtypes = c["model"]["config"].get("dtypes")
     if dtypes is not None and len(dtypes) > 0:
         dtypes = [str2dtype(dtype) for dtype in dtypes]
@@ -391,10 +472,18 @@ if __name__ == "__main__":
     # 清理 DDP 环境
     if use_ddp:
         cleanup_ddp()
-    
+
     # 模型信息记录（只在主进程执行）
     if not use_ddp or is_main_process():
-        model_info(output_dir, model, input_sizes, dtypes=dtypes)
-        model_flops(output_dir, model, input_sizes)
+        print_model_info_block(output_dir, model, input_sizes, dtypes=dtypes, device=c["device"])
 
     async_executor.shutdown(wait=True)
+
+
+if __name__ == "__main__":
+    parse_args()
+    try:
+        _run_main()
+    except Exception as e:
+        _wandb_alert_on_failure(e)
+        raise

@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
-from typing import Callable
+import numpy as np
+from typing import Callable, Tuple, Any
+from PIL import Image
 
 def postprocess_binary_classification(targets: torch.Tensor, outputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     # 对二分类输出进行后处理
@@ -305,4 +307,86 @@ def select_postprocess_fn(name: str) -> Callable[..., tuple[torch.Tensor, torch.
             return postprocess_binary_classification
     elif "regress" in name:
         return postprocess_regression
+    return None
+
+
+# --- Predict-stage postprocess: model output -> saveable format (per sample) ---
+
+def _ensure_pred_4d(pred: torch.Tensor) -> torch.Tensor:
+    """(1, H, W) or (1, C, H, W) -> (1, C, H, W)."""
+    if pred.dim() == 3:
+        return pred.unsqueeze(1)
+    return pred
+
+
+def predict_postprocess_binary_segmentation(
+    pred: torch.Tensor,
+    original_size: Tuple[int, int] | None = None,
+) -> Image.Image:
+    """Pred logits [1,1,H,W] or [1,H,W] -> PIL Image L (0/255)."""
+    pred = _ensure_pred_4d(pred.detach())
+    prob = F.sigmoid(pred)
+    mask = (prob >= 0.5).float()
+    mask = mask.squeeze(0).squeeze(0).cpu().numpy()
+    mask = (mask * 255).astype(np.uint8)
+    img = Image.fromarray(mask, mode="L")
+    if original_size:
+        img = img.resize((original_size[1], original_size[0]), Image.NEAREST)
+    return img
+
+
+def predict_postprocess_instance_segmentation(
+    pred: torch.Tensor,
+    original_size: Tuple[int, int] | None = None,
+) -> Image.Image:
+    """Pred logits [1, C, H, W] -> PIL Image L (class indices)."""
+    pred = _ensure_pred_4d(pred.detach())
+    prob = F.softmax(pred, dim=1)
+    mask = torch.argmax(prob, dim=1, keepdim=False)
+    mask = mask.squeeze(0).cpu().numpy().astype(np.uint8)
+    img = Image.fromarray(mask, mode="L")
+    if original_size:
+        img = img.resize((original_size[1], original_size[0]), Image.NEAREST)
+    return img
+
+
+def predict_postprocess_binary_classification(pred: torch.Tensor) -> Tuple[int, float]:
+    """Pred logits [1, 1] or [1, C] -> (class_id, prob)."""
+    pred = pred.detach().float().squeeze()
+    if pred.dim() == 0:
+        pred = pred.unsqueeze(0)
+    prob = F.sigmoid(pred).cpu().numpy()
+    p = float(prob[0]) if len(prob) == 1 else float(prob[1])
+    class_id = 1 if p >= 0.5 else 0
+    return class_id, p
+
+
+def predict_postprocess_multiclass_classification(pred: torch.Tensor) -> Tuple[int, np.ndarray]:
+    """Pred logits [1, C] -> (class_id, probs)."""
+    pred = pred.detach().float().squeeze(0)
+    probs = F.softmax(pred, dim=0).cpu().numpy()
+    class_id = int(np.argmax(probs))
+    return class_id, probs
+
+
+def predict_postprocess_regression(pred: torch.Tensor) -> float:
+    """Pred [1, ...] -> scalar."""
+    return float(pred.detach().cpu().numpy().ravel()[0])
+
+
+def get_predict_postprocess_fn(name: str) -> Callable[..., Any] | None:
+    """Return a predict-stage function: (pred, optional original_size) -> saveable (Image, scalar, or (id, prob))."""
+    if not name:
+        return None
+    name_lower = name.lower()
+    if "segment" in name_lower:
+        if "instance" in name_lower:
+            return predict_postprocess_instance_segmentation
+        return predict_postprocess_binary_segmentation
+    if "class" in name_lower:
+        if "multi" in name_lower or "multiple" in name_lower:
+            return predict_postprocess_multiclass_classification
+        return predict_postprocess_binary_classification
+    if "regress" in name_lower:
+        return predict_postprocess_regression
     return None

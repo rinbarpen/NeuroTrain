@@ -9,7 +9,7 @@ from torchvision import models
 import timm
 from huggingface_hub import snapshot_download as hf_download
 
-from src.constants import PRETRAINED_MODEL_DIR
+from src.paths import get_pretrained_dir
 from src.utils.annotation import retry
 
 
@@ -106,7 +106,7 @@ def download_and_save(model_name: str, desired_provider: Optional[str] = None):
     Returns:
         模型保存目录路径
     """
-    CACHE_DIR = Path(PRETRAINED_MODEL_DIR)
+    CACHE_DIR = get_pretrained_dir()
     logger = logging.getLogger('downloader')
 
     @retry()

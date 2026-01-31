@@ -42,13 +42,14 @@ from .util import (
     save_numpy_data, load_numpy_data,
     model_info,
     model_flops,
+    print_model_info_block,
     freeze_layers,
     str2dtype,
     run_async_task,
     reset_peak_memory_stats,
     log_memory_cost,
 )
-from .postprocess import select_postprocess_fn
+from .postprocess import select_postprocess_fn, get_predict_postprocess_fn
 from .download import download_file, download_with_retry, download_multiple
 
 # 延迟导入 painter 相关类以避免循环依赖

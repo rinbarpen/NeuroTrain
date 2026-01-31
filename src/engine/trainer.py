@@ -6,8 +6,6 @@ from torch.amp.grad_scaler import GradScaler
 from torch.amp.autocast_mode import autocast
 from torch.utils.data import DataLoader
 import logging
-from rich.table import Table
-from rich.console import Console
 import json
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -19,7 +17,8 @@ class TrainingStopRequested(RuntimeError):
     """Internal exception to unwind control flow when stop is requested."""
     pass
 
-from src.config import get_config, get_style_sequence
+from src.config import get_config
+from src.utils.ddp_utils import is_main_process
 from src.utils import (
     EarlyStopping,
     save_model,
@@ -30,6 +29,7 @@ from src.utils import (
     log_memory_cost,
 )
 from src.utils.ndict import ModelOutput, NDict
+from src.utils.metric_table import print_metric_scores_table
 from src.utils.progress_bar import ProgressBar
 from src.recorder import MeterRecorder, DataSaver, LossTracker
 from src.visualizer.painter import Plot
@@ -44,6 +44,7 @@ class Trainer:
         model: nn.Module,
         is_continue_mode: bool = False,
         *,
+        recovery_dir: Path | None = None,
         async_executor: ThreadPoolExecutor | None = None,
     ):
         self.output_dir = output_dir
@@ -60,6 +61,8 @@ class Trainer:
         self.filename_env.prepare_dir()
 
         self.model = model
+        self.is_continue_mode = is_continue_mode
+        self._recovery_dir = Path(recovery_dir) if recovery_dir is not None else None
 
         self.logger = logging.getLogger('train')
         self._stop_manager = TrainingStopManager()
@@ -104,6 +107,14 @@ class Trainer:
         if monitor_conf.get('web'):
             try:
                 self.web_monitor = create_web_monitor()
+                if c.get("private", {}).get("wandb") and c.get("private", {}).get("wandb_alerts", True):
+                    def _wandb_alert_callback(alert):
+                        try:
+                            import wandb
+                            wandb.alert(title=alert.rule_name, text=alert.message)
+                        except Exception:
+                            pass
+                    self.web_monitor.alert_system.alert_callbacks.append(_wandb_alert_callback)
                 self.web_monitor.start(block=False)
                 self.logger.info("Web monitor started")
             except Exception as e:
@@ -122,7 +133,7 @@ class Trainer:
         # MeterBasedRecorder uses epoch_meters format
         # Recovery mechanism for MeterBasedRecorder
         try:
-            recovery_dir = self.filename_env.recovery_dir
+            recovery_dir = self._recovery_dir if self._recovery_dir is not None else self.filename_env.recovery_dir
             pointer_file = recovery_dir / "recovery_info.json"
 
             def _load_and_restore(target_file: Path):
@@ -576,11 +587,22 @@ class Trainer:
             self.loss_tracker.finish_epoch('valid', epoch)
         return valid_loss
 
-    def train(self, num_epochs: int, 
+    def train(self, num_epochs: int,
               train_dataloader,
-              valid_dataloader = None, 
+              valid_dataloader = None,
               *, early_stop: bool = False, last_epoch: int=0):
         c = get_config()
+        if last_epoch == 0 and self.is_continue_mode:
+            try:
+                recovery_dir = self._recovery_dir if self._recovery_dir is not None else self.filename_env.recovery_dir
+                pointer_file = recovery_dir / "recovery_info.json"
+                if pointer_file.exists():
+                    with pointer_file.open("r") as f:
+                        recovery_data = json.load(f)
+                    last_epoch = int(recovery_data.get("epoch", 0))
+                    self.logger.info(f"Resumed last_epoch from recovery_info: {last_epoch}")
+            except Exception as e:
+                self.logger.warning(f"Could not infer last_epoch from recovery_info: {e}")
         save_period = c["train"]["save_period"] 
         if save_period >= 1:
             save_period = int(save_period)
@@ -716,6 +738,16 @@ class Trainer:
                                 self.logger.info("Early stopping")
                                 break
 
+                    # per-epoch wandb full-recording
+                    current_lr = self.optimizer.param_groups[0]["lr"] if self.optimizer else None
+                    train_metrics = self.train_metric_recorder.get_epoch_metrics()
+                    valid_metrics = self.valid_metric_recorder.get_epoch_metrics() if valid_dataloader else None
+                    self._wandb_log_epoch(
+                        epoch, train_loss,
+                        valid_loss if valid_dataloader else None,
+                        current_lr, train_metrics, valid_metrics,
+                    )
+
                     # else:
                     #     best_loss = train_loss
                     #     save_model(self.best_model_file_path, self.model, 
@@ -779,7 +811,8 @@ class Trainer:
         if self.monitor_api_client:
             self.monitor_api_client.stop_monitoring()
 
-        self._print_table(valid_dataloader is not None)
+        if not c.get("ddp", {}).get("enabled", False) or is_main_process():
+            self._print_table(valid_dataloader is not None)
 
         self._draw_visualizations(all_step_losses, all_step_lrs, epoch_lrs, num_epochs)
 
@@ -821,6 +854,14 @@ class Trainer:
             self._save_train_info(safe_epoch, num_epochs, train_losses, valid_losses)
         except Exception as exc:
             self.logger.warning(f"Failed to save metric info on stop: {exc}")
+
+        c = get_config()
+        if c.get("private", {}).get("wandb") and c.get("private", {}).get("wandb_alerts", True):
+            try:
+                import wandb
+                wandb.alert(title="Run stopped", text=str(reason))
+            except Exception as exc:
+                self.logger.debug(f"wandb alert on stop failed: {exc}")
 
         try:
             self._stop_manager.acknowledge()
@@ -884,52 +925,31 @@ class Trainer:
 
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
-        class_labels  = c['classes']
+        class_labels = c['classes']
         metric_labels = c['metrics']
 
-        # 使用MeterBasedRecorder的内置统计功能
         train_mean_scores = self.train_metric_recorder.get_epoch_metrics()
-        train_metric_class_scores = (
-            self.train_metric_recorder._compute_mc1(np.mean),
-            self.train_metric_recorder._compute_mc1(np.std)
-        )
-        
-        valid_mean_scores = None
-        valid_metric_class_scores = None
+        train_mc1_mean = self.train_metric_recorder._compute_mc1(np.mean)
+        train_mc1_std = self.train_metric_recorder._compute_mc1(np.std)
+        class_table_rows: list = [("Train", train_mc1_mean, train_mc1_std)]
+        summary_rows: list = [("Train", train_mean_scores)]
+
         if enable_valid_when_training:
             valid_mean_scores = self.valid_metric_recorder.get_epoch_metrics()
-            valid_metric_class_scores = (
-                self.valid_metric_recorder._compute_mc1(np.mean),
-                self.valid_metric_recorder._compute_mc1(np.std)
-            )
+            valid_mc1_mean = self.valid_metric_recorder._compute_mc1(np.mean)
+            valid_mc1_std = self.valid_metric_recorder._compute_mc1(np.std)
+            class_table_rows.append(("Valid", valid_mc1_mean, valid_mc1_std))
+            summary_rows.append(("Valid", valid_mean_scores))
 
-        metric_styles = get_style_sequence('train.metric_table', len(metric_labels), fallback='default.metric_table')
-        summary_styles = get_style_sequence('train.summary_table', len(metric_labels), fallback='default.summary_table')
-        console = Console()
-
-        table = Table(title='Metric Class Mean Score(Train)')
-        table.add_column("Class/Metric", justify="center")
-        for metric, style in zip(metric_labels, metric_styles):
-            table.add_column(metric, justify="center", style=style)
-        for class_label in class_labels:
-            mean_scores = train_metric_class_scores[0]
-            std_scores = train_metric_class_scores[1]
-            table.add_row("Train/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
-        if valid_metric_class_scores:
-            for class_label in class_labels:
-                mean_scores = valid_metric_class_scores[0]
-                std_scores = valid_metric_class_scores[1]
-                table.add_row("Valid/" + class_label, *[f'{mean_scores[metric][class_label]:.3f} ± {std_scores[metric][class_label]:.3f}' for metric in metric_labels])
-        console.print(table)
-
-        table = Table(title='Summary of Metric(Train)')
-        table.add_column("Metric", justify="center")
-        for metric, style in zip(metric_labels, summary_styles):
-            table.add_column(metric, justify="center", style=style)
-        table.add_row("Train", *[f'{score:.3f}' for score in train_mean_scores.values()])
-        if valid_mean_scores:
-            table.add_row("Valid", *[f'{score:.3f}' for score in valid_mean_scores.values()])
-        console.print(table)
+        print_metric_scores_table(
+            class_labels,
+            metric_labels,
+            class_table_rows,
+            summary_rows,
+            style_key="train",
+            title_class="Metric Class Mean Score(Train)",
+            title_summary="Summary of Metric(Train)",
+        )
 
     def _save_train_info(self, epochs: int, num_epochs: int, train_losses, valid_losses=None):
         """保存训练信息，包括损失图表和指标记录"""
@@ -1077,10 +1097,33 @@ class Trainer:
             self.logger.error(f"Failed to save recovery info at epoch {epoch}: {e}")
             # 不抛出异常，避免中断训练过程
 
+    def _wandb_log_epoch(self, epoch: int, train_loss: float, valid_loss=None, lr=None,
+                         train_metrics=None, valid_metrics=None):
+        """Log per-epoch metrics to wandb for full-recording."""
+        c = get_config()
+        if not c.get('private', {}).get('wandb'):
+            return
+        try:
+            import wandb
+            log_dict = {"epoch": epoch, "train/loss": train_loss}
+            if lr is not None:
+                log_dict["lr"] = lr
+            if valid_loss is not None:
+                log_dict["valid/loss"] = valid_loss
+            if train_metrics:
+                for k, v in train_metrics.items():
+                    log_dict[f"train/{k}"] = v
+            if valid_metrics:
+                for k, v in valid_metrics.items():
+                    log_dict[f"valid/{k}"] = v
+            wandb.log(log_dict, step=epoch)
+        except Exception as e:
+            self.logger.warning(f"wandb log epoch failed: {e}")
+
     def _wandb_save(self, train_losses, valid_losses=None, optimizer=None, scaler=None, lr_scheduler=None):
         c = get_config()
-        if c['private']['wandb']:
-            train_c = c['train']
+        if c.get('private', {}).get('wandb'):
+            train_c = c.get('train', {})
             import wandb
             wandb.log({
                 "train": {
@@ -1094,7 +1137,7 @@ class Trainer:
                     "scaler": scaler.state_dict() if scaler else None,
                     "lr_scheduler": {
                         'weights': lr_scheduler.state_dict(),
-                        **{k: v for k, v in train_c['lr_scheduler'].items()},
+                        **{k: v for k, v in train_c.get('lr_scheduler', {}).items()},
                     } if lr_scheduler else None,
                 },
             })

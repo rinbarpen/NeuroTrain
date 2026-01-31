@@ -64,6 +64,7 @@ def parse_args():
     parser.add_argument('--check', action='store_true', default=False, help='Check mode')
     parser.add_argument('--output_dir', type=str, help='output directory')
     parser.add_argument('--continue_id', type=str, help='continue with $run_id$')
+    parser.add_argument('--continue_from', type=str, help='full recovery from a run dir (e.g. runs/task/run_id)')
     parser.add_argument('--continue_checkpoint', type=str, help='continue checkpoint path')
     parser.add_argument('--pretrained', type=str, help='load model checkpoint')
     parser.add_argument('--task', type=str, help='task name')
@@ -99,7 +100,19 @@ def parse_args():
         CONFIG['dataset'] = {"name": args.data, "root_dir": args.data_dir}
     if args.num_workers:
         CONFIG['dataloader']['num_workers'] = args.num_workers
-    if args.continue_id:
+    if args.continue_from:
+        # Full recovery from any run directory: set checkpoint/ext paths and recovery_dir
+        continue_from = Path(args.continue_from)
+        weights_dir = continue_from / "train" / "weights"
+        recovery_dir = continue_from / "train" / "recovery"
+        last_pt = weights_dir / "last.pt"
+        stop_pt = weights_dir / "stop.pt"
+        model_ckpt = last_pt if last_pt.exists() else (stop_pt if stop_pt.exists() else last_pt)
+        ext_ckpt = weights_dir / "last.ext.pt" if last_pt.exists() else (weights_dir / "stop.ext.pt" if stop_pt.exists() else weights_dir / "last.ext.pt")
+        CONFIG['model']['continue_checkpoint'] = str(model_ckpt)
+        CONFIG['model']['continue_ext_checkpoint'] = str(ext_ckpt)
+        CONFIG.setdefault('private', {})['recovery_dir'] = str(recovery_dir)
+    elif args.continue_id:
         task_dir = os.path.join(CONFIG['output_dir'], CONFIG['task'])
         if args.continue_id.lower() == 'auto':
             continue_id = os.listdir(task_dir)[-1] # select the last run_id

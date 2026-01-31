@@ -18,6 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Load .env so ALERT_EMAIL_* etc. are available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / ".env")
+except ImportError:
+    pass
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.monitor import (
@@ -103,6 +110,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable alert system console logging.",
     )
+    parser.add_argument(
+        "--alert-email",
+        action="store_true",
+        help="Enable email alerts; requires --email-user and --email-recipients (password from ALERT_EMAIL_PASSWORD env).",
+    )
+    parser.add_argument("--smtp-server", default="smtp.gmail.com", help="SMTP server for email alerts.")
+    parser.add_argument("--smtp-port", type=int, default=587, help="SMTP port.")
+    parser.add_argument("--email-user", help="SMTP username (e.g. your@gmail.com).")
+    parser.add_argument(
+        "--email-password",
+        default=None,
+        help="SMTP password; prefer ALERT_EMAIL_PASSWORD env to avoid leaking in process list.",
+    )
+    parser.add_argument(
+        "--email-recipients",
+        help="Comma-separated recipient addresses for email alerts.",
+    )
     return parser.parse_args()
 
 
@@ -142,10 +166,22 @@ def build_monitor(args: argparse.Namespace) -> "WebMonitor":
     )
 
     alert_log_file = log_dir / "alerts.log"
+    import os
+    email_enabled = getattr(args, "alert_email", False)
+    email_user = getattr(args, "email_user", None) or os.environ.get("ALERT_EMAIL_USER")
+    email_password = getattr(args, "email_password", None) or os.environ.get("ALERT_EMAIL_PASSWORD")
+    email_recipients_str = getattr(args, "email_recipients", None) or os.environ.get("ALERT_EMAIL_RECIPIENTS", "")
+    email_recipients = [s.strip() for s in email_recipients_str.split(",") if s.strip()]
     alert_config = AlertConfig(
         enable_console_output=not args.quiet_alert,
         enable_file_output=True,
         log_file=alert_log_file,
+        enable_email_output=email_enabled and bool(email_user and email_recipients),
+        smtp_server=getattr(args, "smtp_server", "smtp.gmail.com"),
+        smtp_port=getattr(args, "smtp_port", 587),
+        email_username=email_user,
+        email_password=email_password,
+        email_recipients=email_recipients,
     )
 
     web_monitor = WebMonitor(

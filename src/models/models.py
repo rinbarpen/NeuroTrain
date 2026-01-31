@@ -1,8 +1,9 @@
 import torch
 
-from src.constants import PRETRAINED_MODEL_DIR
+from src.paths import get_pretrained_dir
 
 def get_model(model_name: str, config: dict):
+    _cache_dir = config.get("cache_dir") or str(get_pretrained_dir())
     default_dtype = torch.float16
     
     match model_name.lower():
@@ -25,7 +26,7 @@ def get_model(model_name: str, config: dict):
 
             model = CLIP(
                 model_name=model_id, 
-                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=_cache_dir,
                 dtype=config.get('dtype', default_dtype)
             )
             return model
@@ -55,7 +56,7 @@ def get_model(model_name: str, config: dict):
             from .like.llm.transformers import build_transformers
             model, tokenizer, processor = build_transformers(
                 model_id=model_id,
-                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=_cache_dir,
                 device=config.get('device', 'cuda'),
                 torch_dtype=config.get('dtype', default_dtype)
             )
@@ -79,7 +80,7 @@ def get_model(model_name: str, config: dict):
             
             model, tokenizer, processor = build_transformers(
                 model_id=model_id,
-                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=_cache_dir,
                 device=config.get('device', 'auto'),
                 torch_dtype=config.get('dtype', default_dtype)
             )
@@ -102,7 +103,7 @@ def get_model(model_name: str, config: dict):
             
             model, tokenizer, _ = build_transformers(
                 model_id=model_id,
-                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=_cache_dir,
                 device=config.get('device', 'auto'),
                 torch_dtype=config.get('dtype', default_dtype)
             )
@@ -151,6 +152,38 @@ def get_model(model_name: str, config: dict):
                     heads=config.get('heads', 12),
                     mlp_dim=config.get('mlp_dim', 3072),
                     **config.get('kwargs', {})
+                )
+            return model
+        case 'vit_grid':
+            from .transformer.vit_grid import (
+                ViTGrid,
+                vit_grid_tiny_patch16_224,
+                vit_grid_small_patch16_224,
+                vit_grid_base_patch16_224,
+                vit_grid_base_patch32_224,
+            )
+            variant = config.get('variant', 'base').lower()
+            n_classes = config.get('n_classes', 1000)
+            variants = {
+                'tiny': vit_grid_tiny_patch16_224,
+                'small': vit_grid_small_patch16_224,
+                'base': vit_grid_base_patch16_224,
+                'base-p16': vit_grid_base_patch16_224,
+                'base-p32': vit_grid_base_patch32_224,
+            }
+            if variant in variants:
+                model = variants[variant](num_classes=n_classes, **config.get('kwargs', {}))
+            else:
+                model = ViTGrid(
+                    image_size=config.get('image_size', 224),
+                    patch_size=config.get('patch_size', 16),
+                    num_classes=n_classes,
+                    dim=config.get('dim', 768),
+                    depth=config.get('depth', 12),
+                    heads=config.get('heads', 12),
+                    mlp_dim=config.get('mlp_dim', 3072),
+                    channels=config.get('channels', 3),
+                    **config.get('kwargs', {}),
                 )
             return model
         case 'swin':
@@ -301,7 +334,7 @@ def get_model(model_name: str, config: dict):
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_c['model'],
                 trust_remote_code=tokenizer_c.get('trust_remote_code', False),
-                cache_dir=tokenizer_c.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=tokenizer_c.get('cache_dir') or str(get_pretrained_dir()),
                 use_fast=tokenizer_c.get('use_fast', False),
             )
             model_c = config['model']
@@ -312,7 +345,7 @@ def get_model(model_name: str, config: dict):
             }[model_c.get('torch_dtype', "bfloat16")]
             model = AutoModelForCausalLM.from_pretrained(
                 model_c['model'],
-                cache_dir=model_c.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=model_c.get('cache_dir') or str(get_pretrained_dir()),
                 trust_remote_code=model_c.get('trust_remote_code', False),
                 torch_dtype=torch_dtype,
                 device_map=model_c.get('device_map', 'auto'),
@@ -338,7 +371,7 @@ def get_model(model_name: str, config: dict):
                 text_encoder_dim=config.get('text_encoder_dim', 512),
                 alignment_dim=config.get('alignment_dim', 512),
                 temperature=config.get('temperature', 0.07),
-                cache_dir=config.get('cache_dir', PRETRAINED_MODEL_DIR),
+                cache_dir=_cache_dir,
             )
             # 使用包装器以适配训练器的数据格式
             model = EMOERefCOCOModelWrapper(base_model)
