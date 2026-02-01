@@ -6,7 +6,7 @@ from pathlib import Path
 from torchvision import transforms
 from typing import Literal, Union
 
-from ..custom_dataset import CustomDataset, Betweens
+from ..custom_dataset import CustomDataset
 
 class ChaseDB1Dataset(CustomDataset):
     mapping = {

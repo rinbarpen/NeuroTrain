@@ -6,7 +6,7 @@ import yaml
 import numpy as np
 from typing import Literal, Union
 
-from ..custom_dataset import CustomDataset, Betweens
+from ..custom_dataset import CustomDataset
 
 class StareDataset(CustomDataset):
     mapping = {

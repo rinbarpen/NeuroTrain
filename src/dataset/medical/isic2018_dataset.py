@@ -6,7 +6,7 @@ import yaml
 from typing import Literal, Union
 import torchvision.transforms as T
 
-from ..custom_dataset import CustomDataset, Betweens
+from ..custom_dataset import CustomDataset
 
 class ISIC2018Dataset(CustomDataset):
     """ISIC 2018皮肤病变分割数据集

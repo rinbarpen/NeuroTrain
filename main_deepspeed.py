@@ -231,8 +231,8 @@ def main():
                 model.load_state_dict(model_params)
         
         # 创建测试器（这里需要根据实际情况调整）
-        from src.engine import Tester
-        handler = Tester(test_dir, model)
+        from src.engine import Inferencer
+        handler = Inferencer(test_dir, model)
         handler.test(test_dataloader=test_loader)
     
     # 预测模式

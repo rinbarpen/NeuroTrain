@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 import logging
 
-from utils.annotation import unimplemented
+from src.utils.annotation import unimplemented
 
 logger = logging.getLogger(__name__)
 

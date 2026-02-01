@@ -6,7 +6,7 @@ from PIL import Image
 import logging
 import json
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 
 
 class ImageNet1KDataset(CustomDataset):

@@ -20,6 +20,7 @@ from src.utils import (
 )
 from src.monitor import TrainingMonitor, ProgressTracker
 from src.utils.ndict import ModelOutput, Sample, NDict
+from src.utils.progress_bar import format_progress_desc
 from src.utils.metric_table import print_metric_scores_table
 from src.metrics import get_metric_fns, many_metrics
 
@@ -90,7 +91,10 @@ class Predictor:
                 self.logger.warning(f"Web monitor start_training failed: {exc}")
                 self.web_monitor = None
         classification_results: list[dict] = []
-        for idx, input in enumerate(tqdm(inputs, desc="Predicting..."), 1):
+        total = len(inputs)
+        pbar = tqdm(inputs, desc="Predicting...")
+        for idx, input in enumerate(pbar, 1):
+            pbar.set_description(format_progress_desc("Predicting...", idx, total, idx, total, 1, 1))
             if self.progress_tracker:
                 if idx == 1:
                     self.progress_tracker.start_epoch(0)
@@ -262,11 +266,12 @@ class Predictor:
             mc1_mean[metric_label] = {class_labels[j]: float(scores[j]) for j in range(num_classes)}
             mc1_std[metric_label] = {class_labels[j]: 0.0 for j in range(num_classes)}
             mean_scores[metric_label] = float(np.mean(scores))
+        std_scores = {m: 0.0 for m in metric_labels}
         print_metric_scores_table(
             class_labels,
             metric_labels,
             [("Predict", mc1_mean, mc1_std)],
-            [("Predict", mean_scores)],
+            [("Predict", mean_scores, std_scores)],
             style_key="default",
             title_class="Metric Class Mean Score(Predict)",
             title_summary="Summary of Metric(Predict)",

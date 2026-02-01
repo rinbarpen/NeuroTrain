@@ -33,6 +33,9 @@ def parse_args():
     ## for early_stopping
     train_parser.add_argument('--early_stopping', action='store_true', help='early_stopping')
     train_parser.add_argument('--patience', type=int, help='patience')
+    ## best model and early_stop by loss or main_metric
+    train_parser.add_argument('--best_by', type=str, default=None, choices=['loss', 'main_metric'], help='best checkpoint and early_stop by "loss" (min) or "main_metric"')
+    train_parser.add_argument('--metric_direction', type=str, default=None, choices=['max', 'min'], help='metric direction when best_by=main_metric: "max" (e.g. dice) or "min"')
     ## common
     train_parser.add_argument('-b', '--batch_size', type=int, help='batch_size')
     train_parser.add_argument('--num_workers', type=int, help='dataset num_workers')
@@ -77,6 +80,7 @@ def parse_args():
     # parser.add_argument('--data_cacher', action='store_true', help='tool: data cacher')
     # TODO: support for future!
     parser.add_argument('--metrics', nargs='+', default=[], help='metrics, support iou-family dice accuracy f1 recall auc mAP@[threshold] mF1@[threshold]')
+    parser.add_argument('--main_metric', type=str, default=None, help='main metric for train/valid (default: loss); only this metric is computed during training; full metrics at inference (Inferencer)')
     
     args = parser.parse_args()
 
@@ -152,6 +156,10 @@ def parse_args():
             if args.patience:
                 CONFIG['train']['early_stopping']['patience'] = args.patience
                 print('set up early_stopping with patience={}'.format(args.patience))
+        if args.best_by is not None:
+            CONFIG['train']['best_by'] = args.best_by
+        if args.metric_direction is not None:
+            CONFIG['train']['metric_direction'] = args.metric_direction
         if args.lr_scheduler:
             CONFIG['train']['lr_scheduler'] = {}
             if args.warmup:
@@ -181,6 +189,9 @@ def parse_args():
         CONFIG['run_id'] = args.run_id
     elif CONFIG['run_id'] is None or CONFIG['run_id'] == '':
         CONFIG['run_id'] = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+
+    if args.main_metric is not None:
+        CONFIG['main_metric'] = args.main_metric
 
     if args.check:
         CONFIG['private']['mode'] |= (TRAIN_MODE | TEST_MODE | PREDICT_MODE)

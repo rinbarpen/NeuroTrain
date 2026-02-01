@@ -14,6 +14,7 @@ from typing import Sequence
 
 from src.config import get_config
 from src.utils import get_transforms, to_path, FilePath, build_image_transforms, VisionTransformersBuilder, Timer
+from src.utils.progress_bar import format_progress_desc
 
 class SegmentPredictor:
     def __init__(self, output_dir: Path, 
@@ -37,7 +38,10 @@ class SegmentPredictor:
         self.model = self.model.to(device)
         self.model.eval()
 
-        for input in tqdm(inputs, desc="Predicting..."):
+        total = len(inputs)
+        pbar = tqdm(inputs, desc="Predicting...")
+        for idx, input in enumerate(pbar):
+            pbar.set_description(format_progress_desc("Predicting...", idx + 1, total, idx + 1, total, 1, 1))
             input = to_path(input)
             input_filename = input.name
 

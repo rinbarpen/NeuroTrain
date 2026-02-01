@@ -21,7 +21,7 @@
 ## 📦 安装
 
 ### 环境要求
-- Python 3.10 或更高版本
+- Python 3.10–3.13（推荐，CI 已覆盖）
 - CUDA 11.8+ (可选，用于GPU训练)
 - Conda 或 Miniconda
 

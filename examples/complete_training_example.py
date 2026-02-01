@@ -21,7 +21,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from src.dataset import get_train_valid_test_dataloader
 from src.models import get_model
-from src.engine import Trainer, Tester
+from src.engine import Trainer, Inferencer
 from src.utils.criterion import get_criterion
 from src.utils import EarlyStopping
 from src.metrics import dice, iou_seg, accuracy

@@ -9,8 +9,8 @@ from PIL import Image
 
 import toml
 
-from utils.annotation import buildin
-from utils.typed import (
+from src.utils.annotation import buildin
+from src.utils.typed import (
     ClassLabelManyScoreDict,
     ClassLabelOneScoreDict,
     MetricLabelManyScoreDict,

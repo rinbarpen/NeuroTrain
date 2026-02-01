@@ -607,7 +607,10 @@ def get_dataset(mode: str):
     config = raw_config.copy() if isinstance(raw_config, dict) else {}
     config, sampling_options = _extract_sampling_options(c_dataset, config, mode)
     dataset_name = c_dataset["name"]
-    root_dir = Path(c_dataset["root_dir"])
+    root_dir = c_dataset.get("root_dir") or c_dataset.get("base_dir")
+    if root_dir is None:
+        raise KeyError("dataset must have 'root_dir' or 'base_dir' in config")
+    root_dir = Path(root_dir)
 
     match mode:
         case "train":

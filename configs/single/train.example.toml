@@ -1,0 +1,72 @@
+# 示例配置 train.example.toml：main_metric / best_by / early_stopping / Inferencer
+# 单卡：python main.py --train --test -c configs/single/train.example.toml -e 4 --main_metric accuracy --best_by main_metric --metric_direction max --early_stopping --patience 2
+output_dir = "./runs"
+task = "FeatureTest"
+entity = "Lab"
+run_id = ""
+device = "cuda"
+seed = 42
+classes = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+metrics = ['accuracy', 'precision', 'recall', 'f1']
+main_metric = "accuracy"
+postprocess = "classification"
+
+[model]
+name = "torchvision"
+continue_checkpoint = ""
+continue_ext_checkpoint = ""
+pretrained = ""
+
+[model.config]
+arch = "resnet18"
+n_channels = 1
+n_classes = 10
+pretrained = false
+
+[[criterion]]
+type = 'cross_entropy'
+weight = 1.0
+config = {}
+
+[transform]
+RESIZE = [224, 224]
+PIL_TO_TENSOR = []
+CONVERT_IMAGE_DTYPE = ['float32']
+
+[dataset]
+name = "MNIST"
+base_dir = "./data/mnist"
+betweens = { train = [0.0, 1.0], valid = [0.0, 1.0], test = [0.0, 1.0] }
+config = { download = true }
+ref = "mnist.yaml"
+
+[dataloader]
+num_workers = 0
+shuffle = true
+
+[train]
+batch_size = 32
+epoch = 4
+save_period = 2
+save_recovery_period = 2
+best_by = "main_metric"
+metric_direction = "max"
+
+[train.early_stopping]
+patience = 2
+
+[train.optimizer]
+type = "adam"
+learning_rate = 1e-3
+weight_decay = 1e-4
+
+[test]
+batch_size = 32
+
+[private]
+wandb = false
+mode = 0
+
+[private.log]
+verbose = true
+debug = false

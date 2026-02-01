@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore")
 
 from src.config import get_config, dump_config, is_predict, is_train, is_test
 from src.options import parse_args
-from src.engine import Trainer, Tester, Predictor, get_predictor, MultiModelPredictor
+from src.engine import Trainer, Inferencer, Predictor, get_predictor, MultiModelPredictor
 from src.models import get_model
 from src.dataset import get_train_valid_test_dataloader
 from src.utils import (
@@ -416,7 +416,7 @@ def _run_main():
                     logger.info(f"Load model: {model_path}")
                 model.load_state_dict(model_params)
 
-        handler = Tester(test_dir, model)
+        handler = Inferencer(test_dir, model)
         if test_loader is not None:
             handler.test(test_dataloader=test_loader)
 
@@ -461,20 +461,20 @@ def _run_main():
             inputs = [input_path]
             handler.predict(inputs, **predict_runtime_conf)
 
-    # get_input_size
-    input_sizes = c["model"]["config"]["input_sizes"]
+    # get_input_size（缺失时跳过模型信息记录）
+    input_sizes = c["model"]["config"].get("input_sizes")
     dtypes = c["model"]["config"].get("dtypes")
     if dtypes is not None and len(dtypes) > 0:
         dtypes = [str2dtype(dtype) for dtype in dtypes]
     else:
-        dtype = None
+        dtypes = None
 
     # 清理 DDP 环境
     if use_ddp:
         cleanup_ddp()
 
-    # 模型信息记录（只在主进程执行）
-    if not use_ddp or is_main_process():
+    # 模型信息记录（只在主进程执行，且配置了 input_sizes 时）
+    if (not use_ddp or is_main_process()) and input_sizes is not None:
         print_model_info_block(output_dir, model, input_sizes, dtypes=dtypes, device=c["device"])
 
     async_executor.shutdown(wait=True)

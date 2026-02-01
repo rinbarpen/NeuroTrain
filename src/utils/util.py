@@ -26,12 +26,14 @@ from src.utils.typed import FilePath, ImageInstance
 from src.utils.criterion import CombineCriterion, get_criterion
 
 def prepare_logger(output_dir: Path, names: Sequence[str]|None=None):
-    c = get_config_value('private.log', default={
+    _default_log = {
         'debug': False,
         'verbose': True,
         'log_file_format': '%Y-%m-%d %H_%M_%S',
         'log_format': '%(asctime)s %(levelname)s | %(name)s | %(message)s',
-    })
+    }
+    c_raw = get_config_value('private.log', default=_default_log)
+    c = {**_default_log, **(c_raw or {})}
     assert c is not None
 
     filename = output_dir / f'{time.strftime(c["log_file_format"], time.localtime())}.log'

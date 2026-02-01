@@ -6,7 +6,7 @@ import yaml
 from typing import Literal, Union
 from torchvision import transforms
 
-from ..custom_dataset import CustomDataset, Betweens
+from ..custom_dataset import CustomDataset
 
 class ISIC2017Dataset(CustomDataset):
     mapping = {
@@ -23,7 +23,7 @@ class ISIC2017Dataset(CustomDataset):
         说明:
             - transforms 的定义由具体数据集维护，避免在 CustomDataset 中耦合。
         """
-        from utils.transform import get_transforms
+        from src.utils.transform import get_transforms
         return get_transforms()
 
     def __init__(self, root_dir: Union[str, Path], split: Literal['train', 'test', 'valid'], is_rgb: bool = False, **kwargs):

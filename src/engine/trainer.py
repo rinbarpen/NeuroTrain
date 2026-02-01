@@ -53,7 +53,16 @@ class Trainer:
         self.device = torch.device(c['device'])
         
         class_labels = c['classes']
-        metric_labels = c['metrics']
+        all_metrics = c['metrics']
+        main_metric = c.get('main_metric', 'loss')
+        if main_metric == 'loss' or not main_metric:
+            train_valid_metric_labels = []
+        else:
+            if main_metric not in all_metrics:
+                logging.getLogger('train').warning(f"main_metric '{main_metric}' not in config metrics {all_metrics}; using loss only for train/valid")
+                train_valid_metric_labels = []
+            else:
+                train_valid_metric_labels = [main_metric]
         
         self.filename_env = TrainOutputFilenameEnv()
         self.filename_env.register(train_dir=self.output_dir, model=c["model"]["name"], class_labels=class_labels)
@@ -72,8 +81,8 @@ class Trainer:
         self._stop_saved = False
         self._save_model_fn = None
         self.data_saver = DataSaver()
-        self.train_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="train_")
-        self.valid_metric_recorder = MeterRecorder(class_labels, metric_labels, logger=self.logger, saver=self.data_saver, prefix="valid_")
+        self.train_metric_recorder = MeterRecorder(class_labels, train_valid_metric_labels, logger=self.logger, saver=self.data_saver, prefix="train_")
+        self.valid_metric_recorder = MeterRecorder(class_labels, train_valid_metric_labels, logger=self.logger, saver=self.data_saver, prefix="valid_")
         self.loss_tracker = LossTracker(self.data_saver, self.filename_env, logger=self.logger)
 
         postprocess_name = c.get('postprocess', "")
@@ -212,12 +221,31 @@ class Trainer:
 
         model_input = inputs_obj
         if isinstance(inputs_obj, Mapping):
-            # 规范化：如果包含'inputs'键，则将其作为模型输入，避免将NDict整体传入模型
+            # 规范化：从 dict 中取出模型输入张量（支持 inputs / image / images）
             if 'inputs' in inputs_obj:
                 model_input = inputs_obj['inputs']
+            elif 'image' in inputs_obj:
+                model_input = inputs_obj['image']
+            elif 'images' in inputs_obj:
+                model_input = inputs_obj['images']
             else:
                 model_input = inputs_obj
             targets = inputs_obj.get('targets', targets)
+            if targets is None and 'metadata' in inputs_obj:
+                meta = inputs_obj['metadata']
+                dev = model_input.device if isinstance(model_input, torch.Tensor) else None
+                if isinstance(meta, (list, tuple)) and len(meta) > 0 and isinstance(meta[0], Mapping) and 'label' in meta[0]:
+                    targets = torch.tensor([m['label'] for m in meta], device=dev)
+                elif isinstance(meta, Mapping) and 'label' in meta:
+                    lbl = meta['label']
+                    if isinstance(lbl, torch.Tensor):
+                        targets = lbl if dev is None else lbl.to(dev)
+                        if targets.dtype != torch.long:
+                            targets = targets.long()
+                    else:
+                        # 单样本为标量，batch 为 list；保证 targets 为 1D long
+                        flat = [lbl] if (np.ndim(lbl) == 0 or isinstance(lbl, (int, float))) else lbl
+                        targets = torch.tensor(flat, device=dev, dtype=torch.long)
         else:
             model_input = inputs_obj
 
@@ -305,9 +333,10 @@ class Trainer:
         pbar: ProgressBar,
         train_losses_ref: list[float],
         valid_losses_ref: list[float],
+        total_pbar_steps: int,
     ):
         c = get_config()
-        accumulation_steps = c["train"]["grad_accumulation_steps"]
+        accumulation_steps = c["train"].get("grad_accumulation_steps", 1)
         enable_accumulation_step = accumulation_steps > 0
         lr_scheduler_update_policy = c['train'].get('lr_scheduler', {}).get('update_policy', 'epoch')
         train_loss = 0.0
@@ -468,6 +497,12 @@ class Trainer:
 
             pbar.update()
 
+            main_metric = c.get('main_metric', 'loss')
+            train_metrics = None
+            if main_metric and main_metric != 'loss' and self.train_metric_recorder.metric_labels:
+                all_m = self.train_metric_recorder.get_current_metrics()
+                if main_metric in all_m:
+                    train_metrics = {main_metric: all_m[main_metric]}
             pbar.update_step(
                 epoch=epoch,
                 current_step=batch,
@@ -476,6 +511,10 @@ class Trainer:
                 loss_value=batch_loss,
                 global_step=batch + epoch * total_steps,
                 force=batch == total_steps,
+                prefix='Training...',
+                total_global_steps=total_pbar_steps,
+                total_epochs=num_epochs,
+                metrics=train_metrics,
             )
 
             if self._stop_manager.should_stop():
@@ -513,7 +552,9 @@ class Trainer:
         pbar: ProgressBar,
         train_losses_ref: list[float],
         valid_losses_ref: list[float],
+        total_pbar_steps: int,
     ):
+        c = get_config()
         self.model.eval()
         valid_loss = 0.0
         processed_batches = 0
@@ -556,6 +597,12 @@ class Trainer:
 
                 pbar.update()
 
+                main_metric = c.get("main_metric", "loss")
+                valid_metrics = None
+                if main_metric and main_metric != "loss" and self.valid_metric_recorder.metric_labels:
+                    all_m = self.valid_metric_recorder.get_current_metrics()
+                    if main_metric in all_m:
+                        valid_metrics = {main_metric: all_m[main_metric]}
                 pbar.update_step(
                     epoch=epoch,
                     current_step=batch_idx,
@@ -563,6 +610,10 @@ class Trainer:
                     loss_label='valid_batch_loss',
                     loss_value=batch_loss,
                     force=batch_idx == total_steps,
+                    prefix='Training...',
+                    total_global_steps=total_pbar_steps,
+                    total_epochs=num_epochs,
+                    metrics=valid_metrics,
                 )
 
                 if self._stop_manager.should_stop():
@@ -635,9 +686,20 @@ class Trainer:
         else:
             early_stopper = None
 
+        best_by = c['train'].get('best_by', 'loss')
+        metric_direction = c['train'].get('metric_direction', 'max')
+        if best_by == 'main_metric':
+            if c.get('main_metric') in (None, 'loss') or not self.valid_metric_recorder.metric_labels:
+                self.logger.warning("best_by=main_metric but main_metric is loss or no valid metrics; using best_by=loss")
+                best_by = 'loss'
+        if best_by == 'main_metric':
+            best_metric = float('-inf') if metric_direction == 'max' else float('inf')
+        else:
+            best_metric = None
+        best_loss = float('inf')
+
         train_losses = []
         valid_losses = []
-        best_loss = float('inf')
         
         # 收集step级别的数据用于可视化
         all_step_losses = []
@@ -669,6 +731,7 @@ class Trainer:
                         pbar,
                         train_losses,
                         valid_losses,
+                        total_pbar_steps,
                     )
                     train_losses.append(train_loss)
                     completed_epoch = epoch
@@ -683,7 +746,13 @@ class Trainer:
                         epoch_lrs.append(current_lr)
                     
                     pbar.update(0)
-                    pbar.set_postfix({'epoch_loss': train_loss, 'epoch': epoch})
+                    epoch_postfix: dict[str, Any] = {'epoch_loss': train_loss, 'epoch': epoch}
+                    main_metric = c.get('main_metric', 'loss')
+                    if main_metric and main_metric != 'loss':
+                        train_epoch_metrics = self.train_metric_recorder.get_epoch_metrics()
+                        if main_metric in train_epoch_metrics:
+                            epoch_postfix[main_metric] = f"{float(train_epoch_metrics[main_metric]):.4f}"
+                    pbar.set_postfix(epoch_postfix)
 
                     # 调整 lr per one epoch
                     if hasattr(self, 'lr_scheduler') and self.lr_scheduler is not None:
@@ -717,23 +786,51 @@ class Trainer:
                             pbar,
                             train_losses,
                             valid_losses,
+                            total_pbar_steps,
                         )
                         valid_losses.append(valid_loss)
 
                         pbar.update(0)
-                        pbar.set_postfix({'valid_epoch_loss': valid_loss, 'epoch': epoch})
-                        
-                        # save best model
-                        target_loss = valid_loss
-                        if target_loss < best_loss:
-                            best_loss = target_loss
-                            save_model_preset(self.filename_env.output_best_model_filename, 
-                                        ext_path=self.filename_env.output_best_ext_model_filename,
-                                        epoch=epoch, loss=best_loss)
-                            self.logger.info(f'save model params to {self.filename_env.output_best_model_filename} and ext params to {self.filename_env.output_best_ext_model_filename} when {epoch=}, {best_loss=}')
+                        valid_postfix: dict[str, Any] = {'valid_epoch_loss': valid_loss, 'epoch': epoch}
+                        main_metric = c.get('main_metric', 'loss')
+                        if main_metric and main_metric != 'loss':
+                            valid_epoch_metrics = self.valid_metric_recorder.get_epoch_metrics()
+                            if main_metric in valid_epoch_metrics:
+                                valid_postfix[main_metric] = f"{float(valid_epoch_metrics[main_metric]):.4f}"
+                        pbar.set_postfix(valid_postfix)
+
+                        # save best model and early_stop by best_by (loss or main_metric)
+                        # EarlyStopping expects "quantity to minimize" and does score = -val internally
+                        if best_by == 'loss':
+                            target = valid_loss
+                            if target < best_loss:
+                                best_loss = target
+                                save_model_preset(self.filename_env.output_best_model_filename,
+                                            ext_path=self.filename_env.output_best_ext_model_filename,
+                                            epoch=epoch, loss=best_loss)
+                                self.logger.info(f'save best model (loss) to {self.filename_env.output_best_model_filename} when {epoch=}, {best_loss=}')
+                            early_score = valid_loss
+                        else:
+                            valid_metrics = self.valid_metric_recorder.get_epoch_metrics()
+                            main_metric_name = self.valid_metric_recorder.metric_labels[0] if self.valid_metric_recorder.metric_labels else str(c.get('main_metric', ''))
+                            default_val = float('-inf') if metric_direction == 'max' else float('inf')
+                            target = valid_metrics.get(main_metric_name, default_val)
+                            current_best = best_metric if best_metric is not None else default_val
+                            if metric_direction == 'max':
+                                is_better = target > current_best
+                                early_score = -target
+                            else:
+                                is_better = target < current_best
+                                early_score = target
+                            if is_better:
+                                best_metric = target
+                                save_model_preset(self.filename_env.output_best_model_filename,
+                                            ext_path=self.filename_env.output_best_ext_model_filename,
+                                            epoch=epoch, loss=valid_loss, best_metric=best_metric, best_by=best_by)
+                                self.logger.info(f'save best model (main_metric={main_metric_name}) to {self.filename_env.output_best_model_filename} when {epoch=}, {best_metric=}')
 
                         if early_stopper:
-                            early_stopper(valid_loss)
+                            early_stopper(early_score)
                             if early_stopper.is_stopped():
                                 self.logger.info("Early stopping")
                                 break
@@ -926,20 +1023,31 @@ class Trainer:
     def _print_table(self, enable_valid_when_training=False):
         c = get_config()
         class_labels = c['classes']
-        metric_labels = c['metrics']
+        metric_labels = self.train_metric_recorder.metric_labels
+        if not metric_labels:
+            self.logger.info("Train/Valid: main_metric is loss, no per-batch metrics table.")
+            return
 
         train_mean_scores = self.train_metric_recorder.get_epoch_metrics()
         train_mc1_mean = self.train_metric_recorder._compute_mc1(np.mean)
         train_mc1_std = self.train_metric_recorder._compute_mc1(np.std)
+        train_std_scores = {}
+        for m in metric_labels:
+            vals = list(train_mc1_mean.get(m, {}).values())
+            train_std_scores[m] = float(np.std(vals)) if len(vals) > 1 else 0.0
         class_table_rows: list = [("Train", train_mc1_mean, train_mc1_std)]
-        summary_rows: list = [("Train", train_mean_scores)]
+        summary_rows: list = [("Train", train_mean_scores, train_std_scores)]
 
         if enable_valid_when_training:
             valid_mean_scores = self.valid_metric_recorder.get_epoch_metrics()
             valid_mc1_mean = self.valid_metric_recorder._compute_mc1(np.mean)
             valid_mc1_std = self.valid_metric_recorder._compute_mc1(np.std)
+            valid_std_scores = {}
+            for m in metric_labels:
+                vals = list(valid_mc1_mean.get(m, {}).values())
+                valid_std_scores[m] = float(np.std(vals)) if len(vals) > 1 else 0.0
             class_table_rows.append(("Valid", valid_mc1_mean, valid_mc1_std))
-            summary_rows.append(("Valid", valid_mean_scores))
+            summary_rows.append(("Valid", valid_mean_scores, valid_std_scores))
 
         print_metric_scores_table(
             class_labels,

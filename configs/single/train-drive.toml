@@ -54,12 +54,15 @@ config = {}
 num_workers = 4
 shuffle = true
 
+# main_metric = "dice" # optional: use one metric for train/valid; full metrics at inference (Inferencer)
 [train]
 batch_size = 1
 epoch = 40
 save_every_n_epoch = 40
 grad_accumulation_steps = 0 # <= 0 for disabled
 optimizer_type = 'adam' # sgd, adam, adamw
+# best_by = "loss" # "loss" (min) | "main_metric" (use main_metric for best checkpoint and early_stop)
+# metric_direction = "max" # "max" (e.g. dice higher better) | "min"; only when best_by = "main_metric"
 
 [train.optimizer]
 learning_rate = 3e-6
@@ -75,6 +78,7 @@ eps = 1e-8
 
 # [train.early_stopping]
 # patience = 3
+# With main_metric = "dice" and best_by = "main_metric", best model and early_stop use dice (max).
 
 [valid]
 batch_size = 1

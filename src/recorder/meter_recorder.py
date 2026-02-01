@@ -10,8 +10,8 @@ from typing import Dict, Callable, Union, Optional
 
 from .meter import Meter
 from .data_saver import DataSaver
-from utils.typed import *
-from metrics import get_metric_fns, many_metrics
+from src.utils.typed import *
+from src.metrics import get_metric_fns, many_metrics
 
 
 class MeterRecorder:
@@ -211,6 +211,8 @@ class MeterRecorder:
         Returns:
             当前批次的指标结果 {metric: {class: score}}
         """
+        if not self.metric_labels:
+            return {}
         # 获取指标函数
         metric_fns = get_metric_fns(self.metric_labels)
         

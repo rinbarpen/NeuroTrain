@@ -6,7 +6,7 @@ from typing import Literal, Union
 from torchvision import transforms, datasets
 from torch.utils.data import Subset
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 
 class MNISTDataset(CustomDataset):
     """MNIST数据集实现

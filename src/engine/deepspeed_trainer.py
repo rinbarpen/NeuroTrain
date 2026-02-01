@@ -17,6 +17,8 @@ from typing import Dict, Any, Optional, Union
 import numpy as np
 from tqdm import tqdm
 import torch
+
+from src.utils.progress_bar import format_progress_desc
 from torch import nn
 from torch.utils.data import DataLoader
 import torch.distributed as dist
@@ -71,15 +73,24 @@ class DeepSpeedTrainer:
         self.logger = logging.getLogger('deepspeed_train')
         self.data_saver = DataSaver()
         
-        # 设置指标记录器
+        # 设置指标记录器：训练/验证仅使用主指标（main_metric），全量指标在 Inferencer 推理时计算
         class_labels = self.c['classes']
-        metric_labels = self.c['metrics']
+        all_metrics = self.c['metrics']
+        main_metric = self.c.get('main_metric', 'loss')
+        if main_metric == 'loss' or not main_metric:
+            train_valid_metric_labels = []
+        else:
+            if main_metric not in all_metrics:
+                self.logger.warning(f"main_metric '{main_metric}' not in config metrics {all_metrics}; using loss only for train/valid")
+                train_valid_metric_labels = []
+            else:
+                train_valid_metric_labels = [main_metric]
         self.train_metric_recorder = MeterRecorder(
-            class_labels, metric_labels, 
+            class_labels, train_valid_metric_labels,
             logger=self.logger, saver=self.data_saver, prefix="train_"
         )
         self.valid_metric_recorder = MeterRecorder(
-            class_labels, metric_labels, 
+            class_labels, train_valid_metric_labels,
             logger=self.logger, saver=self.data_saver, prefix="valid_"
         )
         
@@ -232,20 +243,35 @@ class DeepSpeedTrainer:
             patience = self.c['train'].get('early_stopping', {}).get('patience', 10)
             early_stopping = EarlyStopping(patience=patience, verbose=True)
         
+        best_by = self.c['train'].get('best_by', 'loss')
+        metric_direction = self.c['train'].get('metric_direction', 'max')
+        if best_by == 'main_metric':
+            if self.c.get('main_metric') in (None, 'loss') or not self.valid_metric_recorder.metric_labels:
+                self.logger.warning("best_by=main_metric but main_metric is loss or no valid metrics; using best_by=loss")
+                best_by = 'loss'
+        
         # 训练循环
         for epoch in range(last_epoch, num_epochs):
             self.logger.info(f"Epoch {epoch + 1}/{num_epochs}")
             
             # 训练一个epoch
-            train_metrics = self._train_epoch(epoch, train_dataloader)
+            train_metrics = self._train_epoch(epoch, train_dataloader, num_epochs)
             
             # 验证
             if valid_dataloader is not None:
                 valid_metrics = self._validate_epoch(epoch, valid_dataloader)
                 
-                # 早停检查
+                # 早停检查：EarlyStopping 接收“要最小化的量”，内部 score = -val
                 if early_stopping:
-                    if early_stopping(valid_metrics.get('loss', float('inf'))):
+                    if best_by == 'loss':
+                        early_score = valid_metrics.get('loss', float('inf'))
+                    else:
+                        vm = self.valid_metric_recorder.get_epoch_metrics()
+                        main_metric_name = self.c.get('main_metric')
+                        default_val = float('-inf') if metric_direction == 'max' else float('inf')
+                        target = vm.get(main_metric_name, default_val)
+                        early_score = -target if metric_direction == 'max' else target
+                    if early_stopping(early_score):
                         self.logger.info(f"Early stopping at epoch {epoch + 1}")
                         break
             
@@ -262,7 +288,7 @@ class DeepSpeedTrainer:
         
         self.logger.info("DeepSpeed training completed")
     
-    def _train_epoch(self, epoch: int, train_dataloader: DataLoader) -> Dict[str, float]:
+    def _train_epoch(self, epoch: int, train_dataloader: DataLoader, num_epochs: int) -> Dict[str, float]:
         """训练一个epoch"""
         self.model_engine.train()
         
@@ -271,7 +297,7 @@ class DeepSpeedTrainer:
         
         # 创建进度条
         if self.local_rank <= 0:  # 只在主进程显示进度条
-            pbar = tqdm(train_dataloader, desc=f"Epoch {epoch + 1}")
+            pbar = tqdm(train_dataloader, desc="Training...")
         else:
             pbar = train_dataloader
         
@@ -315,9 +341,19 @@ class DeepSpeedTrainer:
             
             # 更新进度条
             if self.local_rank <= 0:
+                pbar.set_description(format_progress_desc(
+                    "Training...",
+                    batch_idx + 1,
+                    num_batches,
+                    batch_idx + 1,
+                    num_batches,
+                    epoch + 1,
+                    num_epochs,
+                ))
                 pbar.set_postfix({
                     'loss': f"{loss.item():.4f}",
-                    'avg_loss': f"{total_loss / (batch_idx + 1):.4f}"
+                    'avg_loss': f"{total_loss / (batch_idx + 1):.4f}",
+                    'step': f"{batch_idx + 1}/{num_batches}",
                 })
             
             # 记录指标
@@ -383,6 +419,7 @@ class DeepSpeedTrainer:
                     )
         
         avg_loss = total_loss / num_batches
+        self.valid_metric_recorder.finish_one_epoch()
         self.logger.info(f"Epoch {epoch + 1} - Valid Loss: {avg_loss:.4f}")
         
         return {'loss': avg_loss}

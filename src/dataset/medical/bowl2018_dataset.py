@@ -6,7 +6,7 @@ import numpy as np
 from torchvision import transforms
 from typing import Literal, Union
 
-from ..custom_dataset import CustomDataset, Betweens
+from ..custom_dataset import CustomDataset
 
 # Instance Segmentation Dataset
 class BOWL2018Dataset(CustomDataset):
@@ -87,7 +87,7 @@ class BOWL2018Dataset(CustomDataset):
         }
 
     @staticmethod
-    def to_numpy(save_dir: Path, root_dir: Union[str, Path], betweens: Betweens, **kwargs):
+    def to_numpy(save_dir: Path, root_dir: Union[str, Path], betweens: dict, **kwargs):
         """
         导出为numpy文件
         - 兼容保留 betweens 形参，但内部不再进行切片

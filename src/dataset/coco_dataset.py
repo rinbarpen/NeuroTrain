@@ -7,7 +7,7 @@ import json
 from PIL import Image
 import logging
 
-from .custom_dataset import CustomDataset, Betweens
+from .custom_dataset import CustomDataset
 
 try:
     from pycocotools.coco import COCO

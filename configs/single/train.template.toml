@@ -74,9 +74,12 @@ num_workers = 4 # 0 to disable multiprocessing, or set to a positive integer for
 shuffle = true
 pin_memory = true
 
+# main_metric = "dice" # optional: one metric for train/valid; full metrics at inference
 [train]
 batch_size = 2
 epoch = 200
+# best_by = "loss" # "loss" | "main_metric"; default loss
+# metric_direction = "max" # "max" | "min"; default max when best_by = main_metric
 # if 0 < save_period < 1, then save temporary checkpoint and metrics per (num_epochs * save_period) epochs
 # if save_period >= 1, then save temporary checkpoint and metrics per save_period epochs
 # if save_period <= 0, then will only save the last one
@@ -111,6 +114,7 @@ compute_type = 'float16'
 
 # [train.early_stopping]
 # patience = 3
+# best_by = "main_metric" and metric_direction = "max" use main_metric (e.g. dice) for best save and early_stop
 
 [test]
 batch_size = 2
